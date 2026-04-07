@@ -13,7 +13,7 @@ const String kAdminSocketUrl = String.fromEnvironment(
 
 /// Admin user ID — always '1'.
 const String kAdminUserId = '1';
-const int kAdminSocketReconnectAttempts = 999999;
+const int kAdminSocketReconnectAttempts = 20;
 
 /// Default timeout for acknowledgement-based Socket.IO calls.
 const Duration kAdminSocketTimeout = Duration(seconds: 15);

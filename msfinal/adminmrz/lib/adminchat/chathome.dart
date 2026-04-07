@@ -111,6 +111,23 @@ class _ChatWindowState extends State<ChatWindow> {
   String? _editingMessageId;
   String _editingOriginalText = ''; // original message text before user edits it
 
+  // Voice message playback state
+  final AudioPlayer _voiceAudioPlayer = AudioPlayer();
+  String? _playingVoiceMessageId;
+  bool _voiceIsPlaying = false;
+  Duration _voicePlaybackPosition = Duration.zero;
+  Duration _voicePlaybackDuration = Duration.zero;
+  StreamSubscription? _voicePlayerStateSub;
+  StreamSubscription? _voicePlayerPositionSub;
+  StreamSubscription? _voicePlayerDurationSub;
+
+  // Voice message recording state (web uses FlutterSoundRecorder)
+  bool _isRecordingVoice = false;
+  bool _isSendingVoice = false;
+  int _voiceRecordDuration = 0;
+  Timer? _voiceRecordTimer;
+  String? _voiceRecordingPath;
+
   static const int _kMaxQuoteLength = 80; // max chars shown in reply/edit preview
   static const String _kDeletedMessageText = 'This message was deleted.';
   static const String _kUnsentMessageText = 'This message was unsent.';
@@ -156,6 +173,25 @@ class _ChatWindowState extends State<ChatWindow> {
       if (cp.id != null) _setupTypingListener(cp.id!);
     });
 
+    // Voice audio player listeners (just_audio)
+    _voicePlayerStateSub = _voiceAudioPlayer.playerStateStream.listen((state) {
+      if (mounted) {
+        setState(() {
+          _voiceIsPlaying = state.playing;
+          if (state.processingState == ProcessingState.completed) {
+            _playingVoiceMessageId = null;
+            _voicePlaybackPosition = Duration.zero;
+          }
+        });
+      }
+    });
+    _voicePlayerPositionSub = _voiceAudioPlayer.positionStream.listen((pos) {
+      if (mounted) setState(() => _voicePlaybackPosition = pos);
+    });
+    _voicePlayerDurationSub = _voiceAudioPlayer.durationStream.listen((dur) {
+      if (dur != null && mounted) setState(() => _voicePlaybackDuration = dur);
+    });
+
     // Connect the Socket.IO service and start listening for events.
     _socketService.connect();
     _setupSocketListeners();
@@ -194,6 +230,9 @@ class _ChatWindowState extends State<ChatWindow> {
     if (msgType == 'image') {
       imageUrl = rawMessage;
       displayMessage = 'Image';
+    } else if (msgType == 'voice') {
+      imageUrl = rawMessage; // reuse imageUrl field to carry voice URL
+      displayMessage = '🎤 Voice message';
     } else if (msgType == 'profile_card') {
       try {
         profileData = jsonDecode(rawMessage) as Map<String, dynamic>;
@@ -585,6 +624,8 @@ class _ChatWindowState extends State<ChatWindow> {
     switch (data['type']?.toString()) {
       case 'image':
         return '📷 Image';
+      case 'voice':
+        return '🎤 Voice message';
       case 'profile_card':
         return '👤 Profile shared';
       case 'call':
@@ -2248,6 +2289,118 @@ class _ChatWindowState extends State<ChatWindow> {
       );
     }
 
+    if (type == 'voice' && imageUrl != null) {
+      // imageUrl field holds the voice URL for voice messages in this schema
+      final voiceUrl = imageUrl;
+      final isCurrentlyPlaying = _playingVoiceMessageId == messageId && _voiceIsPlaying;
+      final isCurrentMessage = _playingVoiceMessageId == messageId;
+      final progressValue = isCurrentMessage && _voicePlaybackDuration.inSeconds > 0
+          ? (_voicePlaybackPosition.inMilliseconds / _voicePlaybackDuration.inMilliseconds).clamp(0.0, 1.0)
+          : 0.0;
+      final displaySecs = isCurrentMessage && _voicePlaybackDuration.inSeconds > 0
+          ? _voicePlaybackPosition.inSeconds
+          : 0;
+      final displayTime = '${(displaySecs ~/ 60).toString().padLeft(2, '0')}:${(displaySecs % 60).toString().padLeft(2, '0')}';
+
+      final bubble = Align(
+        alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: Column(
+          crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            if (replyPreview != null) replyPreview,
+            if (statusMessage != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
+                decoration: BoxDecoration(
+                  color: isSentByMe ? kPrimary : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  displayedMessage,
+                  style: TextStyle(
+                    color: isSentByMe ? Colors.white : kText,
+                    fontSize: 13,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              )
+            else
+              GestureDetector(
+                onTap: () => _toggleVoicePlayback(messageId!, voiceUrl),
+                child: Container(
+                  width: 200,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
+                  decoration: BoxDecoration(
+                    color: isSentByMe ? kPrimary : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(color: Colors.black.withOpacity(0.07), blurRadius: 4, offset: const Offset(0, 1)),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: isSentByMe ? Colors.white.withOpacity(0.22) : kPrimary.withOpacity(0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isCurrentlyPlaying ? Icons.pause : Icons.play_arrow,
+                          color: isSentByMe ? Colors.white : kPrimary,
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: progressValue,
+                                minHeight: 3,
+                                backgroundColor: Colors.grey.withOpacity(0.25),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  isSentByMe ? Colors.white : kPrimary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              displayTime,
+                              style: TextStyle(
+                                color: isSentByMe ? Colors.white70 : kMuted,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            footer(),
+          ],
+        ),
+      );
+
+      return _buildMessageWithActions(
+        bubble: bubble,
+        isSentByMe: isSentByMe,
+        canEdit: false,
+        canMutate: canMutate,
+        messageId: messageId,
+        replyPayload: replyPayload,
+      );
+    }
+
     if (type == 'profile_card' && profileData != null) {
       const kCardPrimary = Color(0xFFD81B60);
       const kCardSurface = Color(0xFFFCFCFE);
@@ -2943,7 +3096,161 @@ class _ChatWindowState extends State<ChatWindow> {
     }
   }
 
-  /// Inline reply/edit banner shown above the message input.
+  Future<void> _toggleVoicePlayback(String messageId, String voiceUrl) async {
+    if (_playingVoiceMessageId == messageId && _voiceIsPlaying) {
+      await _voiceAudioPlayer.pause();
+    } else if (_playingVoiceMessageId == messageId && !_voiceIsPlaying) {
+      await _voiceAudioPlayer.play();
+    } else {
+      _voicePlaybackPosition = Duration.zero;
+      _voicePlaybackDuration = Duration.zero;
+      if (mounted) setState(() => _playingVoiceMessageId = messageId);
+      await _voiceAudioPlayer.setUrl(voiceUrl);
+      await _voiceAudioPlayer.play();
+    }
+  }
+
+  // ── VOICE MESSAGE RECORDING (web: flutter_sound) ─────────────────────────
+
+  Future<void> _startVoiceRecording() async {
+    if (_isRecordingVoice) return;
+    try {
+      await _recorder.openRecorder();
+      final tempPath = 'voice_${DateTime.now().millisecondsSinceEpoch}.webm';
+      await _recorder.startRecorder(
+        toFile: tempPath,
+        codec: Codec.opusWebM,
+      );
+      setState(() {
+        _isRecordingVoice = true;
+        _voiceRecordDuration = 0;
+        _voiceRecordingPath = tempPath;
+      });
+      _voiceRecordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() => _voiceRecordDuration++);
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to start recording: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _stopAndSendVoiceRecording() async {
+    if (!_isRecordingVoice) return;
+    _voiceRecordTimer?.cancel();
+    _voiceRecordTimer = null;
+
+    try {
+      final path = await _recorder.stopRecorder();
+      setState(() {
+        _isRecordingVoice = false;
+        _isSendingVoice = true;
+      });
+      if (path == null || path.isEmpty) return;
+      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+      final receiverId = chatProvider.id?.toString();
+      if (receiverId == null) return;
+
+      final voiceUrl = await _uploadVoiceMessage(path);
+
+      _socketService.sendMessage(
+        chatRoomId: AdminSocketService.chatRoomId(receiverId),
+        receiverId: receiverId,
+        message: voiceUrl,
+        messageType: 'voice',
+        messageId: 'voice_${DateTime.now().millisecondsSinceEpoch}_$senderId',
+        receiverName: chatProvider.namee,
+        receiverImage: chatProvider.profilePicture,
+      );
+
+      await NotificationService.sendChatNotification(
+        recipientUserId: receiverId,
+        senderName: "Admin",
+        senderId: '1',
+        message: '🎤 Voice message',
+        extraData: {
+          'chatId': receiverId,
+          'screen': 'chat',
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send voice message: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() { _isRecordingVoice = false; _isSendingVoice = false; });
+    }
+  }
+
+  void _cancelVoiceRecording() {
+    if (!_isRecordingVoice) return;
+    _voiceRecordTimer?.cancel();
+    _voiceRecordTimer = null;
+    _recorder.stopRecorder();
+    setState(() {
+      _isRecordingVoice = false;
+      _voiceRecordDuration = 0;
+    });
+  }
+
+  Future<String> _uploadVoiceMessage(String filePath) async {
+    // For web, flutter_sound returns a blob URL; use XHR to fetch then upload
+    if (kIsWeb) {
+      final response = await http.get(Uri.parse(filePath));
+      if (response.statusCode != 200) {
+        throw Exception('Failed to read recorded audio data');
+      }
+      final req = http.MultipartRequest(
+        'POST',
+        Uri.parse('$kAdminSocketUrl/upload?type=voice'),
+      );
+      req.files.add(http.MultipartFile.fromBytes(
+        'file',
+        response.bodyBytes,
+        filename: 'voice_${DateTime.now().millisecondsSinceEpoch}.webm',
+      ));
+      final streamed = await req.send();
+      final body = await streamed.stream.bytesToString();
+      if (streamed.statusCode != 200) {
+        throw Exception('Upload failed: ${streamed.statusCode} $body');
+      }
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      final url = json['url']?.toString();
+      if (url == null || url.isEmpty) {
+        throw Exception(json['error']?.toString() ?? 'Upload returned no URL');
+      }
+      return url;
+    } else {
+      final req = http.MultipartRequest(
+        'POST',
+        Uri.parse('$kAdminSocketUrl/upload?type=voice'),
+      );
+      req.files.add(await http.MultipartFile.fromPath('file', filePath));
+      final streamed = await req.send();
+      final body = await streamed.stream.bytesToString();
+      if (streamed.statusCode != 200) {
+        throw Exception('Upload failed: ${streamed.statusCode} $body');
+      }
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      final url = json['url']?.toString();
+      if (url == null || url.isEmpty) {
+        throw Exception(json['error']?.toString() ?? 'Upload returned no URL');
+      }
+      return url;
+    }
+  }
+
+  String _formatVoiceRecordDuration(int seconds) {
+    final m = (seconds ~/ 60).toString().padLeft(2, '0');
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
   Widget _buildActionBanner(ChatColors colors) {
     const kPrimary = Color(0xFFD81B60);
     final bool isEditing = _editingMessageId != null;
@@ -3045,6 +3352,76 @@ class _ChatWindowState extends State<ChatWindow> {
     );
   }
 
+  Widget _buildAdminRecordingBar(ChatColors colors, Color kPrimary) {
+    return Row(
+      children: [
+        IconButton(
+          onPressed: _cancelVoiceRecording,
+          icon: const Icon(Icons.delete_outline, color: Colors.red, size: 22),
+          tooltip: 'Cancel',
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          padding: EdgeInsets.zero,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: kPrimary.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: kPrimary.withOpacity(0.3), width: 1),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.mic, color: kPrimary, size: 16),
+                const SizedBox(width: 6),
+                Text(
+                  _formatVoiceRecordDuration(_voiceRecordDuration),
+                  style: TextStyle(
+                    color: kPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  'Recording...',
+                  style: TextStyle(color: colors.muted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        _isSendingVoice
+            ? const SizedBox(
+                width: 38,
+                height: 38,
+                child: Padding(
+                  padding: EdgeInsets.all(9),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Color(0xFFD81B60),
+                  ),
+                ),
+              )
+            : GestureDetector(
+                onTap: _stopAndSendVoiceRecording,
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: kPrimary,
+                    borderRadius: BorderRadius.circular(19),
+                  ),
+                  child: const Icon(Icons.send_rounded, color: Colors.white, size: 18),
+                ),
+              ),
+      ],
+    );
+  }
+
   Widget _buildMessageInput(ChatProvider chatProvider) {
     const kPrimary = Color(0xFFD81B60);
     // Dark-mode tints for the language-selector chip
@@ -3111,7 +3488,9 @@ class _ChatWindowState extends State<ChatWindow> {
                 ],
               ),
             ),
-          Row(
+          if (_isRecordingVoice)
+            _buildAdminRecordingBar(colors, kPrimary)
+          else Row(
             children: [
               IconButton(
                 icon: Icon(Icons.emoji_emotions, color: colors.muted, size: 20),
@@ -3254,6 +3633,20 @@ class _ChatWindowState extends State<ChatWindow> {
                 valueListenable: _messageController,
                 builder: (context, value, child) {
                   final hasText = value.text.trim().isNotEmpty;
+                  if (!hasText) {
+                    return GestureDetector(
+                      onTap: _startVoiceRecording,
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: kPrimary,
+                          borderRadius: BorderRadius.circular(19),
+                        ),
+                        child: const Icon(Icons.mic, color: Colors.white, size: 18),
+                      ),
+                    );
+                  }
                   return GestureDetector(
                     onTap: _sendMessage,
                     child: Container(
@@ -3712,6 +4105,11 @@ class _ChatWindowState extends State<ChatWindow> {
     _messageController.dispose();
     _searchController.dispose();
     _recorder.closeRecorder();
+    _voiceRecordTimer?.cancel();
+    _voicePlayerStateSub?.cancel();
+    _voicePlayerPositionSub?.cancel();
+    _voicePlayerDurationSub?.cancel();
+    await _voiceAudioPlayer.dispose();
     super.dispose();
   }
 }

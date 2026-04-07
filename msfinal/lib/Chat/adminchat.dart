@@ -3,6 +3,9 @@ import 'dart:ui';
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -59,6 +62,22 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   final FocusNode _messageFocusNode = FocusNode();
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isSending = false;
+
+  // Voice message playback tracking
+  String? _playingMessageId;
+  bool _isPlaying = false;
+  Duration _playbackPosition = Duration.zero;
+  Duration _playbackDuration = Duration.zero;
+  StreamSubscription? _audioPlayerStateSub;
+  StreamSubscription? _audioPlayerPositionSub;
+  StreamSubscription? _audioPlayerDurationSub;
+
+  // Voice message recording
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  bool _isRecording = false;
+  bool _isSendingVoice = false;
+  int _recordDuration = 0;
+  Timer? _recordTimer;
   String? _replyToID;
   Map<String, dynamic>? _replyToMessage;
   final ScrollController _scrollController = ScrollController();
@@ -147,6 +166,25 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       _loadCurrentUserData();
     }
     _scrollController.addListener(_onScroll);
+
+    // Voice audio player listeners
+    _audioPlayerStateSub = _audioPlayer.onPlayerStateChanged.listen((state) {
+      if (mounted) {
+        setState(() {
+          _isPlaying = state == PlayerState.playing;
+          if (state == PlayerState.completed) {
+            _playingMessageId = null;
+            _playbackPosition = Duration.zero;
+          }
+        });
+      }
+    });
+    _audioPlayerPositionSub = _audioPlayer.onPositionChanged.listen((pos) {
+      if (mounted) setState(() => _playbackPosition = pos);
+    });
+    _audioPlayerDurationSub = _audioPlayer.onDurationChanged.listen((dur) {
+      if (mounted) setState(() => _playbackDuration = dur);
+    });
 
     _startAdminStatusListener();
     _setupCallListener();
@@ -461,6 +499,11 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     _controller.dispose();
     _messageFocusNode.dispose();
     _audioPlayer.dispose();
+    _recordTimer?.cancel();
+    _audioRecorder.dispose();
+    _audioPlayerStateSub?.cancel();
+    _audioPlayerPositionSub?.cancel();
+    _audioPlayerDurationSub?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -839,6 +882,89 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     _socketService.toggleLike(_chatRoomId, messageId);
   }
 
+  // ── VOICE MESSAGE RECORDING ──────────────────────────────────────────────
+
+  Future<void> _startRecording() async {
+    if (_isRecording) return;
+    final status = await Permission.microphone.request();
+    if (status != PermissionStatus.granted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Microphone permission is required to send voice messages.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+    try {
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _audioRecorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 44100),
+        path: path,
+      );
+      setState(() {
+        _isRecording = true;
+        _recordDuration = 0;
+      });
+      _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() => _recordDuration++);
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to start recording: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _stopAndSendRecording() async {
+    if (!_isRecording) return;
+    _recordTimer?.cancel();
+    _recordTimer = null;
+    try {
+      final path = await _audioRecorder.stop();
+      setState(() {
+        _isRecording = false;
+        _isSendingVoice = true;
+      });
+      if (path == null || path.isEmpty) return;
+      final file = File(path);
+      final url = await _socketService.uploadVoiceMessage(
+        voiceFile: file,
+        userId: _mySenderId,
+        chatRoomId: _chatRoomId,
+      );
+      await _sendMessage('voice', url);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send voice message: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() { _isRecording = false; _isSendingVoice = false; });
+    }
+  }
+
+  void _cancelRecording() {
+    if (!_isRecording) return;
+    _recordTimer?.cancel();
+    _recordTimer = null;
+    _audioRecorder.stop();
+    setState(() { _isRecording = false; _recordDuration = 0; });
+  }
+
+  String _formatRecordDuration(int seconds) {
+    final m = (seconds ~/ 60).toString().padLeft(2, '0');
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+
   Future<void> _setReplyTo(
       String messageID, Map<String, dynamic> messageData) async {
     setState(() {
@@ -896,6 +1022,19 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       await _audioPlayer.play(UrlSource(url));
     } catch (e) {
       print('Error playing audio: $e');
+    }
+  }
+
+  Future<void> _toggleVoicePlayback(String voiceUrl) async {
+    if (_playingMessageId == voiceUrl && _isPlaying) {
+      await _audioPlayer.pause();
+    } else if (_playingMessageId == voiceUrl && !_isPlaying) {
+      await _audioPlayer.resume();
+    } else {
+      _playbackPosition = Duration.zero;
+      _playbackDuration = Duration.zero;
+      if (mounted) setState(() => _playingMessageId = voiceUrl);
+      await _audioPlayer.play(UrlSource(voiceUrl));
     }
   }
 
@@ -1761,52 +1900,78 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   }
 
   Widget _buildVoiceMessage(String content, bool isMe) {
+    // Support both plain URL (new) and JSON-encoded format (legacy)
+    String voiceUrl = content;
     try {
-      Map<String, dynamic> voiceData = jsonDecode(content);
-      return GestureDetector(
-        onTap: () => _playVoice(voiceData['url']),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            gradient: isMe ? _primaryGradient : _secondaryGradient,
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.play_circle_filled,
-                color: isMe ? Colors.white : _primaryGradient.colors[0],
-                size: 28,
-              ),
-              const SizedBox(width: 10),
-              Text(voiceData['duration'] ?? '0:15',
-                  style: TextStyle(
-                    color: isMe ? Colors.white : _textColor,
-                    fontWeight: FontWeight.w500,
-                    fontSize: 14,
-                  )),
-              const SizedBox(width: 6),
-              Text('•',
-                  style: TextStyle(
-                    color: isMe ? Colors.white70 : _lightTextColor,
-                  )),
-              const SizedBox(width: 6),
-              Text('Voice message',
-                  style: TextStyle(
-                    color: isMe ? Colors.white70 : _lightTextColor,
-                    fontSize: 13,
-                  )),
-            ],
-          ),
-        ),
-      );
-    } catch (e) {
-      return Text('Voice message',
-          style: TextStyle(
-            color: isMe ? Colors.white : _textColor,
-          ));
+      final decoded = jsonDecode(content) as Map<String, dynamic>;
+      voiceUrl = decoded['url']?.toString() ?? content;
+    } catch (_) {
+      // plain URL - use as-is
     }
+
+    final isCurrentlyPlaying = _playingMessageId == voiceUrl && _isPlaying;
+    final isCurrentMessage = _playingMessageId == voiceUrl;
+    final progressValue = isCurrentMessage && _playbackDuration.inSeconds > 0
+        ? (_playbackPosition.inMilliseconds / _playbackDuration.inMilliseconds).clamp(0.0, 1.0)
+        : 0.0;
+    final displaySecs = isCurrentMessage && _playbackDuration.inSeconds > 0
+        ? _playbackPosition.inSeconds
+        : 0;
+    final displayTime = '${(displaySecs ~/ 60).toString().padLeft(2, '0')}:${(displaySecs % 60).toString().padLeft(2, '0')}';
+
+    return GestureDetector(
+      onTap: () => _toggleVoicePlayback(voiceUrl),
+      child: Container(
+        width: 200,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: isMe ? Colors.white.withOpacity(0.25) : _primaryGradient.colors[0].withOpacity(0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isCurrentlyPlaying ? Icons.pause : Icons.play_arrow,
+                color: isMe ? Colors.white : _primaryGradient.colors[0],
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: progressValue,
+                      minHeight: 3,
+                      backgroundColor: (isMe ? Colors.white : _primaryGradient.colors[0]).withOpacity(0.25),
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        isMe ? Colors.white : _primaryGradient.colors[0],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    displayTime,
+                    style: TextStyle(
+                      color: isMe ? Colors.white70 : _lightTextColor,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildDocumentMessage(String content, bool isMe) {
@@ -3135,6 +3300,88 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   }
 
   Widget _buildInputBar() {
+    const kAccent = Color(0xFF9C27B0);
+    if (_isRecording) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF3E8FF),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.12),
+              blurRadius: 10,
+              offset: const Offset(0, -3),
+            )
+          ],
+        ),
+        child: Row(
+          children: [
+            IconButton(
+              onPressed: _cancelRecording,
+              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 26),
+              tooltip: 'Cancel',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                height: 50,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: kAccent.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: kAccent.withOpacity(0.3), width: 1),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.mic, color: kAccent, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      _formatRecordDuration(_recordDuration),
+                      style: TextStyle(
+                        color: kAccent,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                      ),
+                    ),
+                    const Spacer(),
+                    const Text(
+                      'Recording...',
+                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            _isSendingVoice
+                ? const SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: Padding(
+                      padding: EdgeInsets.all(12),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: kAccent,
+                      ),
+                    ),
+                  )
+                : Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: _primaryGradient,
+                    ),
+                    child: IconButton(
+                      icon: const Icon(Icons.send, color: Colors.white, size: 22),
+                      onPressed: _stopAndSendRecording,
+                    ),
+                  ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -3214,22 +3461,49 @@ class _AdminChatScreenState extends State<AdminChatScreen>
             ),
           ),
           const SizedBox(width: 12),
-          Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: _primaryGradient,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _controller,
+            builder: (context, value, child) {
+              final hasText = value.text.trim().isNotEmpty;
+              if (!hasText) {
+                return GestureDetector(
+                  onTap: _startRecording,
+                  child: Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: _primaryGradient,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.mic, color: Colors.white, size: 22),
+                  ),
+                );
+              }
+              return Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: _primaryGradient,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.send, color: Colors.white, size: 22),
-              onPressed: _sendText,
-            ),
+                child: IconButton(
+                  icon: const Icon(Icons.send, color: Colors.white, size: 22),
+                  onPressed: _sendText,
+                ),
+              );
+            },
           ),
         ],
       ),

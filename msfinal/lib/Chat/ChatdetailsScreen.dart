@@ -12,6 +12,9 @@ import 'package:ms2026/Chat/screen_state_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 
 import '../service/socket_service.dart';
@@ -97,6 +100,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   bool _isPlaying = false;
   Duration _playbackPosition = Duration.zero;
   Duration _playbackDuration = Duration.zero;
+
+  // Voice recording
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  bool _isRecording = false;
+  bool _isSendingVoice = false;
+  int _recordDuration = 0;
+  Timer? _recordTimer;
+  String? _recordingPath;
 
   // Swipe reply variables
   Map<String, dynamic>? _swipedMessage;
@@ -613,6 +624,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     _audioPlayerPositionSubscription?.cancel();
     _audioPlayerDurationSubscription?.cancel();
     _audioPlayer.dispose();
+    _recordTimer?.cancel();
+    _audioRecorder.dispose();
     _swipeAnimationController?.dispose();
     _typingDebounce?.cancel();
     _typingSubscription?.cancel();
@@ -841,6 +854,130 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     } finally {
       if (mounted) setState(() => _isSendingImage = false);
     }
+  }
+
+  // ── VOICE MESSAGE RECORDING ──────────────────────────────────────────────
+
+  Future<void> _startRecording() async {
+    if (_isBlocked || _isRecording) return;
+
+    // Request microphone permission
+    final status = await Permission.microphone.request();
+    if (status != PermissionStatus.granted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Microphone permission is required to record voice messages.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      final dir = await getTemporaryDirectory();
+      final path = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+      await _audioRecorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 44100),
+        path: path,
+      );
+
+      setState(() {
+        _isRecording = true;
+        _recordDuration = 0;
+        _recordingPath = path;
+      });
+
+      _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() => _recordDuration++);
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to start recording: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  Future<void> _stopAndSendRecording() async {
+    if (!_isRecording) return;
+
+    _recordTimer?.cancel();
+    _recordTimer = null;
+
+    try {
+      final path = await _audioRecorder.stop();
+      setState(() {
+        _isRecording = false;
+        _isSendingVoice = true;
+      });
+
+      if (path == null || path.isEmpty) return;
+
+      final messageId = _uuid.v4();
+      final file = File(path);
+      final bool receiverViewingThisChat = _isReceiverViewingThisChat;
+
+      final voiceUrl = await _socketService.uploadVoiceMessage(
+        voiceFile: file,
+        userId: widget.currentUserId,
+        chatRoomId: widget.chatRoomId,
+      );
+
+      _forceScrollToBottom = true;
+      _scrollToBottom();
+
+      _socketService.sendMessage(
+        chatRoomId:        widget.chatRoomId,
+        senderId:          widget.currentUserId,
+        receiverId:        widget.receiverId,
+        message:           voiceUrl,
+        messageType:       'voice',
+        messageId:         messageId,
+        isReceiverViewing: receiverViewingThisChat,
+        user1Name:         widget.currentUserName,
+        user2Name:         widget.receiverName,
+        user1Image:        widget.currentUserImage,
+        user2Image:        widget.receiverImage,
+      );
+
+      if (!receiverViewingThisChat) {
+        await NotificationService.sendChatNotification(
+          recipientUserId: widget.receiverId.toString(),
+          senderName: widget.currentUserName,
+          senderId: widget.currentUserId.toString(),
+          message: '🎤 Voice message',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send voice message: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() { _isRecording = false; _isSendingVoice = false; });
+    }
+  }
+
+  void _cancelRecording() {
+    if (!_isRecording) return;
+    _recordTimer?.cancel();
+    _recordTimer = null;
+    _audioRecorder.stop();
+    setState(() {
+      _isRecording = false;
+      _recordDuration = 0;
+    });
+  }
+
+  String _formatRecordDuration(int seconds) {
+    final m = (seconds ~/ 60).toString().padLeft(2, '0');
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return '$m:$s';
   }
 
   Future<void> _editMessage() async {
@@ -1916,7 +2053,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         children: [
           if (isReplying) _buildReplyPreview(),
           if (isEditing) _buildEditPreview(),
-          Row(
+          if (_isRecording) _buildRecordingBar() else Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               if (!isEditing)
@@ -2005,32 +2142,53 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 ),
               ),
               const SizedBox(width: 8),
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                decoration: BoxDecoration(
-                  gradient: hasText ? _primaryGradient : null,
-                  color: hasText ? null : _sendButtonDisabled,
-                  shape: BoxShape.circle,
-                  boxShadow: hasText
-                      ? [
-                          BoxShadow(
-                            color: _accentColor.withOpacity(0.35),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ]
-                      : [],
-                ),
-                child: IconButton(
-                  onPressed: hasText ? (isEditing ? _editMessage : _sendMessage) : null,
-                  icon: Icon(
-                    isEditing ? Icons.check : Icons.send_rounded,
-                    color: Colors.white,
-                    size: 22,
+              if (!isEditing && !hasText)
+                GestureDetector(
+                  onTap: _startRecording,
+                  child: Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      gradient: _primaryGradient,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: _accentColor.withOpacity(0.35),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.mic, color: Colors.white, size: 22),
                   ),
-                  padding: const EdgeInsets.all(13),
+                )
+              else
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  decoration: BoxDecoration(
+                    gradient: hasText ? _primaryGradient : null,
+                    color: hasText ? null : _sendButtonDisabled,
+                    shape: BoxShape.circle,
+                    boxShadow: hasText
+                        ? [
+                            BoxShadow(
+                              color: _accentColor.withOpacity(0.35),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ]
+                        : [],
+                  ),
+                  child: IconButton(
+                    onPressed: hasText ? (isEditing ? _editMessage : _sendMessage) : null,
+                    icon: Icon(
+                      isEditing ? Icons.check : Icons.send_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                    padding: const EdgeInsets.all(13),
+                  ),
                 ),
-              ),
             ],
           ),
         ],
@@ -2040,7 +2198,83 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   Widget _bottomSection() => _bottomInputBar();
 
-  Widget _buildMessagesList() {
+  Widget _buildRecordingBar() {
+    return Row(
+      children: [
+        IconButton(
+          onPressed: _cancelRecording,
+          icon: const Icon(Icons.delete_outline, color: Colors.red, size: 24),
+          tooltip: 'Cancel',
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Container(
+            height: 46,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: _accentColor.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: _accentColor.withOpacity(0.3), width: 1),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.mic, color: _accentColor, size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  _formatRecordDuration(_recordDuration),
+                  style: const TextStyle(
+                    color: _accentColor,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                ),
+                const Spacer(),
+                const Text(
+                  'Recording...',
+                  style: TextStyle(color: _lightTextColor, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        _isSendingVoice
+            ? const SizedBox(
+                width: 46,
+                height: 46,
+                child: Padding(
+                  padding: EdgeInsets.all(11),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
+                  ),
+                ),
+              )
+            : GestureDetector(
+                onTap: _stopAndSendRecording,
+                child: Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    gradient: _primaryGradient,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: _accentColor.withOpacity(0.35),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.send_rounded, color: Colors.white, size: 22),
+                ),
+              ),
+      ],
+    );
+  }
+
     // Show skeleton on very first load before the stream delivers any data.
     if (_isFirstLoad) {
       return _buildSkeletonLoader();

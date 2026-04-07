@@ -562,7 +562,7 @@ class _ChatWindowState extends State<ChatWindow> {
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    'Respond within 30 seconds',
+                    'Respond Within 30 Seconds',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.62),
                       fontSize: 12,

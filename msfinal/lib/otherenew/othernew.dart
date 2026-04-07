@@ -510,30 +510,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   bool _isOtherUserOnline = false;
   DateTime? _otherUserLastSeen;
-  StreamSubscription<DocumentSnapshot>? _onlineStatusSub;
+  StreamSubscription? _onlineStatusSub;
 
   void _startOnlineStatusListener() {
-    _onlineStatusSub?.cancel();
-    _onlineStatusSub = FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.userId)
-        .snapshots()
-        .listen((doc) {
+    final targetId = widget.userId;
+
+    // Fetch initial status from server
+    SocketService().getUserStatus(targetId).then((data) {
       if (!mounted) return;
-      bool online = false;
-      DateTime? lastSeen;
-      if (doc.exists) {
-        final data = doc.data() as Map<String, dynamic>;
-        final bool isOnline = data['isOnline'] == true;
-        final Timestamp? ts = data['lastSeen'] as Timestamp?;
-        lastSeen = ts?.toDate();
-        final bool recentlySeen = lastSeen != null &&
-            DateTime.now().difference(lastSeen).inMinutes < 5;
-        online = isOnline || recentlySeen;
-      }
-      if (_isOtherUserOnline != online || _otherUserLastSeen != lastSeen) {
+      final bool isOnline = data['isOnline'] == true;
+      final DateTime? lastSeen = SocketService.parseTimestamp(data['lastSeen']);
+      final bool recentlySeen = lastSeen != null &&
+          DateTime.now().difference(lastSeen).inMinutes < 5;
+      setState(() {
+        _isOtherUserOnline = isOnline || recentlySeen;
+        _otherUserLastSeen = lastSeen;
+      });
+    });
+
+    // Subscribe to real-time status changes via Socket.IO
+    _onlineStatusSub?.cancel();
+    _onlineStatusSub = SocketService().onUserStatusChange.listen((data) {
+      if (!mounted) return;
+      final uid = data['userId']?.toString() ?? '';
+      if (uid != targetId) return;
+      final bool isOnline = data['isOnline'] == true;
+      final DateTime? lastSeen = SocketService.parseTimestamp(data['lastSeen']);
+      final bool recentlySeen = lastSeen != null &&
+          DateTime.now().difference(lastSeen).inMinutes < 5;
+      if (_isOtherUserOnline != (isOnline || recentlySeen) ||
+          _otherUserLastSeen != lastSeen) {
         setState(() {
-          _isOtherUserOnline = online;
+          _isOtherUserOnline = isOnline || recentlySeen;
           _otherUserLastSeen = lastSeen;
         });
       }

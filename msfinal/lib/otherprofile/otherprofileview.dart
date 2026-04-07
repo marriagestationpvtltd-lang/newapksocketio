@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart' hide ErrorWidget;
 import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:ms2026/otherprofile/profileheader.dart';
 import 'package:ms2026/otherprofile/profiletabs.dart';
 import 'package:ms2026/otherprofile/requestdiag.dart';
@@ -11,6 +10,7 @@ import 'dart:convert';
 
 import '../Notification/notification_inbox_service.dart';
 import '../pushnotification/pushservice.dart';
+import '../service/socket_service.dart';
 import '../utils/privacy_utils.dart';
 import 'gallerysection.dart';
 import 'loadingerror.dart';
@@ -44,7 +44,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   bool _isOtherUserOnline = false;
   DateTime? _otherUserLastSeen;
-  StreamSubscription<DocumentSnapshot>? _onlineStatusSub;
+  StreamSubscription? _onlineStatusSub;
 
   @override
   void initState() {
@@ -61,26 +61,35 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   void _startOnlineStatusListener() {
-    _onlineStatusSub = FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.userId.toString())
-        .snapshots()
-        .listen((doc) {
+    final targetId = widget.userId.toString();
+
+    // Fetch initial status from server
+    SocketService().getUserStatus(targetId).then((data) {
       if (!mounted) return;
-      bool online = false;
-      DateTime? lastSeen;
-      if (doc.exists) {
-        final data = doc.data() as Map<String, dynamic>;
-        final bool isOnline = data['isOnline'] == true;
-        final Timestamp? ts = data['lastSeen'] as Timestamp?;
-        lastSeen = ts?.toDate();
-        final bool recentlySeen = lastSeen != null &&
-            DateTime.now().difference(lastSeen).inMinutes < 5;
-        online = isOnline || recentlySeen;
-      }
-      if (_isOtherUserOnline != online || _otherUserLastSeen != lastSeen) {
+      final bool isOnline = data['isOnline'] == true;
+      final DateTime? lastSeen = SocketService.parseTimestamp(data['lastSeen']);
+      final bool recentlySeen = lastSeen != null &&
+          DateTime.now().difference(lastSeen).inMinutes < 5;
+      setState(() {
+        _isOtherUserOnline = isOnline || recentlySeen;
+        _otherUserLastSeen = lastSeen;
+      });
+    });
+
+    // Subscribe to real-time status changes via Socket.IO
+    _onlineStatusSub?.cancel();
+    _onlineStatusSub = SocketService().onUserStatusChange.listen((data) {
+      if (!mounted) return;
+      final uid = data['userId']?.toString() ?? '';
+      if (uid != targetId) return;
+      final bool isOnline = data['isOnline'] == true;
+      final DateTime? lastSeen = SocketService.parseTimestamp(data['lastSeen']);
+      final bool recentlySeen = lastSeen != null &&
+          DateTime.now().difference(lastSeen).inMinutes < 5;
+      if (_isOtherUserOnline != (isOnline || recentlySeen) ||
+          _otherUserLastSeen != lastSeen) {
         setState(() {
-          _isOtherUserOnline = online;
+          _isOtherUserOnline = isOnline || recentlySeen;
           _otherUserLastSeen = lastSeen;
         });
       }

@@ -761,7 +761,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       messageType: type,
       messageId: messageId,
       repliedTo: _replyToID != null
-          ? {'messageId': _replyToID, 'message': _replyToMessage?['message'] ?? ''}
+          ? _buildReplyPayload(_replyToID!, _replyToMessage ?? {})
           : null,
       user1Name: widget.isAdmin ? _adminUserName : widget.userName,
       user2Name: widget.isAdmin ? widget.userName : _adminUserName,
@@ -845,6 +845,48 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       _replyToID = messageID;
       _replyToMessage = messageData;
     });
+  }
+
+  /// Returns a human-readable preview text for a message (used in reply bubbles
+  /// and the chat list — mirrors WhatsApp convention).
+  String _messagePreviewText(Map<String, dynamic> data) {
+    final type = data['messageType'] ?? data['type'] ?? 'text';
+    switch (type) {
+      case 'image':
+        return '📷 Photo';
+      case 'voice':
+        return '🎤 Voice message';
+      case 'doc':
+        return '📄 Document';
+      case 'profile_card':
+        return '👤 Profile shared';
+      default:
+        return data['message']?.toString() ?? '';
+    }
+  }
+
+  /// Builds the `repliedTo` map that gets stored with the outgoing message.
+  /// For image/voice/doc types the `message` field holds a human-readable
+  /// label rather than the raw URL so that every receiver can display it
+  /// nicely without knowing the message type.
+  Map<String, dynamic> _buildReplyPayload(
+      String messageId, Map<String, dynamic> data) {
+    final type = data['messageType'] ?? data['type'] ?? 'text';
+    final senderIdR =
+        data['senderId']?.toString() ?? data['senderid']?.toString() ?? '';
+    final bool isFromMe = senderIdR == _mySenderId;
+    final bool isFromAdmin = senderIdR == _adminUserId;
+    final String senderName = isFromAdmin
+        ? 'Admin'
+        : (isFromMe ? 'You' : widget.userName);
+    return {
+      'messageId': messageId,
+      'message': _messagePreviewText(data),
+      'messageType': type,
+      'senderName': senderName,
+      if (type == 'image')
+        'imageUrl': data['message']?.toString() ?? data['imageUrl']?.toString(),
+    };
   }
 
   Future<void> _playVoice(String url) async {
@@ -1046,11 +1088,14 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                       children: [
                         // Reply preview — support both Socket.IO repliedTo map and legacy replyto string
                         Builder(builder: (_) {
-                          final replyToId = data['repliedTo']?['messageId']?.toString()
+                          final repliedToMap = data['repliedTo'] is Map
+                              ? Map<String, dynamic>.from(data['repliedTo'] as Map)
+                              : null;
+                          final replyToId = repliedToMap?['messageId']?.toString()
                               ?? data['replyto']?.toString() ?? '';
                           if (replyToId.isNotEmpty) {
                             return Column(children: [
-                              _buildReplyPreview(replyToId, isMe),
+                              _buildReplyPreview(replyToId, isMe, inlinePayload: repliedToMap),
                               const SizedBox(height: 8),
                             ]);
                           }
@@ -1553,8 +1598,9 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   }
 
 // Reply preview uses cache (no async fetch)
-  Widget _buildReplyPreview(String replyToID, bool isMe) {
-    // Look up from cache by messageId
+  Widget _buildReplyPreview(String replyToID, bool isMe,
+      {Map<String, dynamic>? inlinePayload}) {
+    // Look up from cache by messageId for full message data.
     Map<String, dynamic>? replyData;
     try {
       replyData = _cachedMessages.firstWhere(
@@ -1562,7 +1608,8 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       );
     } catch (_) {}
 
-    if (replyData == null) {
+    // Fall back to the repliedTo map passed directly (from the parent message).
+    if (replyData == null && inlinePayload == null) {
       // Minimal placeholder – no network call
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1588,23 +1635,43 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       );
     }
 
-    final String senderIdR = replyData['senderId']?.toString() ?? replyData['senderid']?.toString() ?? '';
-    bool isReplyFromMe = senderIdR == _mySenderId;
-    bool isReplyFromAdmin = senderIdR == _adminUserId;
-    String senderName = isReplyFromAdmin
-        ? "Admin"
-        : (isReplyFromMe ? "You" : widget.userName);
-    final String msgType = replyData['messageType'] ?? replyData['type'] ?? 'text';
-    String content = msgType == 'text'
-        ? (replyData['message'] ?? '')
-        : '$msgType message';
+    // Prefer the full cached message for type detection; fall back to inline.
+    final String msgType = replyData != null
+        ? (replyData['messageType'] ?? replyData['type'] ?? 'text')
+        : (inlinePayload!['messageType'] ?? inlinePayload['type'] ?? 'text');
+
+    final String senderName;
+    if (replyData != null) {
+      final String senderIdR =
+          replyData['senderId']?.toString() ?? replyData['senderid']?.toString() ?? '';
+      final bool isReplyFromMe = senderIdR == _mySenderId;
+      final bool isReplyFromAdmin = senderIdR == _adminUserId;
+      senderName = isReplyFromAdmin
+          ? 'Admin'
+          : (isReplyFromMe ? 'You' : widget.userName);
+    } else {
+      senderName = inlinePayload!['senderName']?.toString() ?? 'User';
+    }
+
+    // Preview text — human-readable label (never a raw URL)
+    final String previewText = replyData != null
+        ? _messagePreviewText(replyData)
+        : (inlinePayload!['message']?.toString() ?? '📷 Photo');
+
+    // Image URL for thumbnail (only for image type)
+    final String? imageUrl = msgType == 'image'
+        ? (replyData != null
+            ? (replyData['message']?.toString() ??
+                replyData['imageUrl']?.toString())
+            : inlinePayload!['imageUrl']?.toString())
+        : null;
+    final bool hasImage = imageUrl != null && imageUrl.isNotEmpty;
 
     return Container(
       constraints: BoxConstraints(
         minWidth: 100,
         maxWidth: MediaQuery.of(context).size.width * 0.6,
       ),
-      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: isMe
             ? Colors.white.withOpacity(0.2)
@@ -1616,32 +1683,73 @@ class _AdminChatScreenState extends State<AdminChatScreen>
               : _primaryGradient.colors[0].withOpacity(0.3),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.reply, size: 16,
-                  color: isMe ? Colors.white70 : _primaryGradient.colors[0]),
-              const SizedBox(width: 6),
-              Text(senderName,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: isMe ? Colors.white70 : _primaryGradient.colors[0],
-                  )),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(content,
-              style: TextStyle(
-                fontSize: 13,
-                color: isMe ? Colors.white : _textColor,
-                fontStyle: FontStyle.italic,
+          // Left accent bar (WhatsApp-style)
+          Container(
+            width: 3,
+            height: hasImage ? 64 : 46,
+            decoration: BoxDecoration(
+              color: isMe
+                  ? Colors.white.withOpacity(0.7)
+                  : _primaryGradient.colors[0],
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(12),
+                bottomLeft: Radius.circular(12),
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis),
+            ),
+          ),
+          Flexible(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(senderName,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: isMe
+                            ? Colors.white.withOpacity(0.9)
+                            : _primaryGradient.colors[0],
+                      )),
+                  const SizedBox(height: 3),
+                  Text(previewText,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isMe
+                            ? Colors.white.withOpacity(0.8)
+                            : _lightTextColor,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+          ),
+          // Image thumbnail (WhatsApp-style) for image replies
+          if (hasImage) ...[
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(12),
+                bottomRight: Radius.circular(12),
+              ),
+              child: Image.network(
+                imageUrl!,
+                width: 56,
+                height: 64,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(
+                  width: 56,
+                  height: 64,
+                  color: Colors.grey.shade300,
+                  child: Icon(Icons.image, color: Colors.grey.shade500),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -2955,6 +3063,14 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   }
 
   Widget _buildReplyBar() {
+    final String msgType =
+        _replyToMessage!['messageType'] ?? _replyToMessage!['type'] ?? 'text';
+    final String previewText = _messagePreviewText(_replyToMessage!);
+    final String? imageUrl = msgType == 'image'
+        ? (_replyToMessage!['message']?.toString() ??
+            _replyToMessage!['imageUrl']?.toString())
+        : null;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -2965,6 +3081,21 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         children: [
           Icon(Icons.reply, color: _primaryGradient.colors[0], size: 22),
           const SizedBox(width: 10),
+          // Thumbnail for image replies
+          if (imageUrl != null && imageUrl.isNotEmpty) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.network(
+                imageUrl,
+                width: 40,
+                height: 40,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                    Icon(Icons.image, size: 40, color: _lightTextColor),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -2975,9 +3106,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                         color: _lightTextColor,
                         fontWeight: FontWeight.w500)),
                 Text(
-                  (_replyToMessage!['messageType'] ?? _replyToMessage!['type']) == 'text'
-                      ? (_replyToMessage!['message'] ?? '')
-                      : '${_replyToMessage!['messageType'] ?? _replyToMessage!['type']} message',
+                  previewText,
                   style: TextStyle(
                       fontSize: 15,
                       color: _textColor,

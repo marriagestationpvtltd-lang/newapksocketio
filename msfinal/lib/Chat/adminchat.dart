@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 import 'dart:ui';
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
@@ -51,7 +52,7 @@ class AdminChatScreen extends StatefulWidget {
 }
 
 class _AdminChatScreenState extends State<AdminChatScreen>
-    with WidgetsBindingObserver {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   static const String _adminUserId = '1';
   static const String _adminUserName = 'Admin';
 
@@ -78,6 +79,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   bool _isSendingVoice = false;
   int _recordDuration = 0;
   Timer? _recordTimer;
+  AnimationController? _recordingAnimController;
   String? _replyToID;
   Map<String, dynamic>? _replyToMessage;
   final ScrollController _scrollController = ScrollController();
@@ -166,6 +168,11 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       _loadCurrentUserData();
     }
     _scrollController.addListener(_onScroll);
+
+    _recordingAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
 
     // Voice audio player listeners
     _audioPlayerStateSub = _audioPlayer.onPlayerStateChanged.listen((state) {
@@ -501,6 +508,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     _audioPlayer.dispose();
     _recordTimer?.cancel();
     _audioRecorder.dispose();
+    _recordingAnimController?.dispose();
     _audioPlayerStateSub?.cancel();
     _audioPlayerPositionSub?.cancel();
     _audioPlayerDurationSub?.cancel();
@@ -909,6 +917,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         _isRecording = true;
         _recordDuration = 0;
       });
+      _recordingAnimController?.repeat();
       _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted) setState(() => _recordDuration++);
       });
@@ -925,6 +934,8 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     if (!_isRecording) return;
     _recordTimer?.cancel();
     _recordTimer = null;
+    _recordingAnimController?.stop();
+    _recordingAnimController?.reset();
     try {
       final path = await _audioRecorder.stop();
       setState(() {
@@ -954,6 +965,8 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     if (!_isRecording) return;
     _recordTimer?.cancel();
     _recordTimer = null;
+    _recordingAnimController?.stop();
+    _recordingAnimController?.reset();
     _audioRecorder.stop();
     setState(() { _isRecording = false; _recordDuration = 0; });
   }
@@ -3301,7 +3314,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
 
   Widget _buildInputBar() {
     const kAccent = Color(0xFF9C27B0);
-    if (_isRecording) {
+    if (_isRecording && _recordingAnimController != null) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
@@ -3327,7 +3340,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
             Expanded(
               child: Container(
                 height: 50,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
                   color: kAccent.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(30),
@@ -3335,20 +3348,64 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.mic, color: kAccent, size: 20),
-                    const SizedBox(width: 8),
+                    // Pulsing red dot – opacity oscillates between 0.4 and 1.0
+                    AnimatedBuilder(
+                      animation: _recordingAnimController!,
+                      builder: (context, _) {
+                        // maps sin output [-1,1] → opacity [0.4, 1.0]
+                        final pulse = 0.4 + 0.6 * (0.5 + 0.5 * sin(2 * pi * _recordingAnimController!.value));
+                        return Opacity(
+                          opacity: pulse,
+                          child: Container(
+                            width: 10,
+                            height: 10,
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 6),
                     Text(
                       _formatRecordDuration(_recordDuration),
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: kAccent,
                         fontWeight: FontWeight.w600,
-                        fontSize: 15,
+                        fontSize: 14,
                       ),
                     ),
-                    const Spacer(),
-                    const Text(
-                      'Recording...',
-                      style: TextStyle(color: Colors.grey, fontSize: 13),
+                    const SizedBox(width: 8),
+                    // Animated waveform bars – each bar's height is a staggered sin wave
+                    Expanded(
+                      child: AnimatedBuilder(
+                        animation: _recordingAnimController!,
+                        builder: (context, _) {
+                          const barCount = 22;
+                          const maxH = 22.0;
+                          const minH = 4.0;
+                          final t = _recordingAnimController!.value;
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: List.generate(barCount, (i) {
+                              // phase offset per bar creates a travelling-wave effect
+                              final phase = (i / barCount) * 2 * pi;
+                              // maps sin output [-1,1] → [minH, maxH]
+                              final h = minH + (maxH - minH) * (0.5 + 0.5 * sin(2 * pi * t + phase));
+                              return Container(
+                                width: 3,
+                                height: h,
+                                decoration: BoxDecoration(
+                                  color: kAccent.withOpacity(0.75),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              );
+                            }),
+                          );
+                        },
+                      ),
                     ),
                   ],
                 ),

@@ -342,6 +342,17 @@ class _ChatListScreenState extends State<ChatListScreen>
   /// Listen to Socket.IO user_status_change for admin's online status.
   void _startAdminStatusListener() {
     _adminStatusSubscription?.cancel();
+
+    // Fetch initial admin status
+    SocketService().getUserStatus(_adminUserId).then((statusData) {
+      if (!mounted) return;
+      final bool online = statusData['isOnline'] == true;
+      setState(() { _adminOnline = online; });
+    }).catchError((e) {
+      print('Error fetching admin status: $e');
+    });
+
+    // Listen for status changes
     _adminStatusSubscription =
         SocketService().onUserStatusChange.listen((data) {
       if (!mounted) return;

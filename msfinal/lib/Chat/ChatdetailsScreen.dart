@@ -1,5 +1,6 @@
 // lib/screens/ChatDetailScreen.dart
 import 'dart:convert';
+import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -65,7 +66,7 @@ class ChatDetailScreen extends StatefulWidget {
 }
 
 class _ChatDetailScreenState extends State<ChatDetailScreen>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   final SocketService _socketService = SocketService();
   final Uuid _uuid = Uuid();
 
@@ -108,6 +109,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   int _recordDuration = 0;
   Timer? _recordTimer;
   String? _recordingPath;
+  AnimationController? _recordingAnimController;
 
   // Swipe reply variables
   Map<String, dynamic>? _swipedMessage;
@@ -218,6 +220,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         parent: _swipeAnimationController!,
         curve: Curves.easeOut,
       ),
+    );
+
+    _recordingAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
     );
 
     // Defer heavy init work off the first frame so the screen opens instantly
@@ -626,6 +633,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     _audioPlayer.dispose();
     _recordTimer?.cancel();
     _audioRecorder.dispose();
+    _recordingAnimController?.dispose();
     _swipeAnimationController?.dispose();
     _typingDebounce?.cancel();
     _typingSubscription?.cancel();
@@ -890,6 +898,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         _recordingPath = path;
       });
 
+      _recordingAnimController?.repeat();
       _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted) setState(() => _recordDuration++);
       });
@@ -907,6 +916,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
     _recordTimer?.cancel();
     _recordTimer = null;
+    _recordingAnimController?.stop();
+    _recordingAnimController?.reset();
 
     try {
       final path = await _audioRecorder.stop();
@@ -967,6 +978,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     if (!_isRecording) return;
     _recordTimer?.cancel();
     _recordTimer = null;
+    _recordingAnimController?.stop();
+    _recordingAnimController?.reset();
     _audioRecorder.stop();
     setState(() {
       _isRecording = false;
@@ -2199,6 +2212,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   Widget _bottomSection() => _bottomInputBar();
 
   Widget _buildRecordingBar() {
+    if (_recordingAnimController == null) return const SizedBox.shrink();
     return Row(
       children: [
         IconButton(
@@ -2212,7 +2226,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         Expanded(
           child: Container(
             height: 46,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
               color: _accentColor.withOpacity(0.08),
               borderRadius: BorderRadius.circular(24),
@@ -2220,20 +2234,63 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             ),
             child: Row(
               children: [
-                const Icon(Icons.mic, color: _accentColor, size: 18),
-                const SizedBox(width: 8),
+                // Pulsing red dot – opacity oscillates between 0.4 and 1.0
+                AnimatedBuilder(
+                  animation: _recordingAnimController!,
+                  builder: (context, _) {
+                    final pulse = 0.4 + 0.6 * (0.5 + 0.5 * sin(2 * pi * _recordingAnimController!.value));
+                    return Opacity(
+                      opacity: pulse,
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(width: 6),
                 Text(
                   _formatRecordDuration(_recordDuration),
                   style: const TextStyle(
                     color: _accentColor,
                     fontWeight: FontWeight.w600,
-                    fontSize: 15,
+                    fontSize: 14,
                   ),
                 ),
-                const Spacer(),
-                const Text(
-                  'Recording...',
-                  style: TextStyle(color: _lightTextColor, fontSize: 13),
+                const SizedBox(width: 8),
+                // Animated waveform bars – each bar's height is a staggered sin wave
+                Expanded(
+                  child: AnimatedBuilder(
+                    animation: _recordingAnimController!,
+                    builder: (context, _) {
+                      const barCount = 22;
+                      const maxH = 20.0;
+                      const minH = 4.0;
+                      final t = _recordingAnimController!.value;
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: List.generate(barCount, (i) {
+                          // phase offset per bar creates a travelling-wave effect
+                          final phase = (i / barCount) * 2 * pi;
+                          // maps sin output [-1,1] → [minH, maxH]
+                          final h = minH + (maxH - minH) * (0.5 + 0.5 * sin(2 * pi * t + phase));
+                          return Container(
+                            width: 3,
+                            height: h,
+                            decoration: BoxDecoration(
+                              color: _accentColor.withOpacity(0.75),
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          );
+                        }),
+                      );
+                    },
+                  ),
                 ),
               ],
             ),

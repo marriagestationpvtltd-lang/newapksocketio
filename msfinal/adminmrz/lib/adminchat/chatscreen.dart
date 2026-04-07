@@ -59,7 +59,7 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           ChatSidebar(),
           Container(width: 1, color: const Color(0xFFE2E8F0)),
-          const Expanded(
+          Expanded(
               child: ChatWindow(
                   name: 'select user to chat',
                   isOnline: true,

@@ -74,6 +74,7 @@ class _CallScreenState extends State<CallScreen>
   Timer? _ringtoneRepeatTimer;
 
   final AdminSocketService _socketService = AdminSocketService();
+  StreamSubscription<Map<String, dynamic>>? _callAcceptedSubscription;
   StreamSubscription<Map<String, dynamic>>? _callRejectedSubscription;
   StreamSubscription<Map<String, dynamic>>? _callEndedSubscription;
 
@@ -212,6 +213,18 @@ class _CallScreenState extends State<CallScreen>
         if (mounted) {
           setState(() => _callStatus = _CallStatus.ringing);
         }
+
+        _callAcceptedSubscription?.cancel();
+        _callAcceptedSubscription =
+            _socketService.onCallAccepted.listen((data) async {
+          if (!mounted || _ending) return;
+          final channelName = data['channelName']?.toString();
+          if (channelName == _channel) {
+            // User accepted the call - stop ringtone and wait for them to join
+            await _stopRingtone();
+            debugPrint('✅ User accepted call on channel $_channel');
+          }
+        });
 
         _callRejectedSubscription?.cancel();
         _callRejectedSubscription =
@@ -369,8 +382,10 @@ class _CallScreenState extends State<CallScreen>
 
       await _callRejectedSubscription?.cancel();
       await _callEndedSubscription?.cancel();
+      await _callAcceptedSubscription?.cancel();
       _callRejectedSubscription = null;
       _callEndedSubscription = null;
+      _callAcceptedSubscription = null;
 
       if (widget.isOutgoingCall) {
         if (_callActive) {
@@ -689,6 +704,7 @@ class _CallScreenState extends State<CallScreen>
     _callTimer?.cancel();
     _timeoutTimer?.cancel();
     _ringtoneRepeatTimer?.cancel();
+    _callAcceptedSubscription?.cancel();
     _callRejectedSubscription?.cancel();
     _callEndedSubscription?.cancel();
 

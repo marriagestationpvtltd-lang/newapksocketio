@@ -246,6 +246,7 @@ class _ChatListScreenState extends State<ChatListScreen>
     final String preview = _formatConversationPreview(
       rawMessage: adminRoom['lastMessage']?.toString() ?? '',
       messageType: msgType,
+      compactMediaLabels: true,
     );
 
     final dynamic lastMsgTime = adminRoom['lastMessageTime'];
@@ -378,13 +379,14 @@ class _ChatListScreenState extends State<ChatListScreen>
   String _formatConversationPreview({
     required String rawMessage,
     String? messageType,
+    bool compactMediaLabels = false,
   }) {
     final type = messageType?.trim().toLowerCase();
     switch (type) {
       case 'image':
-        return '📷 Photo';
+        return compactMediaLabels ? '📷 Image' : '📷 Photo';
       case 'voice':
-        return '🎤 Voice message';
+        return compactMediaLabels ? '🎤 Voice note' : '🎤 Voice message';
       case 'doc':
         return '📄 Document';
       case 'profile_card':
@@ -424,7 +426,7 @@ class _ChatListScreenState extends State<ChatListScreen>
 
     final String callType = payload['callType']?.toString() ?? 'audio';
     final String status = payload['callStatus']?.toString() ?? '';
-    final String label = payload['label']?.toString().trim() ?? '';
+    final String label = (payload['label']?.toString() ?? '').trim();
     final int durationSeconds =
         (payload['duration'] as num?)?.toInt() ??
         (payload['callDuration'] as num?)?.toInt() ??
@@ -463,8 +465,13 @@ class _ChatListScreenState extends State<ChatListScreen>
 
   String _formatCallDuration(int seconds) {
     final duration = Duration(seconds: seconds);
+    final hours = duration.inHours;
     final minutes = duration.inMinutes;
     final remainingSeconds = duration.inSeconds.remainder(60);
+    if (hours > 0) {
+      final remainingMinutes = duration.inMinutes.remainder(60);
+      return '$hours:${remainingMinutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+    }
     return '$minutes:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 

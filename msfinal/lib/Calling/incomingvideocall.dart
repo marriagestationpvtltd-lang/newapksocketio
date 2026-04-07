@@ -253,24 +253,6 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
 
       print('✅ Permissions granted');
 
-      // Notify caller via Socket.IO (fast) + FCM (fallback)
-      print('📤 Notifying caller of acceptance...');
-      SocketService().emitCallAccept(
-        callerId: _callerId,
-        recipientId: _currentUserId,
-        recipientName: _recipientName,
-        recipientUid: _localUid.toString(),
-        channelName: _channel,
-        callType: 'video',
-      );
-      await NotificationService.sendVideoCallResponseNotification(
-        callerId: _callerId,
-        recipientName: _recipientName,
-        accepted: true,
-        recipientUid: _localUid.toString(),
-        channelName: _channel,
-      );
-
       // Token
       print('🔐 Getting Agora token...');
       final token = await AgoraTokenService.getToken(
@@ -294,6 +276,25 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
             print('✅ Joined channel successfully');
             setState(() => _joined = true);
             unawaited(_startForegroundService());
+
+            // Notify caller AFTER successfully joining Agora channel
+            // This prevents race condition where caller receives accept before recipient joins
+            print('📤 Notifying caller of acceptance...');
+            SocketService().emitCallAccept(
+              callerId: _callerId,
+              recipientId: _currentUserId,
+              recipientName: _recipientName,
+              recipientUid: _localUid.toString(),
+              channelName: _channel,
+              callType: 'video',
+            );
+            unawaited(NotificationService.sendVideoCallResponseNotification(
+              callerId: _callerId,
+              recipientName: _recipientName,
+              accepted: true,
+              recipientUid: _localUid.toString(),
+              channelName: _channel,
+            ));
           },
           onUserJoined: (connection, remoteUid, elapsed) {
             print('👤 Remote user joined: $remoteUid');

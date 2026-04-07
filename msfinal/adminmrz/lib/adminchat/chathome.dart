@@ -1112,17 +1112,19 @@ class _ChatWindowState extends State<ChatWindow> {
   }
 
   void _scrollToBottom() {
+    if (!mounted) return;
     if (_scrollController.hasClients) {
-      final maxScrollExtent = _scrollController.position.maxScrollExtent;
-      if (maxScrollExtent > 0) {
-        _scrollController.jumpTo(maxScrollExtent);
-      } else {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _scrollToBottom();
-        });
-      }
+      // jumpTo(0) is a no-op when content fits on screen, so no need to guard
+      // against maxScrollExtent == 0 — just jump unconditionally.
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
     } else {
-      Future.delayed(Duration(milliseconds: 100), _scrollToBottom);
+      // Controller not yet attached; retry once after layout.
+      Future.delayed(const Duration(milliseconds: 50), () {
+        if (mounted && _scrollController.hasClients) {
+          _scrollController
+              .jumpTo(_scrollController.position.maxScrollExtent);
+        }
+      });
     }
   }
 
@@ -1148,6 +1150,12 @@ class _ChatWindowState extends State<ChatWindow> {
     final String roomId = AdminSocketService.chatRoomId(chatProvider.id.toString());
     final double savedOffset =
         _scrollController.hasClients ? _scrollController.offset : 0;
+    // Capture old max extent so we can shift the position by exactly the
+    // height of the newly prepended messages, keeping the visible content
+    // stable instead of jumping.
+    final double oldMaxExtent = _scrollController.hasClients
+        ? _scrollController.position.maxScrollExtent
+        : 0;
     _currentPage++;
     _socketService
         .getMessages(roomId, page: _currentPage, limit: _pageSize)
@@ -1168,11 +1176,13 @@ class _ChatWindowState extends State<ChatWindow> {
         _suppressNextAutoScroll = false;
       });
       // Restore scroll position so the user stays at the same message.
+      // Shift by the height added at the top (newMaxExtent - oldMaxExtent).
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients) {
-          _scrollController.jumpTo(savedOffset +
-              _scrollController.position.maxScrollExtent -
-              _scrollController.position.minScrollExtent);
+          final double newMaxExtent =
+              _scrollController.position.maxScrollExtent;
+          _scrollController
+              .jumpTo(savedOffset + (newMaxExtent - oldMaxExtent));
         }
       });
     }).catchError((e) {

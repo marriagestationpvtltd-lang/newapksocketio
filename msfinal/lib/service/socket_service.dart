@@ -43,6 +43,14 @@ class SocketService {
   final _chatRoomsUpdateCtrl = StreamController<List<dynamic>>.broadcast();
   final _connectionCtrl = StreamController<bool>.broadcast();
 
+  // ── Call signaling streams ────────────────────────────────────────────────
+
+  final _incomingCallCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _callAcceptedCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _callRejectedCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _callCancelledCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _callEndedCtrl = StreamController<Map<String, dynamic>>.broadcast();
+
   // ── Public streams ────────────────────────────────────────────────────────
 
   Stream<Map<String, dynamic>> get onNewMessage => _newMessageCtrl.stream;
@@ -56,6 +64,13 @@ class SocketService {
   Stream<Map<String, dynamic>> get onUserStatusChange => _userStatusCtrl.stream;
   Stream<List<dynamic>> get onChatRoomsUpdate => _chatRoomsUpdateCtrl.stream;
   Stream<bool> get onConnectionChange => _connectionCtrl.stream;
+
+  // Call signaling streams
+  Stream<Map<String, dynamic>> get onIncomingCall => _incomingCallCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallAccepted => _callAcceptedCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallRejected => _callRejectedCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallCancelled => _callCancelledCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallEnded => _callEndedCtrl.stream;
 
   bool get isConnected => _socket?.connected == true;
 
@@ -132,6 +147,27 @@ class SocketService {
       final map = _toMap(data);
       final rooms = map['chatRooms'];
       if (rooms is List) _chatRoomsUpdateCtrl.add(rooms);
+    });
+
+    // ── Call signaling events ────────────────────────────────────────────────
+    _socket!.on('incoming_call', (data) {
+      _incomingCallCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_accepted', (data) {
+      _callAcceptedCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_rejected', (data) {
+      _callRejectedCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_cancelled', (data) {
+      _callCancelledCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_ended', (data) {
+      _callEndedCtrl.add(_toMap(data));
     });
 
     _socket!.on('error', (data) {
@@ -235,6 +271,110 @@ class SocketService {
       'messageId': messageId,
       'userId': userId,
       'deleteForEveryone': deleteForEveryone,
+    });
+  }
+
+  // ── Call signaling emit methods ───────────────────────────────────────────
+
+  /// Notify the recipient of an incoming call (real-time, for online users).
+  /// Also send a FCM push via [NotificationService] as fallback for offline users.
+  void emitCallInvite({
+    required String recipientId,
+    required String callerId,
+    required String callerName,
+    required String callerImage,
+    required String channelName,
+    required String callerUid,
+    String callType = 'audio',
+    String? chatRoomId,
+  }) {
+    _socket?.emit('call_invite', {
+      'recipientId': recipientId,
+      'callerId': callerId,
+      'callerName': callerName,
+      'callerImage': callerImage,
+      'channelName': channelName,
+      'callerUid': callerUid,
+      'callType': callType,
+      if (chatRoomId != null) 'chatRoomId': chatRoomId,
+      'type': callType == 'video' ? 'video_call' : 'call',
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
+  /// Notify the caller that the call was accepted.
+  void emitCallAccept({
+    required String callerId,
+    required String recipientId,
+    required String recipientName,
+    required String recipientUid,
+    required String channelName,
+    String callType = 'audio',
+  }) {
+    _socket?.emit('call_accept', {
+      'callerId': callerId,
+      'recipientId': recipientId,
+      'recipientName': recipientName,
+      'recipientUid': recipientUid,
+      'channelName': channelName,
+      'callType': callType,
+      'accepted': 'true',
+      'type': callType == 'video' ? 'video_call_response' : 'call_response',
+    });
+  }
+
+  /// Notify the caller that the call was rejected.
+  void emitCallReject({
+    required String callerId,
+    required String recipientId,
+    required String recipientName,
+    required String channelName,
+    String callType = 'audio',
+  }) {
+    _socket?.emit('call_reject', {
+      'callerId': callerId,
+      'recipientId': recipientId,
+      'recipientName': recipientName,
+      'channelName': channelName,
+      'callType': callType,
+      'accepted': 'false',
+      'type': callType == 'video' ? 'video_call_response' : 'call_response',
+    });
+  }
+
+  /// Notify the recipient that the caller cancelled before they answered.
+  void emitCallCancel({
+    required String recipientId,
+    required String callerId,
+    required String callerName,
+    required String channelName,
+    String callType = 'audio',
+  }) {
+    _socket?.emit('call_cancel', {
+      'recipientId': recipientId,
+      'callerId': callerId,
+      'callerName': callerName,
+      'channelName': channelName,
+      'callType': callType,
+      'type': callType == 'video' ? 'video_call_cancelled' : 'call_cancelled',
+    });
+  }
+
+  /// Notify both parties that the call has ended.
+  void emitCallEnd({
+    required String callerId,
+    required String recipientId,
+    required String channelName,
+    String callType = 'audio',
+    int duration = 0,
+  }) {
+    _socket?.emit('call_end', {
+      'callerId': callerId,
+      'recipientId': recipientId,
+      'channelName': channelName,
+      'callType': callType,
+      'duration': duration,
+      'type': callType == 'video' ? 'video_call_ended' : 'call_ended',
     });
   }
 

@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:ui' as ui;
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:ms2026/Auth/Screen/signupscreen10.dart';
@@ -949,38 +948,8 @@ class _RequestCardDynamicState extends State<RequestCardDynamic> {
       userIds.sort();
       final chatRoomId = userIds.join('_');
 
-      final chatRoomDoc = await FirebaseFirestore.instance
-          .collection('chatRooms')
-          .doc(chatRoomId)
-          .get();
-
-      if (!chatRoomDoc.exists) {
-        await FirebaseFirestore.instance
-            .collection('chatRooms')
-            .doc(chatRoomId)
-            .set({
-          'chatRoomId': chatRoomId,
-          'participants': [currentUserIdStr, otherUserId],
-          'participantNames': {
-            currentUserIdStr: currentUserName,
-            otherUserId: otherUserName,
-          },
-          'participantImages': {
-            currentUserIdStr: currentUserImage,
-            otherUserId: otherUserImage,
-          },
-          'unreadCount': {
-            currentUserIdStr: 0,
-            otherUserId: 0,
-          },
-          'lastMessage': '',
-          'lastMessageType': 'text',
-          'lastMessageTime': DateTime.now(),
-          'lastMessageSenderId': '',
-          'createdAt': DateTime.now(),
-          'updatedAt': DateTime.now(),
-        });
-      }
+      // Chat room is auto-created by the Socket.IO server on first message send.
+      // No need to pre-create it in Firestore.
 
       if (docstatus == "approved" && usertye == "paid") {
         Navigator.push(

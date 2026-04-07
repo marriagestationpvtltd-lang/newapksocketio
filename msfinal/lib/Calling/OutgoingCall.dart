@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../Chat/call_overlay_manager.dart';
 import '../navigation/app_navigation.dart';
 import '../pushnotification/pushservice.dart';
+import '../service/socket_service.dart';
 import 'tokengenerator.dart';
 import 'call_history_model.dart';
 import 'call_history_service.dart';
@@ -72,6 +73,9 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
   final AudioPlayer _ringtonePlayer = AudioPlayer();
   bool _isPlayingRingtone = false;
   StreamSubscription<Map<String, dynamic>>? _responseSubscription;
+  StreamSubscription<Map<String, dynamic>>? _socketAcceptedSub;
+  StreamSubscription<Map<String, dynamic>>? _socketRejectedSub;
+  StreamSubscription<Map<String, dynamic>>? _socketEndedSub;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   String? _connectionStatus;
   bool _remoteAccepted = false;
@@ -96,42 +100,64 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
   bool _callDeclined = false; // true when remote explicitly rejected
 
   void _listenForCallResponse() {
+    // Listen via FCM push (for when recipient was offline / app in background)
     _responseSubscription = NotificationService.callResponses.listen((data) {
-      final type = data['type']?.toString();
-      final channelName = data['channelName']?.toString();
-      if (_channel.isNotEmpty &&
-          channelName != null &&
-          channelName.isNotEmpty &&
-          channelName != _channel) {
-        return;
-      }
+      _handleCallResponseData(data);
+    });
 
-      if (type == 'call_response') {
-        final accepted = data['accepted'] == 'true';
-        if (accepted) {
-          if (mounted) {
-            setState(() {
-              _remoteAccepted = true;
-              _isCallRinging = false;
-            });
-          }
-          unawaited(_stopRingtone());
-          _armOutgoingTimeout(_kPostAcceptConnectionTimeout);
-          _syncOverlayState();
-        } else {
-          if (mounted) {
-            setState(() {
-              _remoteAccepted = false;
-              _callDeclined = true;
-            });
-          }
-          unawaited(_stopRingtone());
-          _endCall();
+    // Listen via Socket.IO (low-latency path for online recipients)
+    _socketAcceptedSub = SocketService().onCallAccepted.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
+      _handleCallResponseData({...data, 'type': 'call_response', 'accepted': 'true'});
+    });
+    _socketRejectedSub = SocketService().onCallRejected.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
+      _handleCallResponseData({...data, 'type': 'call_response', 'accepted': 'false'});
+    });
+    _socketEndedSub = SocketService().onCallEnded.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
+      if (!_ending) _endCall();
+    });
+  }
+
+  void _handleCallResponseData(Map<String, dynamic> data) {
+    final type = data['type']?.toString();
+    final channelName = data['channelName']?.toString();
+    if (_channel.isNotEmpty &&
+        channelName != null &&
+        channelName.isNotEmpty &&
+        channelName != _channel) {
+      return;
+    }
+
+    if (type == 'call_response') {
+      final accepted = data['accepted'] == 'true';
+      if (accepted) {
+        if (mounted) {
+          setState(() {
+            _remoteAccepted = true;
+            _isCallRinging = false;
+          });
         }
-      } else if (type == 'call_ended') {
+        unawaited(_stopRingtone());
+        _armOutgoingTimeout(_kPostAcceptConnectionTimeout);
+        _syncOverlayState();
+      } else {
+        if (mounted) {
+          setState(() {
+            _remoteAccepted = false;
+            _callDeclined = true;
+          });
+        }
+        unawaited(_stopRingtone());
         _endCall();
       }
-    });
+    } else if (type == 'call_ended') {
+      _endCall();
+    }
   }
 
   @override
@@ -318,6 +344,19 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
 
       // Send notification for outgoing calls
       if (widget.isOutgoingCall) {
+        // Emit via Socket.IO first (instant delivery for online users)
+        SocketService().emitCallInvite(
+          recipientId: widget.otherUserId,
+          callerId: widget.currentUserId,
+          callerName: widget.currentUserName,
+          callerImage: widget.currentUserImage,
+          channelName: _channel,
+          callerUid: _localUid.toString(),
+          callType: 'audio',
+          chatRoomId: widget.chatRoomId,
+        );
+
+        // Also send FCM push as fallback (for offline users / background)
         await NotificationService.sendCallNotification(
           recipientUserId: widget.otherUserId,
           callerName: widget.currentUserName,
@@ -440,17 +479,38 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
     _callTimer?.cancel();
     _timeoutTimer?.cancel();
     _responseSubscription?.cancel();
+    _socketAcceptedSub?.cancel();
+    _socketRejectedSub?.cancel();
+    _socketEndedSub?.cancel();
 
     await _stopRingtone();
 
     // If the call was never answered, notify the receiver to dismiss their incoming call screen
     if (!_callActive && widget.isOutgoingCall && _channel.isNotEmpty) {
+      // Socket.IO (instant for online users)
+      SocketService().emitCallCancel(
+        recipientId: widget.otherUserId,
+        callerId: widget.currentUserId,
+        callerName: widget.currentUserName,
+        channelName: _channel,
+        callType: 'audio',
+      );
+      // FCM push (fallback for offline users)
       unawaited(NotificationService.sendCallCancelledNotification(
         recipientUserId: widget.otherUserId,
         callerName: widget.currentUserName,
         channelName: _channel,
         callerId: widget.currentUserId,
       ));
+    } else if (_callActive && _channel.isNotEmpty) {
+      // Notify other party that call ended
+      SocketService().emitCallEnd(
+        callerId: widget.currentUserId,
+        recipientId: widget.otherUserId,
+        channelName: _channel,
+        callType: 'audio',
+        duration: _duration.inSeconds,
+      );
     }
 
     // Update call history record and write inline call message to chat (outgoing only)

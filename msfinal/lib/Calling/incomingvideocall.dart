@@ -12,6 +12,7 @@ import '../Chat/ChatlistScreen.dart';
 import '../Chat/call_overlay_manager.dart';
 import '../navigation/app_navigation.dart';
 import '../pushnotification/pushservice.dart';
+import '../service/socket_service.dart';
 import 'tokengenerator.dart';
 import 'call_history_model.dart';
 import 'call_history_service.dart';
@@ -54,6 +55,8 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
   Timer? _callTimer;
   Duration _duration = Duration.zero;
   StreamSubscription<Map<String, dynamic>>? _cancelSubscription;
+  StreamSubscription<Map<String, dynamic>>? _socketCancelSubscription;
+  StreamSubscription<Map<String, dynamic>>? _socketEndedSubscription;
 
   final _ringtonePlayer = FlutterRingtonePlayer();
 
@@ -122,6 +125,7 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
   }
 
   void _listenForCallCancelled() {
+    // FCM path
     _cancelSubscription = NotificationService.callResponses.listen((data) {
       final type = data['type']?.toString();
       if (type == 'video_call_cancelled' || type == 'video_call_ended') {
@@ -131,6 +135,20 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
             _end();
           }
         }
+      }
+    });
+
+    // Socket.IO path (real-time for online callers)
+    _socketCancelSubscription = SocketService().onCallCancelled.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (channelName == _channel && _remoteUid == null) {
+        _end();
+      }
+    });
+    _socketEndedSubscription = SocketService().onCallEnded.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (channelName == _channel) {
+        _end();
       }
     });
   }
@@ -235,8 +253,16 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
 
       print('✅ Permissions granted');
 
-      // Notify caller
+      // Notify caller via Socket.IO (fast) + FCM (fallback)
       print('📤 Notifying caller of acceptance...');
+      SocketService().emitCallAccept(
+        callerId: _callerId,
+        recipientId: _currentUserId,
+        recipientName: _recipientName,
+        recipientUid: _localUid.toString(),
+        channelName: _channel,
+        callType: 'video',
+      );
       await NotificationService.sendVideoCallResponseNotification(
         callerId: _callerId,
         recipientName: _recipientName,
@@ -392,6 +418,14 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
   Future<void> _rejectCall() async {
     _ringTimer?.cancel();
     await _stopRingtone();
+    // Notify caller via Socket.IO (fast) + FCM (fallback)
+    SocketService().emitCallReject(
+      callerId: _callerId,
+      recipientId: _currentUserId,
+      recipientName: _recipientName,
+      channelName: _channel,
+      callType: 'video',
+    );
     await NotificationService.sendVideoCallResponseNotification(
       callerId: _callerId,
       recipientName: _recipientName,
@@ -481,8 +515,19 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
     if (_ending) return;
     _ending = true;
     _callTimer?.cancel();
+    _cancelSubscription?.cancel();
+    _socketCancelSubscription?.cancel();
+    _socketEndedSubscription?.cancel();
 
     if (_callActive) {
+      // Notify caller via Socket.IO (fast) + FCM (fallback)
+      SocketService().emitCallEnd(
+        callerId: _callerId,
+        recipientId: _currentUserId,
+        channelName: _channel,
+        callType: 'video',
+        duration: _duration.inSeconds,
+      );
       unawaited(NotificationService.sendVideoCallEndedNotification(
         recipientUserId: _callerId,
         callerName: _recipientName,
@@ -1156,6 +1201,8 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
     _callTimer?.cancel();
     _qualityUpdateTimer?.cancel();
     _cancelSubscription?.cancel();
+    _socketCancelSubscription?.cancel();
+    _socketEndedSubscription?.cancel();
     // FlutterRingtonePlayer doesn't have a dispose method, stop is called in _endCall
     // Release Agora engine if not already released by _endCall
     if (_engineInitialized) {

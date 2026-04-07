@@ -2,7 +2,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../ReUsable/Navbar.dart'; // AppNavbar with onItemSelected callback
@@ -10,6 +9,7 @@ import '../Home/Screen/HomeScreenPage.dart';
 import '../liked/liked.dart';
 import '../Chat/ChatlistScreen.dart';
 import '../profile/myprofile.dart';
+import '../service/socket_service.dart';
 
 class MainControllerScreen extends StatefulWidget {
   final int initialIndex;
@@ -28,7 +28,9 @@ class _MainControllerScreenState extends State<MainControllerScreen> {
   String? _senderName;
   String? _currentUserImage;
   int _chatUnreadCount = 0;
-  StreamSubscription<QuerySnapshot>? _unreadSubscription;
+  final Set<String> _unreadChatRoomIds = {};
+  StreamSubscription<List<dynamic>>? _unreadSubscription;
+  StreamSubscription<Map<String, dynamic>>? _newMsgSubscription;
 
   @override
   void initState() {
@@ -40,6 +42,7 @@ class _MainControllerScreenState extends State<MainControllerScreen> {
   @override
   void dispose() {
     _unreadSubscription?.cancel();
+    _newMsgSubscription?.cancel();
     super.dispose();
   }
 
@@ -65,33 +68,32 @@ class _MainControllerScreenState extends State<MainControllerScreen> {
 
   void _listenUnreadCounts(String userId) {
     _unreadSubscription?.cancel();
-    _unreadSubscription = FirebaseFirestore.instance
-        .collection('chatRooms')
-        .where('participants', arrayContains: userId)
-        .snapshots()
-        .listen((snapshot) {
-      int unreadConversations = 0;
-      for (final doc in snapshot.docs) {
-        final data = doc.data();
-        final rawUnread = data['unreadCount'];
-        int myUnread = 0;
-        if (rawUnread is Map) {
-          final val = rawUnread[userId];
-          if (val is int) {
-            myUnread = val;
-          } else if (val is num) {
-            myUnread = val.toInt();
-          }
+    _newMsgSubscription?.cancel();
+
+    // Listen to chat_rooms_update from Socket.IO to count rooms with unread messages
+    _unreadSubscription = SocketService().onChatRoomsUpdate.listen((rooms) {
+      int unread = 0;
+      for (final room in rooms) {
+        if (room is Map) {
+          final unreadCount = room['unreadCount'];
+          if (unreadCount is int && unreadCount > 0) unread++;
+          else if (unreadCount is num && unreadCount.toInt() > 0) unread++;
         }
-        if (myUnread > 0) unreadConversations++;
       }
-      if (_chatUnreadCount != unreadConversations) {
-        setState(() {
-          _chatUnreadCount = unreadConversations;
-        });
+      if (_chatUnreadCount != unread && mounted) {
+        setState(() => _chatUnreadCount = unread);
       }
-    }, onError: (e) {
-      debugPrint('MainControllerScreen: unread listener error: $e');
+    });
+
+    // Also track unread rooms from new messages when user is not on Chat tab
+    _newMsgSubscription = SocketService().onNewMessage.listen((msg) {
+      final senderId = msg['senderId']?.toString() ?? '';
+      final chatRoomId = msg['chatRoomId']?.toString() ?? '';
+      if (senderId != userId && chatRoomId.isNotEmpty && _selectedIndex != _chatTabIndex && mounted) {
+        if (_unreadChatRoomIds.add(chatRoomId)) {
+          setState(() => _chatUnreadCount = _unreadChatRoomIds.length);
+        }
+      }
     });
   }
 
@@ -132,6 +134,11 @@ class _MainControllerScreenState extends State<MainControllerScreen> {
           onItemSelected: (index) {
             setState(() {
               _selectedIndex = index;
+              // Clear chat unread badge when user switches to Chat tab
+              if (index == _chatTabIndex) {
+                _chatUnreadCount = 0;
+                _unreadChatRoomIds.clear();
+              }
             });
           },
         ),

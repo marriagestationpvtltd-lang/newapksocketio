@@ -20,6 +20,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
   String _currentUserId = '';
   String _currentUserName = '';
   String _currentUserImage = '';
+  Future<List<CallHistory>>? _callsFuture;
 
   @override
   void initState() {
@@ -36,28 +37,23 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
         _currentUserId = userData['id']?.toString() ?? '';
         _currentUserName = userData['name']?.toString() ?? '';
         _currentUserImage = userData['image']?.toString() ?? '';
+        if (_currentUserId.isNotEmpty) {
+          _callsFuture = CallHistoryService.getCallHistoryFuture(_currentUserId);
+        }
+      });
+    }
+  }
+
+  void _refresh() {
+    if (_currentUserId.isNotEmpty) {
+      setState(() {
+        _callsFuture = CallHistoryService.getCallHistoryFuture(_currentUserId);
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_currentUserId.isEmpty) {
-      return Scaffold(
-        appBar: AppBar(
-          title: const Text('Call History'),
-          backgroundColor: const Color(0xFFF90E18),
-          systemOverlayStyle: SystemUiOverlayStyle(
-            statusBarColor: Colors.white,
-            statusBarIconBrightness: Brightness.dark,
-            statusBarBrightness: Brightness.light,
-            systemStatusBarContrastEnforced: false,
-          ),
-        ),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -73,11 +69,18 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
           statusBarBrightness: Brightness.light,
           systemStatusBarContrastEnforced: false,
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            onPressed: _refresh,
+            tooltip: 'Refresh',
+          ),
+        ],
       ),
-      body: StreamBuilder<List<CallHistory>>(
-        stream: CallHistoryService.getCallHistory(_currentUserId),
+      body: FutureBuilder<List<CallHistory>>(
+        future: _callsFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting || _currentUserId.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -91,7 +94,7 @@ class _CallHistoryScreenState extends State<CallHistoryScreen> {
                   Text('Error: ${snapshot.error}'),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () => setState(() {}),
+                    onPressed: _refresh,
                     child: const Text('Retry'),
                   ),
                 ],

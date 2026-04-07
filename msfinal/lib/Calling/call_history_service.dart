@@ -1,15 +1,16 @@
 import 'dart:convert';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'call_history_model.dart';
 import '../service/socket_service.dart';
 import 'package:uuid/uuid.dart';
 
-class CallHistoryService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static const String COLLECTION_NAME = 'callHistory';
+/// Base URL of the Node.js Socket.IO server (same as SocketService).
+/// Kept in sync with [kSocketServerUrl] in socket_service.dart.
+const String _kCallApiBase = kSocketServerUrl;
 
-  // Log a new call
+class CallHistoryService {
+  // Log a new call – writes to MySQL via REST
   static Future<String> logCall({
     required String callerId,
     required String callerName,
@@ -21,29 +22,29 @@ class CallHistoryService {
     required String initiatedBy,
   }) async {
     try {
-      final callId = _firestore.collection(COLLECTION_NAME).doc().id;
-      final callHistory = CallHistory(
-        callId: callId,
-        callerId: callerId,
-        callerName: callerName,
-        callerImage: callerImage,
-        recipientId: recipientId,
-        recipientName: recipientName,
-        recipientImage: recipientImage,
-        callType: callType,
-        startTime: DateTime.now(),
-        endTime: null,
-        duration: 0,
-        status: CallStatus.missed, // Default to missed, will be updated
-        initiatedBy: initiatedBy,
-      );
+      final callId = const Uuid().v4();
+      final response = await http.post(
+        Uri.parse('$_kCallApiBase/api/calls'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'callId': callId,
+          'callerId': callerId,
+          'callerName': callerName,
+          'callerImage': callerImage,
+          'recipientId': recipientId,
+          'recipientName': recipientName,
+          'recipientImage': recipientImage,
+          'callType': callType.toString().split('.').last,
+          'initiatedBy': initiatedBy,
+        }),
+      ).timeout(const Duration(seconds: 15));
 
-      await _firestore
-          .collection(COLLECTION_NAME)
-          .doc(callId)
-          .set(callHistory.toMap());
-
-      return callId;
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        if (body['success'] == true) return callId;
+      }
+      print('⚠️ logCall failed: ${response.statusCode} ${response.body}');
+      return callId; // Return generated ID even on server error so we can still update later
     } catch (e) {
       print('Error logging call: $e');
       return '';
@@ -56,144 +57,67 @@ class CallHistoryService {
     required CallStatus status,
     int duration = 0,
   }) async {
+    if (callId.isEmpty) return;
     try {
-      await _firestore.collection(COLLECTION_NAME).doc(callId).update({
-        'endTime': Timestamp.fromDate(DateTime.now()),
-        'duration': duration,
-        'status': status.toString().split('.').last,
-      });
+      await http.put(
+        Uri.parse('$_kCallApiBase/api/calls/$callId'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'status': status.toString().split('.').last,
+          'duration': duration,
+        }),
+      ).timeout(const Duration(seconds: 15));
     } catch (e) {
       print('Error updating call end: $e');
     }
   }
 
-  // Get call history for a specific user
-  static Stream<List<CallHistory>> getCallHistory(String userId) {
-    return _firestore
-        .collection(COLLECTION_NAME)
-        .orderBy('startTime', descending: true)
-        .limit(100)
-        .snapshots()
-        .map((snapshot) {
-      // Filter to only calls involving this user
-      final allCalls = snapshot.docs
-          .map((doc) => CallHistory.fromMap(doc.data(), doc.id))
-          .where((call) => call.callerId == userId || call.recipientId == userId)
-          .toList();
-
-      // Sort by start time
-      allCalls.sort((a, b) => b.startTime.compareTo(a.startTime));
-
-      return allCalls.take(100).toList();
-    });
-  }
-
-  // Get call history with pagination
-  static Future<List<CallHistory>> getCallHistoryPaginated({
-    required String userId,
-    int limit = 20,
-    DocumentSnapshot? lastDocument,
-  }) async {
+  // Get call history for a specific user (returns a Future for use with FutureBuilder)
+  static Future<List<CallHistory>> getCallHistoryFuture(String userId, {int limit = 100}) async {
     try {
-      Query query = _firestore
-          .collection(COLLECTION_NAME)
-          .where('callerId', isEqualTo: userId)
-          .orderBy('startTime', descending: true)
-          .limit(limit);
+      final response = await http.get(
+        Uri.parse('$_kCallApiBase/api/calls?userId=$userId&limit=$limit'),
+      ).timeout(const Duration(seconds: 15));
 
-      if (lastDocument != null) {
-        query = query.startAfterDocument(lastDocument);
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        final calls = (body['calls'] as List? ?? [])
+            .map((c) => CallHistory.fromMap(c as Map<String, dynamic>))
+            .toList();
+        return calls;
       }
-
-      final callerSnapshot = await query.get();
-      final callerCalls = callerSnapshot.docs
-          .map((doc) => CallHistory.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-          .toList();
-
-      // Get calls where user is recipient
-      Query recipientQuery = _firestore
-          .collection(COLLECTION_NAME)
-          .where('recipientId', isEqualTo: userId)
-          .orderBy('startTime', descending: true)
-          .limit(limit);
-
-      if (lastDocument != null) {
-        recipientQuery = recipientQuery.startAfterDocument(lastDocument);
-      }
-
-      final recipientSnapshot = await recipientQuery.get();
-      final recipientCalls = recipientSnapshot.docs
-          .map((doc) => CallHistory.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-          .toList();
-
-      // Combine and sort
-      final allCalls = [...callerCalls, ...recipientCalls];
-      allCalls.sort((a, b) => b.startTime.compareTo(a.startTime));
-
-      return allCalls.take(limit).toList();
+      return [];
     } catch (e) {
       print('Error getting call history: $e');
       return [];
     }
   }
 
-  // Get missed calls count
-  static Future<int> getMissedCallsCount(String userId) async {
-    try {
-      final snapshot = await _firestore
-          .collection(COLLECTION_NAME)
-          .where('recipientId', isEqualTo: userId)
-          .where('status', isEqualTo: 'missed')
-          .get();
-
-      return snapshot.docs.length;
-    } catch (e) {
-      print('Error getting missed calls count: $e');
-      return 0;
-    }
-  }
-
-  // Clear all call history for a user (optional feature)
-  static Future<void> clearCallHistory(String userId) async {
-    try {
-      // Delete calls where user is caller
-      final callerCalls = await _firestore
-          .collection(COLLECTION_NAME)
-          .where('callerId', isEqualTo: userId)
-          .get();
-
-      for (var doc in callerCalls.docs) {
-        await doc.reference.delete();
-      }
-
-      // Delete calls where user is recipient
-      final recipientCalls = await _firestore
-          .collection(COLLECTION_NAME)
-          .where('recipientId', isEqualTo: userId)
-          .get();
-
-      for (var doc in recipientCalls.docs) {
-        await doc.reference.delete();
-      }
-    } catch (e) {
-      print('Error clearing call history: $e');
-    }
-  }
-
   // Delete a specific call from history
   static Future<void> deleteCall(String callId) async {
     try {
-      await _firestore.collection(COLLECTION_NAME).doc(callId).delete();
+      await http.delete(
+        Uri.parse('$_kCallApiBase/api/calls/$callId'),
+      ).timeout(const Duration(seconds: 15));
     } catch (e) {
       print('Error deleting call: $e');
     }
   }
 
+  // Clear all call history for a user
+  static Future<void> clearCallHistory(String userId) async {
+    try {
+      await http.delete(
+        Uri.parse('$_kCallApiBase/api/calls/user/$userId'),
+      ).timeout(const Duration(seconds: 15));
+    } catch (e) {
+      print('Error clearing call history: $e');
+    }
+  }
+
   // Write an inline call event message into the chat message stream (WhatsApp-style).
-  // Pass [chatRoomId] for regular user-to-user chat.
-  // Pass [isAdminChat]=true + [adminChatSenderId] + [adminChatReceiverId] for admin chat.
-  // Pass [messageDocId] to use a stable document ID (e.g. channel name) so that both
-  // the caller and recipient sides can write without creating duplicate messages.
+  // Uses Socket.IO for both regular and admin chat rooms so the message appears
+  // in ChatDetailScreen and AdminChatScreen which both read from the Socket.IO server.
   static Future<void> logCallMessageInChat({
     required String callerId,
     required String callType, // 'audio' or 'video'
@@ -206,25 +130,26 @@ class CallHistoryService {
     String? messageDocId,
   }) async {
     try {
+      final payload = jsonEncode({
+        'callType': callType,
+        'callStatus': callStatus,
+        'duration': duration,
+        'callerId': callerId,
+      });
+
       if (isAdminChat) {
         final senderId = adminChatSenderId ?? callerId;
         final receiverId = adminChatReceiverId ?? '';
         if (receiverId.isNotEmpty) {
           final List<String> ids = [senderId, receiverId]..sort();
           final adminChatRoomId = ids.join('_');
-          final payload = jsonEncode({
-            'callType': callType,
-            'callStatus': callStatus,
-            'duration': duration,
-            'callerId': callerId,
-          });
           SocketService().sendMessage(
             chatRoomId: adminChatRoomId,
             senderId: senderId,
             receiverId: receiverId,
             message: payload,
             messageType: 'call',
-            messageId: const Uuid().v4(),
+            messageId: messageDocId ?? const Uuid().v4(),
             user1Name: '',
             user2Name: '',
             user1Image: '',
@@ -232,24 +157,29 @@ class CallHistoryService {
           );
         }
       } else if (chatRoomId != null && chatRoomId.isNotEmpty) {
-        final docId = messageDocId ?? _firestore.collection('chatRooms').doc().id;
-        final msgRef = _firestore
-            .collection('chatRooms')
-            .doc(chatRoomId)
-            .collection('messages')
-            .doc(docId);
-        await msgRef.set({
-          'messageId': msgRef.id,
-          'senderId': callerId,
-          'message': '',
-          'messageType': 'call',
-          'callType': callType,
-          'callStatus': callStatus,
-          'duration': duration,
-          'timestamp': FieldValue.serverTimestamp(),
-          'isRead': false,
-          'isDelivered': false,
-        });
+        // Extract sender and receiver from the chatRoomId (format: "smallerId_largerId")
+        final parts = chatRoomId.split('_');
+        String senderId = callerId;
+        String receiverId = '';
+        if (parts.length >= 2) {
+          // The receiver is the participant that is not the caller
+          receiverId = parts[0] == callerId ? parts[1] : parts[0];
+        }
+
+        if (receiverId.isNotEmpty) {
+          SocketService().sendMessage(
+            chatRoomId: chatRoomId,
+            senderId: senderId,
+            receiverId: receiverId,
+            message: payload,
+            messageType: 'call',
+            messageId: messageDocId ?? const Uuid().v4(),
+            user1Name: '',
+            user2Name: '',
+            user1Image: '',
+            user2Image: '',
+          );
+        }
       }
     } catch (e) {
       print('Error logging call message in chat (chatRoomId: $chatRoomId, isAdminChat: $isAdminChat): $e');
@@ -261,9 +191,10 @@ class CallHistoryService {
     final prefs = await SharedPreferences.getInstance();
     final userDataString = prefs.getString('user_data');
     if (userDataString != null) {
-      // Parse the user data to extract user ID
-      // This depends on how user_data is stored
-      return userDataString; // Adjust this based on actual storage format
+      try {
+        final userData = jsonDecode(userDataString) as Map<String, dynamic>;
+        return userData['id']?.toString() ?? '';
+      } catch (_) {}
     }
     return '';
   }

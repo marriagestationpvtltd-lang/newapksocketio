@@ -537,6 +537,31 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ── get_user_status ───────────────────────────────────────────────────────
+  socket.on('get_user_status', async ({ userId }, callback) => {
+    if (typeof callback !== 'function') return;
+    try {
+      const uid = (userId || '').toString();
+      if (!uid) return callback({ userId: uid, isOnline: false, lastSeen: null });
+      const [rows] = await pool.query(
+        'SELECT is_online, last_seen FROM user_online_status WHERE user_id = ?',
+        [uid],
+      );
+      if (rows.length > 0) {
+        callback({
+          userId:   uid,
+          isOnline: rows[0].is_online === 1,
+          lastSeen: rows[0].last_seen ? rows[0].last_seen.toISOString() : null,
+        });
+      } else {
+        callback({ userId: uid, isOnline: false, lastSeen: null });
+      }
+    } catch (err) {
+      console.error('get_user_status error:', err.message);
+      callback({ userId: (userId || '').toString(), isOnline: false, lastSeen: null });
+    }
+  });
+
   // ── disconnect ────────────────────────────────────────────────────────────
   socket.on('disconnect', async () => {
     console.log(`🔌 Socket disconnected: ${socket.id}`);

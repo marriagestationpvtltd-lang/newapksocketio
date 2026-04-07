@@ -113,6 +113,7 @@ class _ChatWindowState extends State<ChatWindow> {
 
   // Voice message playback state
   final AudioPlayer _voiceAudioPlayer = AudioPlayer();
+  final AudioPlayer _typingAudioPlayer = AudioPlayer();
   String? _playingVoiceMessageId;
   bool _voiceIsPlaying = false;
   Duration _voicePlaybackPosition = Duration.zero;
@@ -421,6 +422,7 @@ class _ChatWindowState extends State<ChatWindow> {
       if (data['chatRoomId']?.toString() != expectedRoom) return;
       if (data['userId']?.toString() == senderId.toString()) return;
       setState(() => _userIsTyping = true);
+      _playTypingSound();
     });
 
     _typingStopSub?.cancel();
@@ -569,6 +571,17 @@ class _ChatWindowState extends State<ChatWindow> {
     if (receiverId == null || receiverId.isEmpty) return;
     final roomId = AdminSocketService.chatRoomId(receiverId);
     _socketService.sendTypingStop(roomId);
+  }
+
+  // Play typing sound
+  void _playTypingSound() async {
+    try {
+      await _typingAudioPlayer.setVolume(0.3);
+      await _typingAudioPlayer.setAsset('assets/audio/outcall.mp3');
+      await _typingAudioPlayer.play();
+    } catch (e) {
+      print('Error playing typing sound: $e');
+    }
   }
 
   // ── SEEN STATUS ─────────────────────────────────────────────────────────
@@ -4110,6 +4123,7 @@ class _ChatWindowState extends State<ChatWindow> {
     _voicePlayerPositionSub?.cancel();
     _voicePlayerDurationSub?.cancel();
     _voiceAudioPlayer.dispose();
+    _typingAudioPlayer.dispose();
     super.dispose();
   }
 }

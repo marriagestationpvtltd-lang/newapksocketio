@@ -33,6 +33,7 @@ import '../otherenew/othernew.dart';
 import '../utils/image_utils.dart';
 import '../utils/privacy_utils.dart';
 import '../utils/time_utils.dart';
+import 'widgets/typing_indicator.dart';
 
 class AdminChatScreen extends StatefulWidget {
   final String senderID;
@@ -116,6 +117,14 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   DateTime? _adminLastSeen;
   StreamSubscription<Map<String, dynamic>>? _adminStatusSubscription;
 
+  // Typing indicator
+  bool _isAdminTyping = false;
+  Timer? _typingTimer;
+  Timer? _typingStopTimer;
+  StreamSubscription<Map<String, dynamic>>? _typingStartSubscription;
+  StreamSubscription<Map<String, dynamic>>? _typingStopSubscription;
+  final AudioPlayer _typingAudioPlayer = AudioPlayer();
+
   // Swipe-to-reply offsets (keyed by message ID)
   final Map<String, double> _swipeOffsets = {};
 
@@ -197,6 +206,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     _startAdminStatusListener();
     _setupCallListener();
     _setupMessageListeners();
+    _setupTypingListeners();
     ScreenStateManager().onChatScreenOpened(
       _chatRoomId,
       _mySenderId,
@@ -507,12 +517,17 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     _msgReadSubscription?.cancel();
     _adminStatusSubscription?.cancel();
     _incomingCallSubscription?.cancel();
+    _typingStartSubscription?.cancel();
+    _typingStopSubscription?.cancel();
+    _typingTimer?.cancel();
+    _typingStopTimer?.cancel();
     _socketService.setActiveChat(_mySenderId, _chatRoomId, isActive: false);
     _socketService.leaveRoom(_chatRoomId);
     _scrollController.removeListener(_onScroll);
     _controller.dispose();
     _messageFocusNode.dispose();
     _audioPlayer.dispose();
+    _typingAudioPlayer.dispose();
     _recordTimer?.cancel();
     _audioRecorder.dispose();
     _recordingAnimController?.dispose();
@@ -612,6 +627,62 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         }).toList();
       });
     });
+  }
+
+  // Set up typing event listeners
+  void _setupTypingListeners() {
+    _typingStartSubscription?.cancel();
+    _typingStartSubscription = _socketService.onTypingStart.listen((data) {
+      if (!mounted) return;
+      if (data['chatRoomId'] != _chatRoomId) return;
+      // Only show typing indicator if it's from the admin (other party)
+      if (data['userId']?.toString() == _adminUserId) {
+        setState(() => _isAdminTyping = true);
+        _playTypingSound();
+        // Auto-hide after 3 seconds if no stop event received
+        _typingStopTimer?.cancel();
+        _typingStopTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) setState(() => _isAdminTyping = false);
+        });
+      }
+    });
+
+    _typingStopSubscription?.cancel();
+    _typingStopSubscription = _socketService.onTypingStop.listen((data) {
+      if (!mounted) return;
+      if (data['chatRoomId'] != _chatRoomId) return;
+      if (data['userId']?.toString() == _adminUserId) {
+        _typingStopTimer?.cancel();
+        setState(() => _isAdminTyping = false);
+      }
+    });
+  }
+
+  // Play typing sound
+  void _playTypingSound() async {
+    try {
+      // Play a short typing sound (we'll use a simple notification sound)
+      await _typingAudioPlayer.setVolume(0.3);
+      await _typingAudioPlayer.play(AssetSource('audio/outcall.mp3'));
+    } catch (e) {
+      debugPrint('Error playing typing sound: $e');
+    }
+  }
+
+  // Emit typing start event
+  void _onUserTyping() {
+    _typingTimer?.cancel();
+    _socketService.startTyping(_chatRoomId, _mySenderId);
+    // Auto-stop typing after 3 seconds
+    _typingTimer = Timer(const Duration(seconds: 3), () {
+      _socketService.stopTyping(_chatRoomId, _mySenderId);
+    });
+  }
+
+  // Emit typing stop event
+  void _onUserStopTyping() {
+    _typingTimer?.cancel();
+    _socketService.stopTyping(_chatRoomId, _mySenderId);
   }
 
   // Backup incoming call listener so that calls ring even while the user is
@@ -3196,6 +3267,54 @@ class _AdminChatScreenState extends State<AdminChatScreen>
               ),
             ),
           ...messageWidgets,
+          if (_isAdminTyping) _buildTypingIndicator(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTypingIndicator() {
+    return Padding(
+      padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 8),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: _secondaryGradient,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+                bottomRight: Radius.circular(20),
+                bottomLeft: Radius.circular(4),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Admin is typing',
+                  style: TextStyle(
+                    color: _textColor.withOpacity(0.7),
+                    fontSize: 13,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TypingIndicatorWidget(
+                  dotColor: _primaryGradient.colors[0],
+                  dotSize: 6,
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -3521,6 +3640,13 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                 minLines: 1,
                 keyboardType: TextInputType.multiline,
                 textInputAction: TextInputAction.newline,
+                onChanged: (text) {
+                  if (text.trim().isNotEmpty) {
+                    _onUserTyping();
+                  } else {
+                    _onUserStopTyping();
+                  }
+                },
                 decoration: InputDecoration(
                   hintText: 'Type a message...',
                   border: InputBorder.none,

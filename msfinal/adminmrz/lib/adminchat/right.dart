@@ -1,6 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
+import 'package:adminmrz/adminchat/services/admin_socket_service.dart';
 import 'package:adminmrz/adminchat/services/MatchedProfileService.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'chat_theme.dart';
@@ -15,6 +16,7 @@ const _kPrimary = Color(0xFFD81B60);
 const _kOnline  = Color(0xFF22C55E);
 
 const _kPaginationScrollThreshold = 200.0;
+const _kShareHistoryPageSize = 100;
 
 class ProfileSidebar extends StatefulWidget {
   final int selectedTab;
@@ -45,11 +47,17 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
   // ── search debounce ───────────────────────────────────────────────────────
   Timer? _searchDebounce;
 
-  // ── Firestore shared-profile tracking ─────────────────────────────────────
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  // ── Socket-backed shared-profile tracking ─────────────────────────────────
+  final AdminSocketService _socketService = AdminSocketService();
   Map<int, Map<String, dynamic>> _sharedProfilesData = {};
   Set<int>      _sharedProfileIds    = {};
   Map<int, DateTime> _lastShareTimestamp = {};
+  int _totalShares = 0;
+  int _shareHistoryRequestId = 0;
+  String? _activeRoomId;
+  StreamSubscription<Map<String, dynamic>>? _newMessageSub;
+  StreamSubscription<Map<String, dynamic>>? _messageDeletedSub;
+  StreamSubscription<Map<String, dynamic>>? _messageUnsentSub;
 
   // ── track which user's matches we've loaded ───────────────────────────────
   int? _lastFetchedUserId;
@@ -67,6 +75,12 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
     super.initState();
     _searchController.addListener(_onSearchChanged);
     _scrollController.addListener(_onScroll);
+    _socketService.connect();
+    _newMessageSub = _socketService.onNewMessage.listen(_handleRealtimeShareEvent);
+    _messageDeletedSub =
+        _socketService.onMessageDeleted.listen(_handleRealtimeShareEvent);
+    _messageUnsentSub =
+        _socketService.onMessageUnsent.listen(_handleRealtimeShareEvent);
     // Poll online status for matched profiles every 10 seconds
     _onlineStatusTimer = Timer.periodic(
       const Duration(seconds: 10),
@@ -105,16 +119,27 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
     final userId = chatProvider.id;
     if (userId != null && userId != _lastFetchedUserId) {
       _lastFetchedUserId = userId;
+      final roomId = AdminSocketService.chatRoomId(userId.toString());
+      _activeRoomId = roomId;
+      _socketService.ensureConnected().then((connected) {
+        if (connected && _activeRoomId == roomId) {
+          _socketService.joinRoom(roomId);
+        }
+      });
       setState(() {
         _matchesLoaded = true;
         _profileFilter = 'matched';
         _searchQuery = '';
         _searchController.clear();
+        _sharedProfilesData = {};
+        _sharedProfileIds = {};
+        _lastShareTimestamp = {};
+        _totalShares = 0;
       });
       final matchProvider =
           Provider.of<MatchedProfileProvider>(context, listen: false);
       matchProvider.clearData();
-      // Fetch Firestore share history and matched profiles automatically
+      // Fetch shared-profile history and matched profiles automatically
       _loadSharedProfilesForUser(userId.toString());
       matchProvider.fetchMatchedProfiles(userId);
       // Start real-time offline detection for this user's matched profiles
@@ -128,6 +153,9 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
     _searchController.dispose();
     _searchDebounce?.cancel();
     _onlineStatusTimer?.cancel();
+    _newMessageSub?.cancel();
+    _messageDeletedSub?.cancel();
+    _messageUnsentSub?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
@@ -153,52 +181,142 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
     }
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
+  void _handleRealtimeShareEvent(Map<String, dynamic> data) {
+    final roomId = data['chatRoomId']?.toString();
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final receiverId = chatProvider.id?.toString();
+    if (receiverId == null || receiverId.isEmpty) return;
+    if (_activeRoomId == null || roomId != _activeRoomId) return;
+    _loadSharedProfilesForUser(receiverId);
+  }
+
+  Map<String, dynamic>? _decodeProfileData(dynamic rawMessage) {
+    if (rawMessage is Map<String, dynamic>) return rawMessage;
+    if (rawMessage is Map) return Map<String, dynamic>.from(rawMessage);
+    if (rawMessage is String && rawMessage.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(rawMessage);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  int? _parseProfileId(Map<String, dynamic> profileData) {
+    final rawId = profileData['id'];
+    if (rawId is int) return rawId;
+    if (rawId is num) return rawId.toInt();
+    return int.tryParse(rawId?.toString() ?? '');
+  }
+
+  void _recordSharedProfile({
+    required Map<int, Map<String, dynamic>> sharedData,
+    required Set<int> sharedIds,
+    required Map<int, DateTime> lastTs,
+    required int profileId,
+    required String profileName,
+    required String memberId,
+    required String receiverId,
+    required DateTime timestamp,
+  }) {
+    if (!sharedData.containsKey(profileId)) {
+      sharedData[profileId] = {
+        'profile_name': profileName,
+        'timestamp': timestamp,
+        'shared_to': receiverId,
+        'profile_member_id': memberId,
+        'share_count': 1,
+      };
+      sharedIds.add(profileId);
+      lastTs[profileId] = timestamp;
+      return;
+    }
+
+    sharedData[profileId]!['share_count'] =
+        (sharedData[profileId]!['share_count'] ?? 0) + 1;
+    if (timestamp.isAfter(lastTs[profileId] ?? DateTime(1970))) {
+      lastTs[profileId] = timestamp;
+      sharedData[profileId]!['timestamp'] = timestamp;
+    }
+  }
+
   Future<void> _loadSharedProfilesForUser(String receiverId) async {
     if (receiverId.isEmpty) return;
+
+    final requestId = ++_shareHistoryRequestId;
+    final roomId = AdminSocketService.chatRoomId(receiverId);
+    final sharedData = <int, Map<String, dynamic>>{};
+    final sharedIds = <int>{};
+    final lastTs = <int, DateTime>{};
+    int totalShares = 0;
+    int page = 1;
+    bool hasMore = true;
+
     try {
-      final snapshot = await _firestore
-          .collection('profile_shares')
-          .where('shared_by', isEqualTo: '1')
-          .where('shared_to', isEqualTo: receiverId)
-          .orderBy('timestamp', descending: true)
-          .get();
+      final connected = await _socketService.ensureConnected();
+      if (!connected) throw Exception('Socket not connected');
 
-      Map<int, Map<String, dynamic>> sharedData = {};
-      Set<int> sharedIds = {};
-      Map<int, DateTime> lastTs = {};
+      while (hasMore) {
+        final result = await _socketService.getMessages(
+          roomId,
+          page: page,
+          limit: _kShareHistoryPageSize,
+        );
+        final messages = (result['messages'] as List? ?? const []);
 
-      for (var doc in snapshot.docs) {
-        final profileId = doc['profile_id'] as int;
-        final ts        = (doc['timestamp'] as Timestamp).toDate();
-        if (!sharedData.containsKey(profileId)) {
-          sharedData[profileId] = {
-            'profile_name':      doc['profile_name'],
-            'timestamp':         ts,
-            'shared_to':         doc['shared_to'],
-            'profile_member_id': doc['profile_member_id'],
-            'share_count':       1,
-          };
-          sharedIds.add(profileId);
-          lastTs[profileId] = ts;
-        } else {
-          sharedData[profileId]!['share_count'] =
-              (sharedData[profileId]!['share_count'] ?? 0) + 1;
-          if (ts.isAfter(lastTs[profileId] ?? DateTime(1970))) {
-            lastTs[profileId] = ts;
+        for (final raw in messages) {
+          if (raw is! Map) continue;
+          final msg = Map<String, dynamic>.from(raw);
+          if (msg['messageType']?.toString() != 'profile_card') continue;
+          if (msg['senderId']?.toString() != kAdminUserId) continue;
+          if (msg['receiverId']?.toString() != receiverId) continue;
+          if (msg['isUnsent'] == true) continue;
+          if (msg['isDeletedForSender'] == true ||
+              msg['isDeletedForReceiver'] == true) {
+            continue;
           }
+
+          final profileData = _decodeProfileData(msg['message']);
+          if (profileData == null) continue;
+          final profileId = _parseProfileId(profileData);
+          if (profileId == null) continue;
+
+          totalShares++;
+          _recordSharedProfile(
+            sharedData: sharedData,
+            sharedIds: sharedIds,
+            lastTs: lastTs,
+            profileId: profileId,
+            profileName: profileData['name']?.toString() ?? '',
+            memberId: profileData['Member ID']?.toString() ?? '',
+            receiverId: receiverId,
+            timestamp:
+                AdminSocketService.parseTimestamp(msg['timestamp']) ??
+                    DateTime(1970),
+          );
         }
+
+        hasMore = result['hasMore'] == true;
+        page++;
       }
 
-      if (mounted) {
-        setState(() {
-          _sharedProfilesData    = sharedData;
-          _sharedProfileIds      = sharedIds;
-          _lastShareTimestamp    = lastTs;
-        });
-      }
+      if (!mounted || requestId != _shareHistoryRequestId) return;
+      setState(() {
+        _sharedProfilesData = sharedData;
+        _sharedProfileIds = sharedIds;
+        _lastShareTimestamp = lastTs;
+        _totalShares = totalShares;
+      });
     } catch (e) {
+      if (!mounted || requestId != _shareHistoryRequestId) return;
       debugPrint('Error loading shared profiles: $e');
+      setState(() {
+        _sharedProfilesData = {};
+        _sharedProfileIds = {};
+        _lastShareTimestamp = {};
+        _totalShares = 0;
+      });
     }
   }
 
@@ -303,6 +421,13 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
   ) async {
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
     try {
+      final receiverId = chatProvider.id?.toString();
+      if (receiverId == null || receiverId.isEmpty) {
+        throw Exception('No receiver selected');
+      }
+      final connected = await _socketService.ensureConnected();
+      if (!connected) throw Exception('Socket not connected');
+
       final profileData = {
         'id':           profileId,
         'name':         '$firstName $lastName',
@@ -320,38 +445,31 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
         'country':      country,
       };
 
-      await _firestore.collection('adminchat').add({
-        'message':     'Profile Shared',
-        'liked':       false,
-        'replyto':     '',
-        'senderid':    '1',
-        'receiverid':  chatProvider.id.toString(),
-        'timestamp':   FieldValue.serverTimestamp(),
-        'type':        'profile_card',
-        'profileData': profileData,
-      });
+      _socketService.sendMessage(
+        chatRoomId: AdminSocketService.chatRoomId(receiverId),
+        receiverId: receiverId,
+        message: jsonEncode(profileData),
+        messageType: 'profile_card',
+        messageId: 'profile_${DateTime.now().millisecondsSinceEpoch}_1',
+        receiverName: chatProvider.namee,
+        receiverImage: chatProvider.profilePicture,
+      );
 
-      await _firestore.collection('profile_shares').add({
-        'shared_by':        '1',
-        'shared_to':        chatProvider.id.toString(),
-        'profile_id':       profileId,
-        'profile_name':     '$firstName $lastName',
-        'profile_member_id': memberid,
-        'timestamp':        FieldValue.serverTimestamp(),
-        'status':           'sent',
-      });
-
-      final convId = _getConversationId('1', chatProvider.id.toString());
-      await _firestore.collection('conversations').doc(convId).set({
-        'participants':          ['1', chatProvider.id.toString()],
-        'lastMessage':           'Shared a profile: $firstName $lastName',
-        'lastTimestamp':         FieldValue.serverTimestamp(),
-        'lastSharedProfileId':   profileId,
-        'lastSharedProfileName': '$firstName $lastName',
-      }, SetOptions(merge: true));
-
-      // Refresh share data
-      await _loadSharedProfilesForUser(chatProvider.id.toString());
+      _recordSharedProfile(
+        sharedData: _sharedProfilesData,
+        sharedIds: _sharedProfileIds,
+        lastTs: _lastShareTimestamp,
+        profileId: profileId,
+        profileName: '$firstName $lastName',
+        memberId: memberid,
+        receiverId: receiverId,
+        timestamp: DateTime.now(),
+      );
+      if (mounted) {
+        setState(() {
+          _totalShares += 1;
+        });
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -370,9 +488,6 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
       }
     }
   }
-
-  String _getConversationId(String a, String b) =>
-      (a.compareTo(b) < 0) ? '${a}_$b' : '${b}_$a';
 
   String _timeAgo(DateTime ts) {
     final d = DateTime.now().difference(ts);
@@ -401,7 +516,7 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
           _buildSearchBar(),
           _buildFilterRow(),
           if (_showFilters) _buildFilterPanel(),
-          _buildStatsRow(chatProvider),
+          _buildStatsRow(),
           Divider(height: 1, color: c.border),
           Expanded(child: _buildProfileList()),
         ],
@@ -775,42 +890,29 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
   }
 
   // ── Stats row ────────────────────────────────────────────────────────────
-  Widget _buildStatsRow(ChatProvider chat) {
+  Widget _buildStatsRow() {
     final c = ChatColors.of(context);
     final statsBg     = c.isDark ? const Color(0xFF052E16) : const Color(0xFFF0FDF4);
     final statsBorder = c.isDark ? const Color(0xFF14532D) : const Color(0xFFBBF7D0);
-    return StreamBuilder<QuerySnapshot>(
-      stream: chat.id == null
-          ? Stream.empty()
-          : _firestore
-              .collection('profile_shares')
-              .where('shared_by', isEqualTo: '1')
-              .where('shared_to', isEqualTo: chat.id.toString())
-              .snapshots(),
-      builder: (context, snap) {
-        final total   = snap.hasData ? snap.data!.docs.length : 0;
-        final unique  = _sharedProfileIds.length;
-        return Container(
-          margin: const EdgeInsets.fromLTRB(10, 4, 10, 4),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: statsBg,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: statsBorder),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _statItem(Icons.share_outlined, '$total', 'Total Shares',
-                  const Color(0xFF16A34A)),
-              Container(width: 1, height: 24,
-                  color: statsBorder),
-              _statItem(Icons.people_outline, '$unique', 'Unique Profiles',
-                  const Color(0xFF0284C7)),
-            ],
-          ),
-        );
-      },
+    final unique = _sharedProfileIds.length;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(10, 4, 10, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: statsBg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: statsBorder),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _statItem(Icons.share_outlined, '$_totalShares', 'Total Shares',
+              const Color(0xFF16A34A)),
+          Container(width: 1, height: 24, color: statsBorder),
+          _statItem(Icons.people_outline, '$unique', 'Unique Profiles',
+              const Color(0xFF0284C7)),
+        ],
+      ),
     );
   }
 

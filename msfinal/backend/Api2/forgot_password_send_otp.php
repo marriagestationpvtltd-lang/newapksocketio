@@ -8,7 +8,7 @@ $dbPass = 'ms';
 $dbName = 'ms';
 
 // BREVO API KEY
-$brevoApiKey = "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";
+$brevoApiKey = "api key ";
 
 function respond($code, $msg) {
     http_response_code($code);

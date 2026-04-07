@@ -4109,7 +4109,7 @@ class _ChatWindowState extends State<ChatWindow> {
     _voicePlayerStateSub?.cancel();
     _voicePlayerPositionSub?.cancel();
     _voicePlayerDurationSub?.cancel();
-    await _voiceAudioPlayer.dispose();
+    _voiceAudioPlayer.dispose();
     super.dispose();
   }
 }

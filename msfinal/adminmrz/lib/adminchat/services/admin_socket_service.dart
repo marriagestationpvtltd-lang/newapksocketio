@@ -39,6 +39,12 @@ class AdminSocketService {
   final _typingStartCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _typingStopCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _userStatusCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _chatRoomsUpdateCtrl = StreamController<List<dynamic>>.broadcast();
+  final _incomingCallCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _callAcceptedCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _callRejectedCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _callCancelledCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _callEndedCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _connectionCtrl = StreamController<bool>.broadcast();
 
   // ── Public streams ────────────────────────────────────────────────────────
@@ -53,6 +59,12 @@ class AdminSocketService {
   Stream<Map<String, dynamic>> get onTypingStart => _typingStartCtrl.stream;
   Stream<Map<String, dynamic>> get onTypingStop => _typingStopCtrl.stream;
   Stream<Map<String, dynamic>> get onUserStatusChange => _userStatusCtrl.stream;
+  Stream<List<dynamic>> get onChatRoomsUpdate => _chatRoomsUpdateCtrl.stream;
+  Stream<Map<String, dynamic>> get onIncomingCall => _incomingCallCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallAccepted => _callAcceptedCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallRejected => _callRejectedCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallCancelled => _callCancelledCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallEnded => _callEndedCtrl.stream;
   Stream<bool> get onConnectionChange => _connectionCtrl.stream;
 
   // ── State ─────────────────────────────────────────────────────────────────

@@ -564,7 +564,7 @@ class _ChatWindowState extends State<ChatWindow> {
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    'Respond Within $_incomingCallTimeoutSeconds Seconds',
+                    'Respond within $_incomingCallTimeoutSeconds seconds',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.62),
                       fontSize: 12,

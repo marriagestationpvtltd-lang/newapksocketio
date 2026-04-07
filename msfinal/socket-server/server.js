@@ -58,6 +58,20 @@ pool.getConnection()
       console.log('✅ Added liked column to chat_messages');
     }
 
+    // Add `is_unsent` column to chat_messages if not present (idempotent).
+    const [[colUnsent]] = await conn.query(
+      `SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'chat_messages' AND COLUMN_NAME = 'is_unsent'
+        LIMIT 1`,
+      [dbName],
+    );
+    if (!colUnsent) {
+      await conn.query(
+        `ALTER TABLE chat_messages ADD COLUMN is_unsent TINYINT(1) NOT NULL DEFAULT 0`
+      );
+      console.log('✅ Added is_unsent column to chat_messages');
+    }
+
     // Create call_history table if not present (idempotent).
     await conn.query(`
       CREATE TABLE IF NOT EXISTS \`call_history\` (
@@ -446,6 +460,7 @@ function toMessageMap(row) {
     isDeletedForSender:    row.is_deleted_for_sender === 1,
     isDeletedForReceiver:  row.is_deleted_for_receiver === 1,
     isEdited:              row.is_edited === 1,
+    isUnsent:              row.is_unsent === 1,
     editedAt:              row.edited_at ? row.edited_at.toISOString() : null,
     repliedTo:             row.replied_to ? JSON.parse(row.replied_to) : null,
     timestamp:             row.created_at ? row.created_at.toISOString() : null,
@@ -650,12 +665,12 @@ io.on('connection', (socket) => {
       if (!authenticatedUserId) return; // Require authentication
 
       // Verify the authenticated user is a participant in the chat room
+      // (uses JSON_CONTAINS since participants is stored as a JSON array)
       const [[room]] = await pool.query(
         `SELECT 1 FROM chat_rooms
-          WHERE chat_room_id = ?
-            AND (user1_id = ? OR user2_id = ?)
+          WHERE id = ? AND JSON_CONTAINS(participants, JSON_QUOTE(?))
           LIMIT 1`,
-        [chatRoomId, authenticatedUserId, authenticatedUserId],
+        [chatRoomId, authenticatedUserId],
       );
       if (!room) return; // Not a participant — silently ignore
 
@@ -678,6 +693,35 @@ io.on('connection', (socket) => {
       }
     } catch (err) {
       console.error('toggle_like error:', err.message);
+    }
+  });
+
+  // ── unsend_message ────────────────────────────────────────────────────────
+  // Marks a message as "unsent" — replaces its content with a placeholder and
+  // sets is_unsent = 1.  Only the original sender may unsend their own message.
+  socket.on('unsend_message', async ({ chatRoomId, messageId, userId }) => {
+    try {
+      if (!chatRoomId || !messageId) return;
+      const uid = (userId || authenticatedUserId || '').toString();
+      if (!uid) return;
+
+      // Only allow the sender to unsend
+      const [[msg]] = await pool.query(
+        'SELECT sender_id FROM chat_messages WHERE message_id = ? AND chat_room_id = ? LIMIT 1',
+        [messageId, chatRoomId],
+      );
+      if (!msg || msg.sender_id?.toString() !== uid) return;
+
+      await pool.query(
+        `UPDATE chat_messages
+            SET message = 'This message was unsent.', is_unsent = 1, is_edited = 0
+          WHERE message_id = ? AND chat_room_id = ?`,
+        [messageId, chatRoomId],
+      );
+      io.to(chatRoomId).emit('message_unsent', { chatRoomId, messageId });
+    } catch (err) {
+      console.error('unsend_message error:', err.message);
+      socket.emit('error', { message: 'Failed to unsend message' });
     }
   });
 

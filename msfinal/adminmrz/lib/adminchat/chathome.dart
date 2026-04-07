@@ -177,7 +177,7 @@ class _ChatWindowState extends State<ChatWindow> {
   // ── SOCKET.IO HELPERS ────────────────────────────────────────────────────
 
   /// Convert a Socket.IO message map (camelCase fields from server) to the
-  /// admin-panel-internal format (lowercase/Firestore-style keys used by the
+  /// admin-panel-internal format (lowercase widget keys used by the
   /// rendering widgets).
   static Map<String, dynamic> _socketMsgToAdminData(Map<String, dynamic> msg) {
     final String msgType = msg['messageType']?.toString() ?? 'text';
@@ -637,7 +637,7 @@ class _ChatWindowState extends State<ChatWindow> {
     String sourceDocId,
     Map<String, dynamic> replyData,
   ) async {
-    // Update reply previews locally in _messages (no Firestore needed).
+    // Update reply previews locally in the in-memory message list.
     setState(() {
       for (int i = 0; i < _messages.length; i++) {
         final replyto = _messages[i]['replyto'];
@@ -1231,9 +1231,8 @@ class _ChatWindowState extends State<ChatWindow> {
 
     final chatProvider = Provider.of<ChatProvider>(context);
 
-    // Rebuild the Firestore stream only when the selected user changes so that
-    // StreamBuilder keeps its existing subscription and never flashes a loading
-    // spinner while switching conversations.
+    // Reset the room-backed message state only when the selected user changes
+    // so the chat view swaps conversations without stale pagination state.
     final bool userChanged = chatProvider.id != _cachedReceiverId;
     if (userChanged) {
       _cachedReceiverId = chatProvider.id;
@@ -1920,35 +1919,6 @@ class _ChatWindowState extends State<ChatWindow> {
         );
       },
     );
-  }
-
-  void _handleIndexError(String error) {
-    final regex = RegExp(r'https://console\.firebase\.google\.com[^\s]+');
-    final match = regex.firstMatch(error);
-
-    if (match != null) {
-      String indexUrl = match.group(0)!;
-
-      if (kIsWeb) {
-        html.window.open(indexUrl, '_blank');
-      } else {
-        launchUrl(Uri.parse(indexUrl));
-      }
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Opening Firebase Console to create index...'),
-          duration: Duration(seconds: 3),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Please check Firebase Console for index creation'),
-          duration: Duration(seconds: 3),
-        ),
-      );
-    }
   }
 
   void openUrl(String url) {

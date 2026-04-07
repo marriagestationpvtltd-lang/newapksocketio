@@ -276,10 +276,8 @@ class MatchedProfileProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Start a Firestore real-time listener that immediately reflects online/offline
-  // changes for matched profiles as soon as the user-side app writes to 'users'.
-  // The full collection is listened to for simplicity; changes not matching any
-  // loaded matched profile are ignored (no-op).
+  // Start a socket-based presence listener that immediately reflects
+  // online/offline changes for the currently loaded matched profiles.
   void startPresenceListener() {
     _presenceSub?.cancel();
     _socketService.connect();

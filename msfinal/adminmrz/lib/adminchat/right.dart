@@ -273,9 +273,7 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
           if (msg['receiverId']?.toString() != receiverId) continue;
           if (msg['isUnsent'] == true) continue;
           if (msg['isDeletedForSender'] == true ||
-              msg['isDeletedForReceiver'] == true) {
-            continue;
-          }
+              msg['isDeletedForReceiver'] == true) continue;
 
           final profileData = _decodeProfileData(msg['message']);
           if (profileData == null) continue;

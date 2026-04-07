@@ -214,17 +214,7 @@ class _ChatWindowState extends State<ChatWindow> {
     final bool deleted = msg['isDeletedForSender'] == true ||
         msg['isDeletedForReceiver'] == true;
 
-    final Map<String, dynamic>? repliedTo =
-        msg['repliedTo'] is Map<String, dynamic>
-            ? Map<String, dynamic>.from(msg['repliedTo'] as Map<String, dynamic>)
-            : null;
-    if (repliedTo != null &&
-        (repliedTo['messageId'] == null || repliedTo['messageId'].toString().isEmpty)) {
-      final legacyId = repliedTo['docId']?.toString();
-      if (legacyId != null && legacyId.isNotEmpty) {
-        repliedTo['messageId'] = legacyId;
-      }
-    }
+    final repliedTo = _normalizeReplyPayload(msg['repliedTo']);
 
     return {
       'messageId': msg['messageId']?.toString() ?? '',
@@ -247,10 +237,20 @@ class _ChatWindowState extends State<ChatWindow> {
     };
   }
 
+  static Map<String, dynamic>? _normalizeReplyPayload(dynamic rawReplyTo) {
+    if (rawReplyTo is! Map) return null;
+    final replyTo = Map<String, dynamic>.from(rawReplyTo as Map);
+    if (replyTo['messageId'] == null || replyTo['messageId'].toString().isEmpty) {
+      final legacyId = replyTo['docId']?.toString();
+      if (legacyId != null && legacyId.isNotEmpty) {
+        replyTo['messageId'] = legacyId;
+      }
+    }
+    return replyTo;
+  }
+
   String _replyTargetMessageId(Map<String, dynamic>? replyTo) {
-    return replyTo?['messageId']?.toString() ??
-        replyTo?['docId']?.toString() ??
-        '';
+    return _normalizeReplyPayload(replyTo)?['messageId']?.toString() ?? '';
   }
 
   /// Set up persistent Socket.IO event listeners.

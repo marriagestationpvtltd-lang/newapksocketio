@@ -99,6 +99,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
 
   final AdminSocketService _socketService = AdminSocketService();
   StreamSubscription<Map<String, dynamic>>? _callRejectedSubscription;
+  StreamSubscription<Map<String, dynamic>>? _callCancelledSubscription;
   StreamSubscription<Map<String, dynamic>>? _callEndedSubscription;
 
   // Video renderers
@@ -226,7 +227,16 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
             _socketService.onCallRejected.listen((data) async {
           if (!mounted || _ending) return;
           if (data['channelName']?.toString() == _channel) {
-            await _endCall();
+            await _endCall(notifyPeer: false);
+          }
+        });
+
+        _callCancelledSubscription?.cancel();
+        _callCancelledSubscription =
+            _socketService.onCallCancelled.listen((data) async {
+          if (!mounted || _ending) return;
+          if (data['channelName']?.toString() == _channel) {
+            await _endCall(notifyPeer: false);
           }
         });
 
@@ -235,7 +245,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
             _socketService.onCallEnded.listen((data) async {
           if (!mounted || _ending) return;
           if (data['channelName']?.toString() == _channel) {
-            await _endCall();
+            await _endCall(notifyPeer: false);
           }
         });
       }
@@ -364,7 +374,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     });
   }
 
-  Future<void> _endCall() async {
+  Future<void> _endCall({bool notifyPeer = true}) async {
     if (_ending) return;
     _ending = true;
 
@@ -372,11 +382,13 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     _timeoutTimer?.cancel();
 
     await _callRejectedSubscription?.cancel();
+    await _callCancelledSubscription?.cancel();
     await _callEndedSubscription?.cancel();
     _callRejectedSubscription = null;
+    _callCancelledSubscription = null;
     _callEndedSubscription = null;
 
-    if (widget.isOutgoingCall) {
+    if (widget.isOutgoingCall && notifyPeer) {
       if (_callActive) {
         _socketService.emitCallEnd(
           callerId: widget.currentUserId,
@@ -856,6 +868,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     _timeoutTimer?.cancel();
     _ringtoneRepeatTimer?.cancel();
     _callRejectedSubscription?.cancel();
+    _callCancelledSubscription?.cancel();
     _callEndedSubscription?.cancel();
     _ringtonePlayer.dispose();
     super.dispose();

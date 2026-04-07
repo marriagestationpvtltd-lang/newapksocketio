@@ -72,7 +72,10 @@ class OnlineStatusService {
     }
   }
 
-  /// Set user offline (call when app goes to background)
+  /// Set user offline (call when app goes to background).
+  /// We only update the HTTP presence API here; the socket connection is kept
+  /// alive so that incoming call invites can still arrive via Socket.IO while
+  /// the app is backgrounded (before Android kills the process).
   Future<void> setOffline() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -84,8 +87,17 @@ class OnlineStatusService {
       final userId = userData["id"].toString();
       if (userId.isEmpty || userId == 'null') return;
 
-      // Disconnect socket so server registers the offline state
-      SocketService().disconnect();
+      // Update HTTP presence only — do NOT disconnect the socket here.
+      // The socket must stay connected so that a call_invite emitted by the
+      // other party while the app is backgrounded can still reach this device.
+      // The socket will be closed automatically when the OS kills the process.
+      unawaited(http.post(
+        Uri.parse(_apiUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({"user_id": userId}),
+      ).catchError((e) {
+        print("⚠️ Offline API update failed (non-critical): $e");
+      }));
 
     } catch (e) {
       print("❌ Set offline error: $e");

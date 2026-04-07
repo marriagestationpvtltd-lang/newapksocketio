@@ -56,6 +56,7 @@ class _ChatWindowState extends State<ChatWindow> {
   StreamSubscription<Map<String, dynamic>>? _readMsgSub;
   StreamSubscription<Map<String, dynamic>>? _typingStartSub;
   StreamSubscription<Map<String, dynamic>>? _typingStopSub;
+  StreamSubscription<Map<String, dynamic>>? _incomingCallSub;
 
   bool _isListening = false;
   bool _userStoppedListening = false;
@@ -435,6 +436,163 @@ class _ChatWindowState extends State<ChatWindow> {
       if (data['userId']?.toString() == senderId.toString()) return;
       setState(() => _userIsTyping = false);
     });
+
+    _incomingCallSub?.cancel();
+    _incomingCallSub = _socketService.onIncomingCall.listen((data) {
+      if (!mounted) return;
+      _handleIncomingCallFromUser(data);
+    });
+  }
+
+  /// Show an incoming call dialog when a user calls the admin.
+  void _handleIncomingCallFromUser(Map<String, dynamic> data) {
+    final callerId = data['callerId']?.toString() ?? '';
+    final callerName = data['callerName']?.toString() ?? 'User';
+    final channelName = data['channelName']?.toString() ?? '';
+    final callType = data['callType']?.toString() ?? 'audio';
+    final isVideo = callType == 'video';
+
+    if (channelName.isEmpty || callerId.isEmpty) return;
+
+    // Auto-dismiss timer — reject automatically after 30 seconds
+    Timer? autoRejectTimer;
+    var _dismissed = false;
+
+    showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        autoRejectTimer = Timer(const Duration(seconds: 30), () {
+          if (!_dismissed) {
+            _dismissed = true;
+            Navigator.of(ctx).pop(false);
+          }
+        });
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(isVideo ? Icons.videocam : Icons.call, color: Colors.green),
+              const SizedBox(width: 8),
+              Text(isVideo ? 'Incoming Video Call' : 'Incoming Call'),
+            ],
+          ),
+          content: Text('$callerName is calling you'),
+          actions: [
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              onPressed: () {
+                if (!_dismissed) {
+                  _dismissed = true;
+                  Navigator.of(ctx).pop(false);
+                }
+              },
+              child: const Text('Reject'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+              onPressed: () {
+                if (!_dismissed) {
+                  _dismissed = true;
+                  Navigator.of(ctx).pop(true);
+                }
+              },
+              child: const Text('Accept'),
+            ),
+          ],
+        );
+      },
+    ).then((accepted) {
+      autoRejectTimer?.cancel();
+      if (accepted == true) {
+        // Notify caller that admin accepted
+        _socketService.emitCallAccept(
+          callerId: callerId,
+          recipientId: kAdminUserId,
+          recipientName: 'Admin',
+          recipientUid: '',
+          channelName: channelName,
+          callType: callType,
+        );
+        // Launch call overlay with the caller's channel
+        _launchIncomingCall(
+          userId: callerId,
+          userName: callerName,
+          channelName: channelName,
+          isVideo: isVideo,
+        );
+      } else {
+        // Notify caller that admin rejected
+        _socketService.emitCallReject(
+          callerId: callerId,
+          recipientId: kAdminUserId,
+          recipientName: 'Admin',
+          channelName: channelName,
+          callType: callType,
+        );
+      }
+    });
+  }
+
+  /// Launch the call overlay for an INCOMING call from a user.
+  void _launchIncomingCall({
+    required String userId,
+    required String userName,
+    required String channelName,
+    required bool isVideo,
+  }) {
+    if (_callOverlayEntry != null) return;
+
+    final isMinimizedNotifier = ValueNotifier<bool>(false);
+
+    void onCallEnded(String callType, String status, int durationSeconds) {
+      _removeCallOverlay();
+      _saveCallHistory(userId, callType, status, durationSeconds);
+    }
+
+    _callOverlayEntry = OverlayEntry(
+      builder: (ctx) => ValueListenableBuilder<bool>(
+        valueListenable: isMinimizedNotifier,
+        builder: (_, isMin, __) {
+          final callWidget = isVideo
+              ? VideoCallScreen(
+                  currentUserId: kAdminUserId,
+                  currentUserName: 'Admin',
+                  otherUserId: userId,
+                  otherUserName: userName,
+                  isOutgoingCall: false,
+                  incomingChannelName: channelName,
+                  onMinimize: () => isMinimizedNotifier.value = true,
+                  onEnd: _removeCallOverlay,
+                  onCallEnded: onCallEnded,
+                )
+              : CallScreen(
+                  currentUserId: kAdminUserId,
+                  currentUserName: 'Admin',
+                  otherUserId: userId,
+                  otherUserName: userName,
+                  isOutgoingCall: false,
+                  incomingChannelName: channelName,
+                  onMinimize: () => isMinimizedNotifier.value = true,
+                  onEnd: _removeCallOverlay,
+                  onCallEnded: onCallEnded,
+                );
+
+          return Stack(
+            children: [
+              Offstage(offstage: isMin, child: callWidget),
+              if (isMin)
+                _buildMiniCallBar(
+                  userName: userName,
+                  isVideo: isVideo,
+                  onMaximize: () => isMinimizedNotifier.value = false,
+                  onEnd: _removeCallOverlay,
+                ),
+            ],
+          );
+        },
+      ),
+    );
+    Overlay.of(context).insert(_callOverlayEntry!);
   }
 
   /// Load a page of messages from the server.
@@ -4112,6 +4270,7 @@ class _ChatWindowState extends State<ChatWindow> {
     _floatingDateNotifier.dispose();
     _typingStartSub?.cancel();
     _typingStopSub?.cancel();
+    _incomingCallSub?.cancel();
     _clearAdminTypingStatus();
     _scrollController.dispose();
     _messageFocusNode.dispose();

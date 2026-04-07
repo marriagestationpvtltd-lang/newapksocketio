@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
+import '../Calling/callmanager.dart';
 
 /// URL of the Node.js Socket.IO server.
 /// ⚠️  IMPORTANT: Replace this with your actual deployed server URL before
@@ -88,7 +89,7 @@ class SocketService {
           .setTransports(['websocket'])
           .enableAutoConnect()
           .enableReconnection()
-          .setReconnectionAttempts(10)
+          .setReconnectionAttempts(20)
           .setReconnectionDelay(2000)
           .build(),
     );
@@ -149,7 +150,11 @@ class SocketService {
 
     // ── Call signaling events ────────────────────────────────────────────────
     _socket!.on('incoming_call', (data) {
-      _incomingCallCtrl.add(_toMap(data));
+      final map = _toMap(data);
+      _incomingCallCtrl.add(map);
+      // Bridge to CallManager so CallOverlayWrapper can show the call screen
+      // for users who are online (socket path, not FCM path).
+      CallManager().triggerIncomingCall(map);
     });
 
     _socket!.on('call_accepted', (data) {

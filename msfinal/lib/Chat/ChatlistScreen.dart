@@ -424,7 +424,7 @@ class _ChatListScreenState extends State<ChatListScreen>
       return rawMessage.isEmpty ? 'Call' : rawMessage;
     }
 
-    final String callType = payload['callType']?.toString() ?? 'audio';
+    final String callType = payload['callType']?.toString() ?? '';
     final String status = payload['callStatus']?.toString() ?? '';
     final String label = (payload['label']?.toString() ?? '').trim();
     final int durationSeconds =
@@ -447,7 +447,9 @@ class _ChatListScreenState extends State<ChatListScreen>
       return isVideo ? 'Cancelled Video Call' : 'Cancelled Call';
     }
 
-    final String baseLabel = isVideo ? 'Video Call' : 'Audio Call';
+    final String baseLabel = isVideo
+        ? 'Video Call'
+        : (callType == 'audio' ? 'Audio Call' : 'Call');
     if (durationSeconds <= 0) return baseLabel;
     return '$baseLabel • ${_formatCallDuration(durationSeconds)}';
   }
@@ -466,12 +468,13 @@ class _ChatListScreenState extends State<ChatListScreen>
   String _formatCallDuration(int seconds) {
     final duration = Duration(seconds: seconds);
     final hours = duration.inHours;
-    final secondsComponent = duration.inSeconds.remainder(60);
     if (hours > 0) {
       final remainingMinutes = duration.inMinutes.remainder(60);
+      final secondsComponent = duration.inSeconds.remainder(60);
       return '$hours:${remainingMinutes.toString().padLeft(2, '0')}:${secondsComponent.toString().padLeft(2, '0')}';
     }
     final minutes = duration.inMinutes;
+    final secondsComponent = duration.inSeconds.remainder(60);
     return '$minutes:${secondsComponent.toString().padLeft(2, '0')}';
   }
 

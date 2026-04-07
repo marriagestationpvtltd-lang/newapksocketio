@@ -17,6 +17,7 @@ const _kOnline  = Color(0xFF22C55E);
 
 const _kPaginationScrollThreshold = 200.0;
 const _kShareHistoryPageSize = 100;
+final DateTime _kEpochStart = DateTime(1970);
 
 class ProfileSidebar extends StatefulWidget {
   final int selectedTab;
@@ -235,7 +236,7 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
 
     sharedData[profileId]!['share_count'] =
         (sharedData[profileId]!['share_count'] ?? 0) + 1;
-    if (timestamp.isAfter(lastTs[profileId] ?? DateTime(1970))) {
+    if (timestamp.isAfter(lastTs[profileId] ?? _kEpochStart)) {
       lastTs[profileId] = timestamp;
       sharedData[profileId]!['timestamp'] = timestamp;
     }
@@ -291,7 +292,7 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
             receiverId: receiverId,
             timestamp:
                 AdminSocketService.parseTimestamp(msg['timestamp']) ??
-                    DateTime(1970),
+                    _kEpochStart,
           );
         }
 
@@ -391,8 +392,8 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
           if (aShared && !bShared) return -1;
           if (!aShared && bShared) return 1;
           if (aShared && bShared) {
-            final aTs = _lastShareTimestamp[p.ids[a]] ?? DateTime(1970);
-            final bTs = _lastShareTimestamp[p.ids[b]] ?? DateTime(1970);
+            final aTs = _lastShareTimestamp[p.ids[a]] ?? _kEpochStart;
+            final bTs = _lastShareTimestamp[p.ids[b]] ?? _kEpochStart;
             return bTs.compareTo(aTs);
           }
           return p.matchingPercentages[b].compareTo(p.matchingPercentages[a]);

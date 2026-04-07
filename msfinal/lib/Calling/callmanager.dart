@@ -19,18 +19,36 @@ class CallManager {
   Map<String, dynamic>? _currentCallData;
   Timer? _callTimeoutTimer;
 
+  // Track the last channel name to deduplicate simultaneous Socket.IO + FCM triggers
+  String? _lastIncomingChannelName;
+
   // Trigger incoming call
   void triggerIncomingCall(Map<String, dynamic> data) {
+    final channelName = data['channelName']?.toString() ?? '';
+
+    // Deduplicate: when a caller sends both a Socket.IO invite and an FCM push
+    // (which is the normal fallback strategy), both paths call triggerIncomingCall
+    // for the same call. Without deduplication this pushes TWO IncomingCallScreens;
+    // the buried screen's 60-second ring-timer then pops the active call screen.
+    if (channelName.isNotEmpty && channelName == _lastIncomingChannelName) {
+      print('📱 CallManager: Duplicate incoming call ignored (channel: $channelName)');
+      return;
+    }
+    _lastIncomingChannelName = channelName;
+
     print('📱 CallManager: Incoming call triggered: $data');
     _currentCallData = data;
     _callScreenShowing = false; // reset for new incoming call
     _incomingCallController.add(data);
 
+    // Cancel any previous auto-reject timer before arming a new one
+    _callTimeoutTimer?.cancel();
     // Auto-reject after 60 seconds if not answered
     _callTimeoutTimer = Timer(const Duration(seconds: 60), () {
       if (_currentCallData != null) {
         print('⏰ CallManager: Call timeout');
         _currentCallData = null;
+        _lastIncomingChannelName = null;
       }
     });
   }
@@ -59,6 +77,7 @@ class CallManager {
   // Clear call data
   void clearCallData() {
     _currentCallData = null;
+    _lastIncomingChannelName = null; // allow the next distinct call to be processed
     _callTimeoutTimer?.cancel();
     _callTimeoutTimer = null;
     _callScreenShowing = false;

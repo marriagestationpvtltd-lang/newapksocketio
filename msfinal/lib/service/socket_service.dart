@@ -9,7 +9,7 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 /// URL of the Node.js Socket.IO server.
 /// ⚠️  IMPORTANT: Replace this with your actual deployed server URL before
 /// building for production. Example: 'https://socket.yourserver.com:3001'
-const String kSocketServerUrl = 'http://192.168.1.4:3001';
+const String kSocketServerUrl = 'http://192.168.18.214:3001';
 
 /// REST endpoint for uploading chat media (images / voice).
 const String kChatUploadUrl = 'https://digitallami.com/Api2/chat_upload.php';
@@ -405,7 +405,8 @@ class SocketService {
   Future<Map<String, dynamic>> getUserStatus(String userId) {
     final completer = Completer<Map<String, dynamic>>();
     if (_socket == null || !_socket!.connected) {
-      completer.complete({'userId': userId, 'isOnline': false, 'lastSeen': null});
+      completer
+          .complete({'userId': userId, 'isOnline': false, 'lastSeen': null});
       return completer.future;
     }
     _socket!.emitWithAck(
@@ -418,7 +419,8 @@ class SocketService {
     );
     Future.delayed(kRequestTimeout, () {
       if (!completer.isCompleted) {
-        completer.complete({'userId': userId, 'isOnline': false, 'lastSeen': null});
+        completer
+            .complete({'userId': userId, 'isOnline': false, 'lastSeen': null});
       }
     });
     return completer.future;

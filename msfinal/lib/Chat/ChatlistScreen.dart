@@ -8,8 +8,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import '../Auth/Screen/signupscreen10.dart';
-import '../Models/chatservice.dart';
 import '../Models/masterdata.dart';
 import '../Package/PackageScreen.dart';
 import '../online/onlineservice.dart';
@@ -756,9 +756,8 @@ class _ChatListScreenState extends State<ChatListScreen>
       if (mounted) Navigator.pop(context);
 
       if (success) {
-        // Create chat room and send "Ok Let's Talk" message
+        // Create chat room via Socket.IO and send "Ok Let's Talk" message
         try {
-          final firebaseService = FirebaseService();
           final senderId = proposal.senderId ?? '';
           final senderName =
               '${proposal.firstName ?? ''} ${proposal.lastName ?? ''}'.trim();
@@ -766,21 +765,20 @@ class _ChatListScreenState extends State<ChatListScreen>
               resolveApiImageUrl(proposal.profilePicture ?? '');
 
           if (senderId.isNotEmpty) {
-            final chatRoomId = await firebaseService.getOrCreateChatRoom(
-              user1Id: userId,
-              user2Id: senderId,
-              user1Name: name,
-              user2Name: senderName,
-              user1Image: resolveApiImageUrl(userimage),
-              user2Image: senderImage,
-            );
+            final List<String> ids = [userId, senderId]..sort();
+            final chatRoomId = ids.join('_');
 
-            await firebaseService.sendMessage(
+            SocketService().sendMessage(
               chatRoomId: chatRoomId,
               senderId: userId,
               receiverId: senderId,
               message: "Ok Let's Talk",
               messageType: 'text',
+              messageId: const Uuid().v4(),
+              user1Name: name,
+              user2Name: senderName,
+              user1Image: resolveApiImageUrl(userimage),
+              user2Image: senderImage,
             );
 
             // Send notification to the request sender

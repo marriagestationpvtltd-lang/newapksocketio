@@ -42,9 +42,9 @@ const pool = mysql.createPool({
 pool.getConnection()
   .then(async conn => {
     console.log('✅ MySQL connected');
-    // Add `liked` column to chat_messages if not present (idempotent migration).
-    // Check INFORMATION_SCHEMA for compatibility with MySQL 5.7, MariaDB, and MySQL 8+.
     const dbName = process.env.DB_NAME || 'marriagestation';
+
+    // Add `liked` column to chat_messages if not present (idempotent).
     const [[col]] = await conn.query(
       `SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'chat_messages' AND COLUMN_NAME = 'liked'
@@ -57,6 +57,31 @@ pool.getConnection()
       );
       console.log('✅ Added liked column to chat_messages');
     }
+
+    // Create call_history table if not present (idempotent).
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS \`call_history\` (
+        \`id\`              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        \`call_id\`         VARCHAR(100) NOT NULL UNIQUE,
+        \`caller_id\`       VARCHAR(50)  NOT NULL,
+        \`caller_name\`     VARCHAR(200) DEFAULT '',
+        \`caller_image\`    VARCHAR(500) DEFAULT '',
+        \`recipient_id\`    VARCHAR(50)  NOT NULL,
+        \`recipient_name\`  VARCHAR(200) DEFAULT '',
+        \`recipient_image\` VARCHAR(500) DEFAULT '',
+        \`call_type\`       ENUM('audio','video') NOT NULL DEFAULT 'audio',
+        \`start_time\`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        \`end_time\`        DATETIME     DEFAULT NULL,
+        \`duration\`        INT          NOT NULL DEFAULT 0,
+        \`status\`          ENUM('completed','missed','declined','cancelled') NOT NULL DEFAULT 'missed',
+        \`initiated_by\`    VARCHAR(50)  NOT NULL,
+        INDEX \`idx_caller\`     (\`caller_id\`),
+        INDEX \`idx_recipient\`  (\`recipient_id\`),
+        INDEX \`idx_start_time\` (\`start_time\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log('✅ call_history table ready');
+
     conn.release();
   })
   .catch(err => { console.error('❌ MySQL connection failed:', err.message); });
@@ -104,6 +129,125 @@ app.post('/upload', upload.single('file'), (req, res) => {
 
 // GET /health
 app.get('/health', (_req, res) => res.json({ status: 'ok', time: new Date() }));
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Call History REST API
+// ──────────────────────────────────────────────────────────────────────────────
+
+// POST /api/calls — Log a new call
+app.post('/api/calls', async (req, res) => {
+  try {
+    const {
+      callId, callerId, callerName = '', callerImage = '',
+      recipientId, recipientName = '', recipientImage = '',
+      callType = 'audio', initiatedBy,
+    } = req.body;
+
+    if (!callId || !callerId || !recipientId || !initiatedBy) {
+      return res.status(400).json({ error: 'callId, callerId, recipientId, initiatedBy are required' });
+    }
+
+    await pool.query(
+      `INSERT INTO call_history
+         (call_id, caller_id, caller_name, caller_image,
+          recipient_id, recipient_name, recipient_image,
+          call_type, start_time, status, initiated_by)
+       VALUES (?,?,?,?,?,?,?,?,NOW(),'missed',?)`,
+      [callId, callerId, callerName, callerImage,
+       recipientId, recipientName, recipientImage,
+       callType === 'video' ? 'video' : 'audio', initiatedBy],
+    );
+    res.json({ success: true, callId });
+  } catch (err) {
+    console.error('POST /api/calls error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/calls/:callId — Update call end (status + duration)
+app.put('/api/calls/:callId', async (req, res) => {
+  try {
+    const { callId } = req.params;
+    const { status, duration = 0 } = req.body;
+
+    const allowed = ['completed', 'missed', 'declined', 'cancelled'];
+    const safeStatus = allowed.includes(status) ? status : 'missed';
+
+    await pool.query(
+      `UPDATE call_history SET end_time = NOW(), duration = ?, status = ? WHERE call_id = ?`,
+      [duration, safeStatus, callId],
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('PUT /api/calls/:callId error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/calls?userId=xxx[&limit=50] — Get call history for a user
+app.get('/api/calls', async (req, res) => {
+  try {
+    const userId  = (req.query.userId  || '').toString();
+    const limit   = Math.min(parseInt(req.query.limit || '100', 10), 200);
+
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+    const [rows] = await pool.query(
+      `SELECT * FROM call_history
+        WHERE caller_id = ? OR recipient_id = ?
+        ORDER BY start_time DESC
+        LIMIT ?`,
+      [userId, userId, limit],
+    );
+
+    const calls = rows.map(r => ({
+      callId:         r.call_id,
+      callerId:       r.caller_id,
+      callerName:     r.caller_name,
+      callerImage:    r.caller_image,
+      recipientId:    r.recipient_id,
+      recipientName:  r.recipient_name,
+      recipientImage: r.recipient_image,
+      callType:       r.call_type,
+      startTime:      r.start_time ? r.start_time.toISOString() : null,
+      endTime:        r.end_time   ? r.end_time.toISOString()   : null,
+      duration:       r.duration,
+      status:         r.status,
+      initiatedBy:    r.initiated_by,
+    }));
+
+    res.json({ success: true, calls });
+  } catch (err) {
+    console.error('GET /api/calls error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/calls/:callId — Delete a specific call record
+app.delete('/api/calls/:callId', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM call_history WHERE call_id = ?', [req.params.callId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('DELETE /api/calls/:callId error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/calls/user/:userId — Clear all call history for a user
+app.delete('/api/calls/user/:userId', async (req, res) => {
+  try {
+    const userId = req.params.userId;
+    await pool.query(
+      'DELETE FROM call_history WHERE caller_id = ? OR recipient_id = ?',
+      [userId, userId],
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('DELETE /api/calls/user/:userId error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ──────────────────────────────────────────────────────────────────────────────
 // In-memory maps: userId → socketId, userId → Set<chatRoomId>
@@ -559,6 +703,67 @@ io.on('connection', (socket) => {
     } catch (err) {
       console.error('get_user_status error:', err.message);
       callback({ userId: (userId || '').toString(), isOnline: false, lastSeen: null });
+    }
+  });
+
+  // ── call_invite ───────────────────────────────────────────────────────────
+  // Caller emits this to invite a recipient. Delivered to recipient's personal
+  // room if they are online; caller should also send a FCM push as fallback.
+  socket.on('call_invite', (data) => {
+    const { recipientId, ...rest } = data || {};
+    if (!recipientId) return;
+    io.to(`user:${recipientId.toString()}`).emit('incoming_call', {
+      ...rest,
+      recipientId: recipientId.toString(),
+    });
+  });
+
+  // ── call_accept ───────────────────────────────────────────────────────────
+  // Recipient emits this to inform the caller the call was accepted.
+  socket.on('call_accept', (data) => {
+    const { callerId, ...rest } = data || {};
+    if (!callerId) return;
+    io.to(`user:${callerId.toString()}`).emit('call_accepted', {
+      ...rest,
+      callerId: callerId.toString(),
+    });
+  });
+
+  // ── call_reject ───────────────────────────────────────────────────────────
+  // Recipient emits this to inform the caller the call was rejected.
+  socket.on('call_reject', (data) => {
+    const { callerId, ...rest } = data || {};
+    if (!callerId) return;
+    io.to(`user:${callerId.toString()}`).emit('call_rejected', {
+      ...rest,
+      callerId: callerId.toString(),
+    });
+  });
+
+  // ── call_cancel ───────────────────────────────────────────────────────────
+  // Caller emits this when they cancel before the recipient answers.
+  socket.on('call_cancel', (data) => {
+    const { recipientId, ...rest } = data || {};
+    if (!recipientId) return;
+    io.to(`user:${recipientId.toString()}`).emit('call_cancelled', {
+      ...rest,
+      recipientId: recipientId.toString(),
+    });
+  });
+
+  // ── call_end ─────────────────────────────────────────────────────────────
+  // Either party emits this to notify the other the call has ended.
+  socket.on('call_end', (data) => {
+    const { callerId, recipientId, ...rest } = data || {};
+    if (callerId) {
+      io.to(`user:${callerId.toString()}`).emit('call_ended', {
+        ...rest, callerId, recipientId,
+      });
+    }
+    if (recipientId) {
+      io.to(`user:${recipientId.toString()}`).emit('call_ended', {
+        ...rest, callerId, recipientId,
+      });
     }
   });
 

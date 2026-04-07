@@ -57,3 +57,24 @@ CREATE TABLE IF NOT EXISTS `user_online_status` (
   `last_seen`           DATETIME     DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `active_chat_room_id` VARCHAR(150) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Call history log
+CREATE TABLE IF NOT EXISTS `call_history` (
+  `id`              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `call_id`         VARCHAR(100) NOT NULL UNIQUE,
+  `caller_id`       VARCHAR(50)  NOT NULL,
+  `caller_name`     VARCHAR(200) DEFAULT '',
+  `caller_image`    VARCHAR(500) DEFAULT '',
+  `recipient_id`    VARCHAR(50)  NOT NULL,
+  `recipient_name`  VARCHAR(200) DEFAULT '',
+  `recipient_image` VARCHAR(500) DEFAULT '',
+  `call_type`       ENUM('audio', 'video') NOT NULL DEFAULT 'audio',
+  `start_time`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `end_time`        DATETIME     DEFAULT NULL,
+  `duration`        INT          NOT NULL DEFAULT 0,
+  `status`          ENUM('completed', 'missed', 'declined', 'cancelled') NOT NULL DEFAULT 'missed',
+  `initiated_by`    VARCHAR(50)  NOT NULL,
+  INDEX `idx_caller`     (`caller_id`),
+  INDEX `idx_recipient`  (`recipient_id`),
+  INDEX `idx_start_time` (`start_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
+import '../service/socket_service.dart';
 
 class ServiceChatPage extends StatefulWidget {
   final String senderId;
@@ -28,10 +30,15 @@ class ServiceChatPage extends StatefulWidget {
 
 class _ServiceChatPageState extends State<ServiceChatPage> {
   final TextEditingController _controller = TextEditingController();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final ImagePicker _picker = ImagePicker();
+  final SocketService _socketService = SocketService();
+  final Uuid _uuid = Uuid();
 
   late String chatId;
+
+  // Messages driven by Socket.IO
+  List<Map<String, dynamic>> _messages = [];
+  bool _isLoading = true;
 
   // Color scheme matching AdminChatScreen
   final LinearGradient _primaryGradient = const LinearGradient(
@@ -53,6 +60,35 @@ class _ServiceChatPageState extends State<ServiceChatPage> {
   void initState() {
     super.initState();
     chatId = _getChatId(widget.senderId, widget.receiverId);
+    _loadMessages();
+    _socketService.joinRoom(chatId);
+    _socketService.onNewMessage.listen((data) {
+      if (data['chatRoomId'] == chatId && mounted) {
+        setState(() => _messages.add(data));
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _socketService.leaveRoom(chatId);
+    super.dispose();
+  }
+
+  Future<void> _loadMessages() async {
+    try {
+      final result = await _socketService.getMessages(chatId, page: 1, limit: 50);
+      if (mounted) {
+        setState(() {
+          _messages = List<Map<String, dynamic>>.from(
+            (result['messages'] as List? ?? []).map((m) => Map<String, dynamic>.from(m as Map)),
+          );
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   String _getChatId(String a, String b) {
@@ -60,43 +96,54 @@ class _ServiceChatPageState extends State<ServiceChatPage> {
     return "chat_${ids[0]}_${ids[1]}";
   }
 
+  // Load current user data for sending messages
+  Future<String> _getCurrentUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userDataString = prefs.getString('user_data');
+    if (userDataString != null) {
+      try {
+        final userData = Map<String, dynamic>.from(
+          Map.from(
+            // ignore: avoid_dynamic_calls
+            (userDataString.startsWith('{') ? userDataString : '{}') as dynamic,
+          ),
+        );
+        return userData['id']?.toString() ?? widget.senderId;
+      } catch (_) {}
+    }
+    return widget.senderId;
+  }
+
   // ---------------- SEND FUNCTIONS ----------------
   Future<void> _sendText() async {
     if (_controller.text.trim().isEmpty) return;
     final messageText = _controller.text.trim();
-    _controller.clear(); // Clear immediately
-    await _sendMessage(
-      type: 'text',
-      message: messageText,
-    );
+    _controller.clear();
+    await _sendMessage(type: 'text', message: messageText);
   }
 
   Future<void> _sendThanks() async {
-    await _sendMessage(
-      type: 'thanks',
-      message: 'Thank you for the service',
-    );
+    await _sendMessage(type: 'thanks', message: 'Thank you for the service');
   }
 
   Future<void> _sendNotSatisfied() async {
-    await _sendMessage(
-      type: 'not_satisfied',
-      message: 'Not satisfied with the service',
-    );
+    await _sendMessage(type: 'not_satisfied', message: 'Not satisfied with the service');
   }
 
   Future<void> _sendImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
     if (image == null) return;
 
-    // 🔥 Upload to Firebase Storage in real app
-    const imageUrl = "https://via.placeholder.com/400x300.png?text=Service+Image";
-
-    await _sendMessage(
-      type: 'image',
-      imageUrl: imageUrl,
-      message: 'Photo',
-    );
+    try {
+      final url = await _socketService.uploadChatImage(
+        imageFile: File(image.path),
+        userId: widget.senderId,
+        chatRoomId: chatId,
+      );
+      await _sendMessage(type: 'image', imageUrl: url, message: 'Photo');
+    } catch (e) {
+      debugPrint('Image upload error: $e');
+    }
   }
 
   Future<void> _sendMessage({
@@ -104,23 +151,15 @@ class _ServiceChatPageState extends State<ServiceChatPage> {
     String? message,
     String? imageUrl,
   }) async {
-    final chatRef = _firestore.collection('service_chat').doc(chatId);
-
-    await chatRef.set({
-      'users': [widget.senderId, widget.receiverId],
-      'lastMessage': message,
-      'lastMessageType': type,
-      'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
-
-    await chatRef.collection('messages').add({
-      'senderId': widget.senderId,
-      'receiverId': widget.receiverId,
-      'type': type,
-      'message': message,
-      'imageUrl': imageUrl,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
+    final msgText = type == 'image' ? (imageUrl ?? '') : (message ?? '');
+    _socketService.sendMessage(
+      chatRoomId: chatId,
+      senderId: widget.senderId,
+      receiverId: widget.receiverId,
+      message: msgText,
+      messageType: type,
+      messageId: _uuid.v4(),
+    );
   }
 
   // ---------------- UI ----------------
@@ -183,45 +222,39 @@ class _ServiceChatPageState extends State<ServiceChatPage> {
   }
 
   Widget _messageList() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: _firestore
-          .collection('service_chat')
-          .doc(chatId)
-          .collection('messages')
-          .orderBy('timestamp', descending: false)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return Center(
-            child: CircularProgressIndicator(color: _accentColor),
-          );
-        }
-
-        return ListView.builder(
-          reverse: true,
-          itemCount: snapshot.data!.docs.length,
-          itemBuilder: (context, index) {
-            final docs = snapshot.data!.docs;
-            final doc = docs[docs.length - 1 - index];
-            final data = doc.data() as Map<String, dynamic>;
-            final isMe = data['senderId'] == widget.senderId;
-            return _buildMessage(data, isMe);
-          },
-        );
+    if (_isLoading) {
+      return Center(child: CircularProgressIndicator(color: _accentColor));
+    }
+    if (_messages.isEmpty) {
+      return Center(
+        child: Text(
+          'No messages yet',
+          style: TextStyle(color: _lightTextColor),
+        ),
+      );
+    }
+    return ListView.builder(
+      reverse: true,
+      itemCount: _messages.length,
+      itemBuilder: (context, index) {
+        final doc = _messages[_messages.length - 1 - index];
+        final isMe = doc['senderId']?.toString() == widget.senderId;
+        return _buildMessage(doc, isMe);
       },
     );
   }
 
   Widget _buildMessage(Map<String, dynamic> data, bool isMe) {
-    switch (data['type']) {
+    final type = data['messageType']?.toString() ?? data['type']?.toString() ?? 'text';
+    switch (type) {
       case 'thanks':
         return _thanksBubble(isMe);
       case 'not_satisfied':
         return _notSatisfiedBubble(isMe);
       case 'image':
-        return _imageBubble(data['imageUrl'], isMe);
+        return _imageBubble(data['message']?.toString() ?? '', isMe);
       default:
-        return _textBubble(data['message'], isMe);
+        return _textBubble(data['message']?.toString() ?? '', isMe);
     }
   }
 

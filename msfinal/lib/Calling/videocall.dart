@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../Chat/call_overlay_manager.dart';
 import '../navigation/app_navigation.dart';
 import '../pushnotification/pushservice.dart';
+import '../service/socket_service.dart';
 import 'tokengenerator.dart';
 import 'call_history_model.dart';
 import 'call_history_service.dart';
@@ -72,6 +73,9 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   Duration _duration = Duration.zero;
 
   StreamSubscription? _responseSubscription;
+  StreamSubscription<Map<String, dynamic>>? _socketAcceptedSub;
+  StreamSubscription<Map<String, dynamic>>? _socketRejectedSub;
+  StreamSubscription<Map<String, dynamic>>? _socketEndedSub;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   String? _connectionStatus;
 
@@ -149,39 +153,61 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
 
   // ================= LISTEN FOR CALL RESPONSE =================
   void _listenForCallResponse() {
+    // FCM path (fallback for background/offline)
     _responseSubscription = NotificationService.callResponses.listen((data) {
-      final type = data['type']?.toString();
-      final channelName = data['channelName']?.toString();
-      if (_channel.isNotEmpty &&
-          channelName != null &&
-          channelName.isNotEmpty &&
-          channelName != _channel) {
-        return;
-      }
-
-      if (type == 'video_call_response') {
-        final accepted = data['accepted'] == 'true';
-        if (mounted) {
-          setState(() {
-            _remoteAccepted = accepted;
-            if (accepted) {
-              _isCallRinging = false;
-            }
-          });
-        }
-
-        if (!accepted) {
-          unawaited(_stopRingtone());
-          _endCall();
-        } else {
-          unawaited(_stopRingtone());
-          _armOutgoingTimeout(_kPostAcceptConnectionTimeout);
-          _syncOverlayState();
-        }
-      } else if (type == 'video_call_ended') {
-        _endCall();
-      }
+      _handleVideoCallResponseData(data);
     });
+
+    // Socket.IO path (fast, for online recipients)
+    _socketAcceptedSub = SocketService().onCallAccepted.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
+      _handleVideoCallResponseData({...data, 'type': 'video_call_response', 'accepted': 'true'});
+    });
+    _socketRejectedSub = SocketService().onCallRejected.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
+      _handleVideoCallResponseData({...data, 'type': 'video_call_response', 'accepted': 'false'});
+    });
+    _socketEndedSub = SocketService().onCallEnded.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
+      if (!_ending) _endCall();
+    });
+  }
+
+  void _handleVideoCallResponseData(Map<String, dynamic> data) {
+    final type = data['type']?.toString();
+    final channelName = data['channelName']?.toString();
+    if (_channel.isNotEmpty &&
+        channelName != null &&
+        channelName.isNotEmpty &&
+        channelName != _channel) {
+      return;
+    }
+
+    if (type == 'video_call_response') {
+      final accepted = data['accepted'] == 'true';
+      if (mounted) {
+        setState(() {
+          _remoteAccepted = accepted;
+          if (accepted) {
+            _isCallRinging = false;
+          }
+        });
+      }
+
+      if (!accepted) {
+        unawaited(_stopRingtone());
+        _endCall();
+      } else {
+        unawaited(_stopRingtone());
+        _armOutgoingTimeout(_kPostAcceptConnectionTimeout);
+        _syncOverlayState();
+      }
+    } else if (type == 'video_call_ended') {
+      _endCall();
+    }
   }
 
   @override
@@ -321,6 +347,18 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
 
       // ✅ SEND NOTIFICATION AFTER CHANNEL EXISTS
       if (widget.isOutgoingCall) {
+        // Socket.IO (instant delivery for online users)
+        SocketService().emitCallInvite(
+          recipientId: widget.otherUserId,
+          callerId: widget.currentUserId,
+          callerName: widget.currentUserName,
+          callerImage: widget.currentUserImage,
+          channelName: _channel,
+          callerUid: _localUid.toString(),
+          callType: 'video',
+          chatRoomId: widget.chatRoomId,
+        );
+        // FCM (fallback for offline users)
         await NotificationService.sendVideoCallNotification(
           recipientUserId: widget.otherUserId,
           callerName: widget.currentUserName,
@@ -487,6 +525,9 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     _callTimer?.cancel();
     _timeoutTimer?.cancel();
     _responseSubscription?.cancel();
+    _socketAcceptedSub?.cancel();
+    _socketRejectedSub?.cancel();
+    _socketEndedSub?.cancel();
 
     // Always stop ringtone when ending call
     await _stopRingtone();
@@ -523,8 +564,15 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
       }
     }
 
-    // Send end/cancel notifications
+    // Send end/cancel via Socket.IO (fast) + FCM (fallback)
     if (_callActive) {
+      SocketService().emitCallEnd(
+        callerId: widget.currentUserId,
+        recipientId: widget.otherUserId,
+        channelName: _channel,
+        callType: 'video',
+        duration: _duration.inSeconds,
+      );
       unawaited(NotificationService.sendVideoCallEndedNotification(
         recipientUserId: widget.otherUserId,
         callerName: widget.currentUserName,
@@ -533,6 +581,13 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
         channelName: _channel,
       ));
     } else if (!_callActive && widget.isOutgoingCall && _channel.isNotEmpty) {
+      SocketService().emitCallCancel(
+        recipientId: widget.otherUserId,
+        callerId: widget.currentUserId,
+        callerName: widget.currentUserName,
+        channelName: _channel,
+        callType: 'video',
+      );
       unawaited(NotificationService.sendVideoCallCancelledNotification(
         recipientUserId: widget.otherUserId,
         callerName: widget.currentUserName,
@@ -1055,6 +1110,9 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     _timeoutTimer?.cancel();
     _qualityUpdateTimer?.cancel();
     _responseSubscription?.cancel();
+    _socketAcceptedSub?.cancel();
+    _socketRejectedSub?.cancel();
+    _socketEndedSub?.cancel();
     _connectivitySubscription?.cancel();
     _controlsHideTimer?.cancel();
     // Release Agora engine if not already released by _endCall

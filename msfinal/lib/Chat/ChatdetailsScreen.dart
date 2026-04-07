@@ -5,7 +5,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'package:intl/intl.dart';
@@ -65,7 +64,6 @@ class ChatDetailScreen extends StatefulWidget {
 class _ChatDetailScreenState extends State<ChatDetailScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   final SocketService _socketService = SocketService();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final Uuid _uuid = Uuid();
 
   final TextEditingController _messageController = TextEditingController();
@@ -2211,10 +2209,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
       final rawTs = data['timestamp'];
       if (rawTs == null) continue;
-      final timestamp = rawTs is Timestamp
-          ? rawTs.toDate()
-          : rawTs is DateTime
-              ? rawTs
+      final timestamp = rawTs is DateTime
+          ? rawTs
+          : rawTs is String
+              ? DateTime.tryParse(rawTs)
               : null;
       if (timestamp == null) continue;
       final dateKey = _formatDateForGrouping(timestamp);
@@ -2235,15 +2233,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         final rawA = a['timestamp'];
         final rawB = b['timestamp'];
         if (rawA == null || rawB == null) return 0;
-        final timeA = rawA is Timestamp
-            ? rawA.toDate()
-            : rawA is DateTime
-                ? rawA
+        final timeA = rawA is DateTime
+            ? rawA
+            : rawA is String
+                ? (DateTime.tryParse(rawA) ?? DateTime.now())
                 : DateTime.now();
-        final timeB = rawB is Timestamp
-            ? rawB.toDate()
-            : rawB is DateTime
-                ? rawB
+        final timeB = rawB is DateTime
+            ? rawB
+            : rawB is String
+                ? (DateTime.tryParse(rawB) ?? DateTime.now())
                 : DateTime.now();
         return timeA.compareTo(timeB);
       });
@@ -2254,10 +2252,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       // Add all messages for this date
       for (final data in messagesForDate) {
         final rawTs = data['timestamp'];
-        final timestamp = rawTs is Timestamp
-            ? rawTs.toDate()
-            : rawTs is DateTime
-                ? rawTs
+        final timestamp = rawTs is DateTime
+            ? rawTs
+            : rawTs is String
+                ? (DateTime.tryParse(rawTs) ?? DateTime.now())
                 : DateTime.now();
 
         if ((data['messageType'] ?? 'text') == 'call') {

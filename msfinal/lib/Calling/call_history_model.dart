@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 enum CallType { audio, video }
 
 enum CallStatus { completed, missed, declined, cancelled }
@@ -35,7 +33,7 @@ class CallHistory {
     required this.initiatedBy,
   });
 
-  // Convert to Firestore document
+  // Convert to map (JSON-serialisable, no Firestore types)
   Map<String, dynamic> toMap() {
     return {
       'callId': callId,
@@ -46,18 +44,24 @@ class CallHistory {
       'recipientName': recipientName,
       'recipientImage': recipientImage,
       'callType': callType.toString().split('.').last,
-      'startTime': Timestamp.fromDate(startTime),
-      'endTime': endTime != null ? Timestamp.fromDate(endTime!) : null,
+      'startTime': startTime.toIso8601String(),
+      'endTime': endTime?.toIso8601String(),
       'duration': duration,
       'status': status.toString().split('.').last,
       'initiatedBy': initiatedBy,
     };
   }
 
-  // Create from Firestore document
-  factory CallHistory.fromMap(Map<String, dynamic> map, String documentId) {
+  // Create from map (works with REST JSON or Socket.IO data)
+  factory CallHistory.fromMap(Map<String, dynamic> map, [String? id]) {
+    DateTime _parseDate(dynamic v) {
+      if (v == null) return DateTime.now();
+      if (v is DateTime) return v;
+      return DateTime.tryParse(v.toString()) ?? DateTime.now();
+    }
+
     return CallHistory(
-      callId: documentId,
+      callId: id ?? map['callId'] ?? '',
       callerId: map['callerId'] ?? '',
       callerName: map['callerName'] ?? '',
       callerImage: map['callerImage'] ?? '',
@@ -68,11 +72,11 @@ class CallHistory {
         (e) => e.toString().split('.').last == map['callType'],
         orElse: () => CallType.audio,
       ),
-      startTime: (map['startTime'] as Timestamp).toDate(),
-      endTime: map['endTime'] != null
-          ? (map['endTime'] as Timestamp).toDate()
-          : null,
-      duration: map['duration'] ?? 0,
+      startTime: _parseDate(map['startTime']),
+      endTime: map['endTime'] != null ? DateTime.tryParse(map['endTime'].toString()) : null,
+      duration: (map['duration'] ?? 0) is int
+          ? (map['duration'] ?? 0)
+          : int.tryParse(map['duration'].toString()) ?? 0,
       status: CallStatus.values.firstWhere(
         (e) => e.toString().split('.').last == map['status'],
         orElse: () => CallStatus.missed,

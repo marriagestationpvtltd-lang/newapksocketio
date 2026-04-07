@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:ms2026/Home/Screen/premiummember.dart';
 import 'package:ms2026/Home/Screen/profilecard.dart';
@@ -3283,38 +3282,8 @@ String usertye = '';
       final userIds = [currentUserIdStr, otherUserId]..sort();
       final chatRoomId = userIds.join('_');
 
-      final chatRoomDoc = await FirebaseFirestore.instance
-          .collection('chatRooms')
-          .doc(chatRoomId)
-          .get();
-
-      if (!chatRoomDoc.exists) {
-        await FirebaseFirestore.instance
-            .collection('chatRooms')
-            .doc(chatRoomId)
-            .set({
-          'chatRoomId': chatRoomId,
-          'participants': [currentUserIdStr, otherUserId],
-          'participantNames': {
-            currentUserIdStr: currentUserName,
-            otherUserId: otherUserName,
-          },
-          'participantImages': {
-            currentUserIdStr: currentUserImage,
-            otherUserId: otherUserImage,
-          },
-          'unreadCount': {
-            currentUserIdStr: 0,
-            otherUserId: 0,
-          },
-          'lastMessage': '',
-          'lastMessageType': 'text',
-          'lastMessageTime': DateTime.now(),
-          'lastMessageSenderId': '',
-          'createdAt': DateTime.now(),
-          'updatedAt': DateTime.now(),
-        });
-      }
+      // Chat room is auto-created by the Socket.IO server on first message send.
+      // No need to pre-create it in Firestore.
 
       Navigator.push(
         context,

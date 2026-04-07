@@ -614,6 +614,8 @@ class _ChatWindowState extends State<ChatWindow> {
       'senderid': senderId,
       'senderName': senderName,
       'type': data['type']?.toString() ?? 'text',
+      if (data['type'] == 'image' && data['imageUrl'] != null)
+        'imageUrl': data['imageUrl'],
       'edited': data['edited'] == true,
       'deleted': data['deleted'] == true,
       'unsent': data['unsent'] == true,
@@ -2698,6 +2700,8 @@ class _ChatWindowState extends State<ChatWindow> {
     final String quotedMsg = replyTo['message'] as String;
     final String quotedSender = replyTo['senderName'] as String? ?? 'User';
     final bool canNavigate = _replyTargetMessageId(replyTo).isNotEmpty;
+    final String? imageUrl = replyTo['imageUrl']?.toString();
+    final bool hasImage = imageUrl != null && imageUrl.isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 4, left: 6, right: 6),
@@ -2709,7 +2713,6 @@ class _ChatWindowState extends State<ChatWindow> {
           highlightColor: canNavigate ? null : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
           child: Ink(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               color: isSentByMe
                   ? Colors.white.withOpacity(_kReplyPreviewSentBackgroundOpacity)
@@ -2725,60 +2728,86 @@ class _ChatWindowState extends State<ChatWindow> {
               ),
             ),
             child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        quotedSender,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: isSentByMe ? Colors.white : primaryColor,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          quotedSender,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: isSentByMe ? Colors.white : primaryColor,
+                          ),
                         ),
-                      ),
-                      if (replyTo['edited'] == true &&
-                          replyTo['deleted'] != true &&
-                          replyTo['unsent'] != true) ...[
+                        if (replyTo['edited'] == true &&
+                            replyTo['deleted'] != true &&
+                            replyTo['unsent'] != true) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            'Edited',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontStyle: FontStyle.italic,
+                              color: isSentByMe
+                                  ? Colors.white.withOpacity(_kReplyPreviewSentTextOpacity)
+                                  : mutedColor,
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 2),
                         Text(
-                          'Edited',
+                          quotedMsg.length > _kMaxQuoteLength
+                              ? '${quotedMsg.substring(0, _kMaxQuoteLength)}…'
+                              : quotedMsg,
                           style: TextStyle(
-                            fontSize: 10,
-                            fontStyle: FontStyle.italic,
+                            fontSize: 11,
                             color: isSentByMe
                                 ? Colors.white.withOpacity(_kReplyPreviewSentTextOpacity)
                                 : mutedColor,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
-                      const SizedBox(height: 2),
-                      Text(
-                        quotedMsg.length > _kMaxQuoteLength
-                            ? '${quotedMsg.substring(0, _kMaxQuoteLength)}…'
-                            : quotedMsg,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isSentByMe
-                              ? Colors.white.withOpacity(_kReplyPreviewSentTextOpacity)
-                              : mutedColor,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-                if (canNavigate) ...[
+                // Image thumbnail (WhatsApp-style)
+                if (hasImage)
+                  ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      topRight: Radius.circular(10),
+                      bottomRight: Radius.circular(10),
+                    ),
+                    child: Image.network(
+                      imageUrl!,
+                      width: 50,
+                      height: 54,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        width: 50,
+                        height: 54,
+                        color: Colors.grey.shade300,
+                        child: Icon(Icons.image, color: Colors.grey.shade500, size: 24),
+                      ),
+                    ),
+                  )
+                else if (canNavigate) ...[
                   const SizedBox(width: 8),
-                  Icon(
-                    Icons.subdirectory_arrow_left_rounded,
-                    size: 16,
-                    color: isSentByMe
-                        ? Colors.white.withOpacity(_kReplyPreviewSentIconOpacity)
-                        : primaryColor,
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Icon(
+                      Icons.subdirectory_arrow_left_rounded,
+                      size: 16,
+                      color: isSentByMe
+                          ? Colors.white.withOpacity(_kReplyPreviewSentIconOpacity)
+                          : primaryColor,
+                    ),
                   ),
                 ],
               ],
@@ -2933,10 +2962,13 @@ class _ChatWindowState extends State<ChatWindow> {
             return msg.length > _kMaxQuoteLength ? '${msg.substring(0, _kMaxQuoteLength)}…' : msg;
           }());
     final IconData leadIcon = isEditing ? Icons.edit_outlined : Icons.reply_rounded;
+    final String? replyImageUrl = (!isEditing)
+        ? _replyingTo?['imageUrl']?.toString()
+        : null;
+    final bool hasReplyImage = replyImageUrl != null && replyImageUrl.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: kPrimary.withOpacity(0.07),
         borderRadius: BorderRadius.circular(10),
@@ -2944,42 +2976,69 @@ class _ChatWindowState extends State<ChatWindow> {
       ),
       child: Row(
         children: [
+          // Left accent bar
           Container(
             width: 3,
-            height: 36,
-            margin: const EdgeInsets.only(right: 10),
+            height: hasReplyImage ? 56 : 46,
+            margin: const EdgeInsets.only(right: 0),
             decoration: BoxDecoration(
               color: kPrimary,
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(10),
+                bottomLeft: Radius.circular(10),
+              ),
             ),
           ),
+          const SizedBox(width: 8),
           Icon(leadIcon, size: 15, color: kPrimary),
           const SizedBox(width: 6),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: kPrimary,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 7),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: kPrimary,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  preview,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12, color: colors.muted),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    preview,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: colors.muted),
+                  ),
+                ],
+              ),
             ),
           ),
+          // Image thumbnail for image replies
+          if (hasReplyImage) ...[
+            const SizedBox(width: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.network(
+                replyImageUrl!,
+                width: 44,
+                height: 44,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) =>
+                    Icon(Icons.image, size: 44, color: Colors.grey.shade400),
+              ),
+            ),
+            const SizedBox(width: 4),
+          ],
           GestureDetector(
             onTap: _cancelAction,
-            child: Icon(Icons.close, size: 16, color: colors.muted),
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Icon(Icons.close, size: 16, color: colors.muted),
+            ),
           ),
         ],
       ),

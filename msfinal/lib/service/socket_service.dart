@@ -11,8 +11,6 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 /// building for production. Example: 'https://socket.yourserver.com:3001'
 const String kSocketServerUrl = 'http://192.168.18.214:3001';
 
-/// REST endpoint for uploading chat media (images / voice).
-const String kChatUploadUrl = 'https://digitallami.com/Api2/chat_upload.php';
 
 /// ---------------------------------------------------------------------------
 /// SocketService — singleton that manages the Socket.IO connection and
@@ -482,9 +480,13 @@ class SocketService {
     required String type,
     required MediaType mimeType,
   }) async {
-    final request = http.MultipartRequest('POST', Uri.parse(kChatUploadUrl))
-      ..fields['type'] = type
-      ..fields['userId'] = userId
+    // Validate type against allowlist to prevent URL injection
+    final safeType = (type == 'voice') ? 'voice' : 'image';
+    final uri = Uri.parse(kSocketServerUrl).replace(
+      path: '/upload',
+      queryParameters: {'type': safeType},
+    );
+    final request = http.MultipartRequest('POST', uri)
       ..files.add(await http.MultipartFile.fromPath(
         'file',
         file.path,
@@ -499,10 +501,11 @@ class SocketService {
     }
 
     final json = jsonDecode(body) as Map<String, dynamic>;
-    if (json['success'] != true) {
-      throw Exception('Upload error: ${json['error']}');
+    final url = json['url']?.toString();
+    if (url == null || url.isEmpty) {
+      throw Exception(json['error']?.toString() ?? 'Upload returned no URL');
     }
-    return json['url'] as String;
+    return url;
   }
 
   // ── Utility ───────────────────────────────────────────────────────────────

@@ -264,6 +264,8 @@ class _ChatSidebarState extends State<ChatSidebar> {
 
   Future<void> _refreshChatRooms() async {
     try {
+      final connected = await _socketService.ensureConnected();
+      if (!connected) return;
       final rooms = await _socketService.getChatRooms();
       _applyChatRoomsUpdate(
         rooms.map((room) => Map<String, dynamic>.from(room as Map)).toList(),

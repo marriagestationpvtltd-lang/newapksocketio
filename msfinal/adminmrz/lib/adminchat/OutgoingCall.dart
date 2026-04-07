@@ -174,7 +174,7 @@ class _CallScreenState extends State<CallScreen>
       );
 
       if (widget.isOutgoingCall) {
-        _socketService.connect();
+        final socketReady = await _socketService.ensureConnected();
         await NotificationService.sendCallNotification(
           recipientUserId: widget.otherUserId,
           callerName: widget.currentUserName,
@@ -184,16 +184,18 @@ class _CallScreenState extends State<CallScreen>
           agoraAppId: AgoraTokenService.appId,
           agoraCertificate: 'SERVER_ONLY',
         );
-        _socketService.emitCallInvite(
-          recipientId: widget.otherUserId,
-          callerId: widget.currentUserId,
-          callerName: widget.currentUserName,
-          callerImage: '',
-          channelName: _channel,
-          callerUid: _localUid.toString(),
-          callType: 'audio',
-          chatRoomId: AdminSocketService.chatRoomId(widget.otherUserId),
-        );
+        if (socketReady) {
+          _socketService.emitCallInvite(
+            recipientId: widget.otherUserId,
+            callerId: widget.currentUserId,
+            callerName: widget.currentUserName,
+            callerImage: '',
+            channelName: _channel,
+            callerUid: _localUid.toString(),
+            callType: 'audio',
+            chatRoomId: AdminSocketService.chatRoomId(widget.otherUserId),
+          );
+        }
 
         // Phase 2 – transition to "Ringing..." once notification+socket are set
         if (mounted) {

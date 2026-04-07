@@ -199,6 +199,28 @@ class AdminSocketService {
     _socket?.disconnect();
   }
 
+  Future<bool> ensureConnected() async {
+    if (isConnected) return true;
+    connect();
+
+    final completer = Completer<bool>();
+    late StreamSubscription<bool> sub;
+    final timer = Timer(kAdminSocketTimeout, () {
+      if (!completer.isCompleted) completer.complete(false);
+    });
+
+    sub = onConnectionChange.listen((connected) {
+      if (connected && !completer.isCompleted) {
+        completer.complete(true);
+      }
+    });
+
+    final result = await completer.future;
+    await sub.cancel();
+    timer.cancel();
+    return result;
+  }
+
   // ── Room management ───────────────────────────────────────────────────────
 
   void joinRoom(String chatRoomId) {

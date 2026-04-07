@@ -1023,6 +1023,8 @@ class _ChatWindowState extends State<ChatWindow> {
     if (receiverId == null || receiverId.isEmpty) return;
 
     try {
+      final connected = await _socketService.ensureConnected();
+      if (!connected) throw Exception('Socket not connected');
       _socketService.sendMessage(
         chatRoomId: AdminSocketService.chatRoomId(receiverId),
         receiverId: receiverId,
@@ -3281,6 +3283,8 @@ class _ChatWindowState extends State<ChatWindow> {
     String receiverId,
   ) async {
     try {
+      final connected = await _socketService.ensureConnected();
+      if (!connected) throw Exception('Socket not connected');
       final imageUrl = await _uploadChatImage(
         image: image,
         imageBytes: imageBytes,
@@ -3410,6 +3414,8 @@ class _ChatWindowState extends State<ChatWindow> {
     _clearAdminTypingStatus();
 
     try {
+      final connected = await _socketService.ensureConnected();
+      if (!connected) throw Exception('Socket not connected');
       _socketService.sendMessage(
         chatRoomId: AdminSocketService.chatRoomId(receiverId),
         receiverId: receiverId,

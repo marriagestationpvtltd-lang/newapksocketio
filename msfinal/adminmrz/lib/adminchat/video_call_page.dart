@@ -181,7 +181,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
 
       // Send call notification for outgoing calls
       if (widget.isOutgoingCall) {
-        _socketService.connect();
+        final socketReady = await _socketService.ensureConnected();
         await NotificationService.sendVideoCallNotification(
           recipientUserId: widget.otherUserId,
           callerName: widget.currentUserName,
@@ -191,16 +191,18 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
           agoraAppId: AgoraTokenService.appId,
           agoraCertificate: 'SERVER_ONLY',
         );
-        _socketService.emitCallInvite(
-          recipientId: widget.otherUserId,
-          callerId: widget.currentUserId,
-          callerName: widget.currentUserName,
-          callerImage: '',
-          channelName: _channel,
-          callerUid: _localUid.toString(),
-          callType: 'video',
-          chatRoomId: AdminSocketService.chatRoomId(widget.otherUserId),
-        );
+        if (socketReady) {
+          _socketService.emitCallInvite(
+            recipientId: widget.otherUserId,
+            callerId: widget.currentUserId,
+            callerName: widget.currentUserName,
+            callerImage: '',
+            channelName: _channel,
+            callerUid: _localUid.toString(),
+            callType: 'video',
+            chatRoomId: AdminSocketService.chatRoomId(widget.otherUserId),
+          );
+        }
 
         // Transition to "Ringing" — remote phone is now ringing
         if (mounted) {

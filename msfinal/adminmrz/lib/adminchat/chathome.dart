@@ -464,7 +464,7 @@ class _ChatWindowState extends State<ChatWindow> {
     Timer? autoRejectTimer;
     StreamSubscription<Map<String, dynamic>>? cancelSub;
     StreamSubscription<Map<String, dynamic>>? endedSub;
-    BuildContext? dialogContext;
+    BuildContext? incomingCallDialogContext;
     var dismissed = false;
     var callerCancelled = false;
     var callerEnded = false;
@@ -472,7 +472,7 @@ class _ChatWindowState extends State<ChatWindow> {
     void dismissDialog(bool accepted) {
       if (dismissed) return;
       dismissed = true;
-      final ctx = dialogContext;
+      final ctx = incomingCallDialogContext;
       if (ctx != null && Navigator.of(ctx, rootNavigator: true).canPop()) {
         Navigator.of(ctx, rootNavigator: true).pop(accepted);
       }
@@ -481,14 +481,12 @@ class _ChatWindowState extends State<ChatWindow> {
     cancelSub = _socketService.onCallCancelled.listen((event) {
       if (event['channelName']?.toString() != channelName) return;
       callerCancelled = true;
-      CallManager().clearCallData();
       dismissDialog(false);
     });
 
     endedSub = _socketService.onCallEnded.listen((event) {
       if (event['channelName']?.toString() != channelName) return;
       callerEnded = true;
-      CallManager().clearCallData();
       dismissDialog(false);
     });
 
@@ -496,7 +494,7 @@ class _ChatWindowState extends State<ChatWindow> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
-        dialogContext = ctx;
+        incomingCallDialogContext = ctx;
         autoRejectTimer = Timer(const Duration(seconds: 30), () {
           dismissDialog(false);
         });

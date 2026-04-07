@@ -13,6 +13,7 @@ const String kAdminSocketUrl = String.fromEnvironment(
 
 /// Admin user ID — always '1'.
 const String kAdminUserId = '1';
+const int kAdminSocketReconnectAttempts = 999999;
 
 /// Default timeout for acknowledgement-based Socket.IO calls.
 const Duration kAdminSocketTimeout = Duration(seconds: 15);
@@ -104,7 +105,7 @@ class AdminSocketService {
           .setTransports(['websocket', 'polling'])
           .setReconnectionDelay(2000)
           .setReconnectionDelayMax(10000)
-          .setReconnectionAttempts(999999)
+          .setReconnectionAttempts(kAdminSocketReconnectAttempts)
           .enableReconnection()
           .disableAutoConnect()
           .build(),

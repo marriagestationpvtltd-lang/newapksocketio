@@ -297,9 +297,16 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
       _timeoutTimer = Timer(const Duration(seconds: 30), () {
         if (_remoteUid == null) {
           if (widget.isOutgoingCall) {
-            NotificationService.sendMissedVideoCallNotification(
-              callerId: widget.currentUserId,
-              callerName: widget.currentUserName,
+            NotificationService.sendNotification(
+              userId: widget.otherUserId,
+              title: '⏰ Missed Video Call',
+              body: 'Missed video call from ${widget.currentUserName}',
+              data: {
+                'type': 'missed_video_call',
+                'callerId': widget.currentUserId,
+                'callerName': widget.currentUserName,
+                'timestamp': DateTime.now().toIso8601String(),
+              },
             );
           }
           _endCall();

@@ -273,9 +273,16 @@ class _CallScreenState extends State<CallScreen>
       // ================= TIMEOUT =================
       _timeoutTimer = Timer(const Duration(seconds: 30), () async {
         if (_remoteUid == null && !_ending) {
-          await NotificationService.sendMissedCallNotification(
-            callerId: widget.currentUserId,
-            callerName: widget.currentUserName,
+          await NotificationService.sendNotification(
+            userId: widget.otherUserId,
+            title: '⏰ Missed Call',
+            body: 'Missed call from ${widget.currentUserName}',
+            data: {
+              'type': 'missed_call',
+              'callerId': widget.currentUserId,
+              'callerName': widget.currentUserName,
+              'timestamp': DateTime.now().toIso8601String(),
+            },
           );
           await _endCall();
         }

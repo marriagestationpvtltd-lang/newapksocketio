@@ -466,13 +466,13 @@ class _ChatListScreenState extends State<ChatListScreen>
   String _formatCallDuration(int seconds) {
     final duration = Duration(seconds: seconds);
     final hours = duration.inHours;
-    final minutes = duration.inMinutes;
-    final remainingSeconds = duration.inSeconds.remainder(60);
+    final secondsComponent = duration.inSeconds.remainder(60);
     if (hours > 0) {
       final remainingMinutes = duration.inMinutes.remainder(60);
-      return '$hours:${remainingMinutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
+      return '$hours:${remainingMinutes.toString().padLeft(2, '0')}:${secondsComponent.toString().padLeft(2, '0')}';
     }
-    return '$minutes:${remainingSeconds.toString().padLeft(2, '0')}';
+    final minutes = duration.inMinutes;
+    return '$minutes:${secondsComponent.toString().padLeft(2, '0')}';
   }
 
   /// Format a lastSeen timestamp into a human-readable "last active" string.

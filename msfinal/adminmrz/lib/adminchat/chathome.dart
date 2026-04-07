@@ -1,4 +1,5 @@
 import 'package:adminmrz/adminchat/services/pushservice.dart';
+import 'package:adminmrz/adminchat/services/admin_socket_service.dart';
 import 'package:adminmrz/adminchat/video_call_page.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -47,24 +48,36 @@ class _ChatWindowState extends State<ChatWindow> {
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _messageFocusNode = FocusNode();
+  // Firestore is kept only for typing indicators and image uploads.
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseStorage _storage = FirebaseStorage.instance;
+
+  // Socket.IO service for all chat messaging.
+  final AdminSocketService _socketService = AdminSocketService();
+  StreamSubscription<Map<String, dynamic>>? _newMsgSub;
+  StreamSubscription<Map<String, dynamic>>? _editedMsgSub;
+  StreamSubscription<Map<String, dynamic>>? _deletedMsgSub;
+  StreamSubscription<Map<String, dynamic>>? _unsentMsgSub;
+  StreamSubscription<Map<String, dynamic>>? _likedMsgSub;
+  StreamSubscription<Map<String, dynamic>>? _readMsgSub;
+
   bool _isListening = false;
   bool _userStoppedListening = false;
   bool _isSearching = false;
   bool _showMatchInfo = false;
   File? _selectedImage;
   Uint8List? _selectedImageBytes;
-  List<QueryDocumentSnapshot> _filteredMessages = [];
   js.JsObject? _webSpeechRecognition;
   FlutterSoundRecorder _recorder = FlutterSoundRecorder();
   final ScrollController _scrollController = ScrollController();
-  QuerySnapshot? _lastSnapshot;
   String? _lastUploadedImageUrl;
 
-  // Cached streams – recreated only when the selected receiver changes.
+  // Message list populated via Socket.IO.
+  List<Map<String, dynamic>> _messages = [];
+  List<Map<String, dynamic>> _filteredMessages = [];
+
+  // Cached selected user — used to detect user switches.
   int? _cachedReceiverId;
-  Stream<QuerySnapshot>? _messagesStream;
 
   // Voice typing state
   String _selectedLanguage = 'en-US'; // 'en-US' or 'ne-NP'
@@ -73,11 +86,11 @@ class _ChatWindowState extends State<ChatWindow> {
   // Pagination
   static const int _pageSize = 20;
   static const double _autoScrollThreshold = 120;
-  int _currentLimit = 20;
-  int? _cachedLimit;
+  int _currentPage = 1;
   bool _isLoadingMore = false;
   bool _hasMoreMessages = true;
   bool _suppressNextAutoScroll = false;
+  bool _isInitialLoad = true;
   int? _prevUserId;
 
   // Floating date indicator (WhatsApp-style)
@@ -93,7 +106,7 @@ class _ChatWindowState extends State<ChatWindow> {
   // Active call overlay
   OverlayEntry? _callOverlayEntry;
 
-  // Typing indicator state
+  // Typing indicator state (kept in Firestore for simplicity)
   Timer? _typingTimer;
   StreamSubscription<DocumentSnapshot>? _typingSubscription;
   bool _userIsTyping = false;
@@ -144,9 +157,272 @@ class _ChatWindowState extends State<ChatWindow> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       FocusScope.of(context).requestFocus(_messageFocusNode);
       // Set up typing listener for the initially selected user.
-      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-      if (chatProvider.id != null) _setupTypingListener(chatProvider.id!);
+      final cp = Provider.of<ChatProvider>(context, listen: false);
+      if (cp.id != null) _setupTypingListener(cp.id!);
     });
+
+    // Connect the Socket.IO service and start listening for events.
+    _socketService.connect();
+    _setupSocketListeners();
+
+    // Load messages once the socket is ready (or immediately if already connected).
+    if (_socketService.isConnected) {
+      _loadMessages(reset: true);
+    } else {
+      StreamSubscription<bool>? connSub;
+      connSub = _socketService.onConnectionChange.listen((connected) {
+        if (connected && mounted) {
+          connSub?.cancel();
+          _loadMessages(reset: true);
+        }
+      });
+    }
+  }
+
+  // ── SOCKET.IO HELPERS ────────────────────────────────────────────────────
+
+  /// Convert a Socket.IO message map (camelCase fields from server) to the
+  /// admin-panel-internal format (lowercase/Firestore-style keys used by the
+  /// rendering widgets).
+  static Map<String, dynamic> _socketMsgToAdminData(Map<String, dynamic> msg) {
+    final String msgType = msg['messageType']?.toString() ?? 'text';
+    final String rawMessage = msg['message']?.toString() ?? '';
+
+    // Decode optional structured payloads from the message field.
+    String? imageUrl;
+    Map<String, dynamic>? profileData;
+    String? callType;
+    String? callStatus;
+    int callDuration = 0;
+    String displayMessage = rawMessage;
+
+    if (msgType == 'image') {
+      imageUrl = rawMessage;
+      displayMessage = 'Image';
+    } else if (msgType == 'profile_card') {
+      try {
+        profileData = jsonDecode(rawMessage) as Map<String, dynamic>;
+        displayMessage = 'Match Profile';
+      } catch (_) {}
+    } else if (msgType == 'call') {
+      try {
+        final decoded = jsonDecode(rawMessage) as Map<String, dynamic>;
+        callType = decoded['callType']?.toString();
+        callStatus = decoded['callStatus']?.toString();
+        callDuration = (decoded['callDuration'] as num?)?.toInt() ?? 0;
+        displayMessage = decoded['label']?.toString() ?? rawMessage;
+      } catch (_) {}
+    }
+
+    // Treat a message as deleted if it is deleted for both or either side
+    // (admin sees all messages in the room).
+    final bool deleted = msg['isDeletedForSender'] == true ||
+        msg['isDeletedForReceiver'] == true;
+
+    return {
+      'messageId': msg['messageId']?.toString() ?? '',
+      'senderid': msg['senderId']?.toString() ?? '',
+      'receiverid': msg['receiverId']?.toString() ?? '',
+      'message': displayMessage,
+      'type': msgType,
+      'liked': msg['liked'] == true,
+      'seen': msg['isRead'] == true,
+      'deleted': deleted,
+      'unsent': msg['isUnsent'] == true,
+      'edited': msg['isEdited'] == true,
+      'replyto': msg['repliedTo'],
+      'timestamp': msg['timestamp']?.toString(),
+      if (imageUrl != null) 'imageUrl': imageUrl,
+      if (callType != null) 'callType': callType,
+      if (callStatus != null) 'callStatus': callStatus,
+      'callDuration': callDuration,
+      if (profileData != null) 'profileData': profileData,
+    };
+  }
+
+  /// Set up persistent Socket.IO event listeners.
+  void _setupSocketListeners() {
+    _newMsgSub?.cancel();
+    _newMsgSub = _socketService.onNewMessage.listen((raw) {
+      if (!mounted) return;
+      final data = _socketMsgToAdminData(raw);
+      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+      final String expectedRoom = AdminSocketService.chatRoomId(
+          chatProvider.id?.toString() ?? '');
+      if (raw['chatRoomId']?.toString() != expectedRoom) return;
+      final msgId = data['messageId'] as String;
+      if (msgId.isEmpty) return;
+      setState(() {
+        final idx = _messages.indexWhere((m) => m['messageId'] == msgId);
+        if (idx >= 0) {
+          _messages[idx] = data; // update optimistic message
+        } else {
+          _messages.add(data);
+          if (_isSearching && _searchController.text.isNotEmpty) {
+            if (data['message']
+                .toString()
+                .toLowerCase()
+                .contains(_searchController.text.toLowerCase())) {
+              _filteredMessages.add(data);
+            }
+          }
+        }
+      });
+      // Mark messages sent by user as seen by admin
+      final bool isByUser = data['senderid'] != senderId.toString();
+      if (isByUser) _socketService.markRead(raw['chatRoomId']?.toString() ?? expectedRoom);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_suppressNextAutoScroll && mounted) _scrollToBottom();
+      });
+    });
+
+    _editedMsgSub?.cancel();
+    _editedMsgSub = _socketService.onMessageEdited.listen((data) {
+      if (!mounted) return;
+      final String msgId = data['messageId']?.toString() ?? '';
+      if (msgId.isEmpty) return;
+      setState(() {
+        final idx = _messages.indexWhere((m) => m['messageId'] == msgId);
+        if (idx >= 0) {
+          _messages[idx] = {
+            ..._messages[idx],
+            'message': data['newMessage']?.toString() ?? _messages[idx]['message'],
+            'edited': true,
+          };
+          _syncFilteredMessages();
+        }
+      });
+    });
+
+    _deletedMsgSub?.cancel();
+    _deletedMsgSub = _socketService.onMessageDeleted.listen((data) {
+      if (!mounted) return;
+      final String msgId = data['messageId']?.toString() ?? '';
+      if (msgId.isEmpty) return;
+      setState(() {
+        final idx = _messages.indexWhere((m) => m['messageId'] == msgId);
+        if (idx >= 0) {
+          _messages[idx] = {
+            ..._messages[idx],
+            'message': _kDeletedMessageText,
+            'deleted': true,
+            'unsent': false,
+            'edited': false,
+          };
+          _syncFilteredMessages();
+        }
+      });
+    });
+
+    _unsentMsgSub?.cancel();
+    _unsentMsgSub = _socketService.onMessageUnsent.listen((data) {
+      if (!mounted) return;
+      final String msgId = data['messageId']?.toString() ?? '';
+      if (msgId.isEmpty) return;
+      setState(() {
+        final idx = _messages.indexWhere((m) => m['messageId'] == msgId);
+        if (idx >= 0) {
+          _messages[idx] = {
+            ..._messages[idx],
+            'message': _kUnsentMessageText,
+            'unsent': true,
+            'deleted': false,
+            'edited': false,
+          };
+          _syncFilteredMessages();
+        }
+      });
+    });
+
+    _likedMsgSub?.cancel();
+    _likedMsgSub = _socketService.onMessageLiked.listen((data) {
+      if (!mounted) return;
+      final String msgId = data['messageId']?.toString() ?? '';
+      if (msgId.isEmpty) return;
+      setState(() {
+        final idx = _messages.indexWhere((m) => m['messageId'] == msgId);
+        if (idx >= 0) {
+          _messages[idx] = {..._messages[idx], 'liked': data['liked'] == true};
+        }
+      });
+    });
+
+    _readMsgSub?.cancel();
+    _readMsgSub = _socketService.onMessagesRead.listen((data) {
+      if (!mounted) return;
+      // When the user marks messages as read, update seen status on all admin-sent messages
+      setState(() {
+        for (int i = 0; i < _messages.length; i++) {
+          if (_messages[i]['senderid'] == senderId.toString()) {
+            _messages[i] = {..._messages[i], 'seen': true};
+          }
+        }
+      });
+    });
+  }
+
+  /// Load a page of messages from the server.
+  Future<void> _loadMessages({bool reset = false}) async {
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    if (chatProvider.id == null) return;
+    final String roomId = AdminSocketService.chatRoomId(chatProvider.id.toString());
+
+    if (reset) {
+      setState(() {
+        _messages = [];
+        _filteredMessages = [];
+        _currentPage = 1;
+        _hasMoreMessages = true;
+        _isInitialLoad = true;
+      });
+      _socketService.joinRoom(roomId);
+      _socketService.setActiveChat(roomId);
+    }
+
+    setState(() => _isLoadingMore = !reset);
+
+    try {
+      final result = await _socketService.getMessages(
+        roomId,
+        page: _currentPage,
+        limit: _pageSize,
+      );
+      if (!mounted) return;
+      final msgs = (result['messages'] as List? ?? [])
+          .map((m) => _socketMsgToAdminData(Map<String, dynamic>.from(m as Map)))
+          .toList();
+      final hasMore = result['hasMore'] == true;
+
+      setState(() {
+        if (reset) {
+          _messages = msgs;
+        } else {
+          final existingIds = _messages.map((m) => m['messageId']).toSet();
+          final newMsgs = msgs.where((m) => !existingIds.contains(m['messageId'])).toList();
+          _messages = [...newMsgs, ..._messages];
+        }
+        _hasMoreMessages = hasMore;
+        _isLoadingMore = false;
+        _isInitialLoad = false;
+      });
+
+      if (reset) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+      }
+      _socketService.markRead(roomId);
+    } catch (e) {
+      debugPrint('Error loading messages: $e');
+      if (mounted) setState(() { _isLoadingMore = false; _isInitialLoad = false; });
+    }
+  }
+
+  /// Keep [_filteredMessages] in sync with [_messages] after an in-place update.
+  void _syncFilteredMessages() {
+    if (!_isSearching || _searchController.text.isEmpty) return;
+    final query = _searchController.text.toLowerCase();
+    _filteredMessages = _messages
+        .where((m) => m['message'].toString().toLowerCase().contains(query))
+        .toList();
   }
 
   Future<void> _fetchMatchDetails() async {
@@ -242,58 +518,38 @@ class _ChatWindowState extends State<ChatWindow> {
 
   // ── SEEN STATUS ─────────────────────────────────────────────────────────
 
-  /// Batch-mark all unread incoming messages as seen by admin.
-  void _markIncomingMessagesAsSeen(List<QueryDocumentSnapshot> messages) {
-    final batch = _firestore.batch();
-    bool hasPending = false;
+  /// Mark incoming messages in the current room as read via Socket.IO.
+  void _markIncomingMessagesAsSeen() {
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
     if (chatProvider.id == null) return;
-    final String userId = chatProvider.id.toString();
-    for (final doc in messages) {
-      final data = doc.data() as Map<String, dynamic>;
-      if (data['senderid'] == userId &&
-          data['receiverid'] == senderId.toString() &&
-          data['seen'] != true) {
-        batch.update(doc.reference, {
-          'seen': true,
-          'seenAt': FieldValue.serverTimestamp(),
-        });
-        hasPending = true;
-      }
-    }
-    if (hasPending) batch.commit().catchError((_) {});
+    final String roomId =
+        AdminSocketService.chatRoomId(chatProvider.id.toString());
+    _socketService.markRead(roomId);
   }
 
   // ── CALL HISTORY ─────────────────────────────────────────────────────────
 
-  /// Save a call history message to the `adminchat` collection.
+  /// Send a call history message via Socket.IO.
   Future<void> _saveCallHistory(
       String receiverId, String callType, String status, int durationSeconds) async {
     try {
       final String label = _callLabel(callType, status, durationSeconds);
-      await _firestore.collection('adminchat').add({
-        'message': label,
-        'senderid': senderId.toString(),
-        'receiverid': receiverId,
-        'timestamp': FieldValue.serverTimestamp(),
-        'type': 'call',
-        'callType': callType,
-        'callStatus': status,
-        'callDuration': durationSeconds,
-        'seen': false,
-      });
-
-      final String conversationId =
-          getConversationId(senderId.toString(), receiverId);
-      await _firestore
-          .collection('conversations')
-          .doc(conversationId)
-          .set({
-        'participants': [senderId.toString(), receiverId],
-        'lastMessage': label,
-        'lastTimestamp': FieldValue.serverTimestamp(),
-        'lastSenderId': senderId.toString(),
-      }, SetOptions(merge: true));
+      final String roomId =
+          AdminSocketService.chatRoomId(receiverId);
+      final String msgId =
+          'call_${DateTime.now().millisecondsSinceEpoch}_${senderId}';
+      _socketService.sendMessage(
+        chatRoomId: roomId,
+        receiverId: receiverId,
+        message: jsonEncode({
+          'label': label,
+          'callType': callType,
+          'callStatus': status,
+          'callDuration': durationSeconds,
+        }),
+        messageType: 'call',
+        messageId: msgId,
+      );
     } catch (_) {}
   }
 
@@ -383,45 +639,18 @@ class _ChatWindowState extends State<ChatWindow> {
     String sourceDocId,
     Map<String, dynamic> replyData,
   ) async {
-    final snapshot = await _firestore
-        .collection('adminchat')
-        .where('replyto.docId', isEqualTo: sourceDocId)
-        .get();
-
-    if (snapshot.docs.isEmpty) return;
-
-    final batch = _firestore.batch();
-    for (final doc in snapshot.docs) {
-      batch.update(doc.reference, {'replyto': replyData});
-    }
-    await batch.commit();
-  }
-
-  Future<void> _updateConversationPreviewIfLatest({
-    required String docId,
-    required String receiverId,
-    required String lastMessage,
-  }) async {
-    final latestSnapshot = await _firestore
-        .collection('adminchat')
-        .where('senderid', whereIn: [senderId.toString(), receiverId])
-        .where('receiverid', whereIn: [senderId.toString(), receiverId])
-        .orderBy('timestamp', descending: true)
-        .limit(1)
-        .get();
-
-    if (latestSnapshot.docs.isEmpty || latestSnapshot.docs.first.id != docId) {
-      return;
-    }
-
-    await _firestore
-        .collection('conversations')
-        .doc(getConversationId(senderId.toString(), receiverId))
-        .set({
-      'lastMessage': lastMessage,
-      'lastTimestamp': FieldValue.serverTimestamp(),
-      'lastSenderId': senderId.toString(),
-    }, SetOptions(merge: true));
+    // Update reply previews locally in _messages (no Firestore needed).
+    setState(() {
+      for (int i = 0; i < _messages.length; i++) {
+        final replyto = _messages[i]['replyto'];
+        if (replyto is Map && replyto['docId'] == sourceDocId) {
+          _messages[i] = {
+            ..._messages[i],
+            'replyto': replyData,
+          };
+        }
+      }
+    });
   }
 
   Future<void> _applyMessageMutation({
@@ -432,37 +661,48 @@ class _ChatWindowState extends State<ChatWindow> {
     final receiverId = chatProvider.id?.toString();
     if (receiverId == null) return;
 
-    final docRef = _firestore.collection('adminchat').doc(docId);
-    await docRef.update(updates);
-    final latestSnapshot = await docRef.get();
-    if (!latestSnapshot.exists) return;
+    final String roomId = AdminSocketService.chatRoomId(receiverId);
 
-    final latestData = {
-      ...latestSnapshot.data() ?? <String, dynamic>{},
-      ...updates,
-    };
+    // Determine mutation type and emit the appropriate Socket.IO event.
+    if (updates['unsent'] == true) {
+      _socketService.unsendMessage(chatRoomId: roomId, messageId: docId);
+    } else if (updates['deleted'] == true) {
+      _socketService.deleteMessage(chatRoomId: roomId, messageId: docId);
+    } else if (updates.containsKey('message') && updates['edited'] == true) {
+      _socketService.editMessage(
+        chatRoomId: roomId,
+        messageId: docId,
+        newMessage: updates['message'] as String,
+      );
+    }
 
-    final replyData = {
-      'docId': docId,
-      'message': _messagePreviewText(latestData),
-      'senderid': latestData['senderid']?.toString() ?? senderId.toString(),
-      'senderName': latestData['senderid']?.toString() == senderId.toString()
-          ? 'You'
-          : (chatProvider.namee ?? 'User'),
-      'type': latestData['type']?.toString() ?? 'text',
-      'edited': latestData['edited'] == true,
-      'deleted': latestData['deleted'] == true,
-      'unsent': latestData['unsent'] == true,
-    };
+    // Optimistically update the local list immediately.
+    setState(() {
+      final idx = _messages.indexWhere((m) => m['messageId'] == docId);
+      if (idx >= 0) {
+        _messages[idx] = {..._messages[idx], ...updates};
+        _syncFilteredMessages();
+      }
+    });
 
-    await Future.wait([
-      _syncReplySnapshots(docId, replyData),
-      _updateConversationPreviewIfLatest(
-        docId: docId,
-        receiverId: receiverId,
-        lastMessage: replyData['message'] as String,
-      ),
-    ]);
+    // Update reply-preview snapshots locally.
+    final idx = _messages.indexWhere((m) => m['messageId'] == docId);
+    if (idx >= 0) {
+      final latestData = _messages[idx];
+      final replyData = {
+        'docId': docId,
+        'message': _messagePreviewText(latestData),
+        'senderid': latestData['senderid']?.toString() ?? senderId.toString(),
+        'senderName': latestData['senderid']?.toString() == senderId.toString()
+            ? 'You'
+            : (chatProvider.namee ?? 'User'),
+        'type': latestData['type']?.toString() ?? 'text',
+        'edited': latestData['edited'] == true,
+        'deleted': latestData['deleted'] == true,
+        'unsent': latestData['unsent'] == true,
+      };
+      await _syncReplySnapshots(docId, replyData);
+    }
   }
 
   String _formatCallDuration(int seconds) {
@@ -640,13 +880,45 @@ class _ChatWindowState extends State<ChatWindow> {
     setState(() {
       _isLoadingMore = true;
       _suppressNextAutoScroll = true;
-      _currentLimit += _pageSize;
     });
-    // _isLoadingMore is cleared in the StreamBuilder once the new snapshot arrives
-    // (via the _hasMoreMessages/noMore logic). As a safety fallback, clear it after
-    // a short delay so the UI never gets stuck.
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted && _isLoadingMore) setState(() => _isLoadingMore = false);
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    if (chatProvider.id == null) {
+      setState(() => _isLoadingMore = false);
+      return;
+    }
+    final String roomId = AdminSocketService.chatRoomId(chatProvider.id.toString());
+    final double savedOffset =
+        _scrollController.hasClients ? _scrollController.offset : 0;
+    _currentPage++;
+    _socketService
+        .getMessages(roomId, page: _currentPage, limit: _pageSize)
+        .then((result) {
+      if (!mounted) return;
+      final msgs = (result['messages'] as List? ?? [])
+          .map((m) =>
+              _socketMsgToAdminData(Map<String, dynamic>.from(m as Map)))
+          .toList();
+      final hasMore = result['hasMore'] == true;
+      final existingIds = _messages.map((m) => m['messageId']).toSet();
+      final newMsgs =
+          msgs.where((m) => !existingIds.contains(m['messageId'])).toList();
+      setState(() {
+        _messages = [...newMsgs, ..._messages];
+        _hasMoreMessages = hasMore;
+        _isLoadingMore = false;
+        _suppressNextAutoScroll = false;
+      });
+      // Restore scroll position so the user stays at the same message.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients) {
+          _scrollController.jumpTo(savedOffset +
+              _scrollController.position.maxScrollExtent -
+              _scrollController.position.minScrollExtent);
+        }
+      });
+    }).catchError((e) {
+      _currentPage--;
+      if (mounted) setState(() { _isLoadingMore = false; _suppressNextAutoScroll = false; });
     });
   }
 
@@ -672,8 +944,7 @@ class _ChatWindowState extends State<ChatWindow> {
 
   Future<bool> _ensureMessageLoaded(String messageId) async {
     for (int attempt = 0; attempt < _kMaxLoadAttempts; attempt++) {
-      final docs = _lastSnapshot?.docs ?? const <QueryDocumentSnapshot>[];
-      final bool found = docs.any((doc) => doc.id == messageId);
+      final bool found = _messages.any((m) => m['messageId'] == messageId);
       if (found) return true;
       if (!_hasMoreMessages || _isLoadingMore) {
         await Future.delayed(_kLoadRetryDelay);
@@ -682,9 +953,7 @@ class _ChatWindowState extends State<ChatWindow> {
       _loadMoreMessages();
       await Future.delayed(_kLoadMoreDelay);
     }
-
-    final docs = _lastSnapshot?.docs ?? const <QueryDocumentSnapshot>[];
-    return docs.any((doc) => doc.id == messageId);
+    return _messages.any((m) => m['messageId'] == messageId);
   }
 
   Duration _navigationDurationForDistance(double distance) {
@@ -980,13 +1249,10 @@ class _ChatWindowState extends State<ChatWindow> {
     // StreamBuilder keeps its existing subscription and never flashes a loading
     // spinner while switching conversations.
     final bool userChanged = chatProvider.id != _cachedReceiverId;
-    final bool limitChanged = _currentLimit != _cachedLimit;
     if (userChanged) {
       _cachedReceiverId = chatProvider.id;
-      _currentLimit = _pageSize;
       _hasMoreMessages = true;
       _suppressNextAutoScroll = false;
-      _lastSnapshot = null; // clear stale messages from the previous user
       _messageKeys.clear();
       _messageIndexMap.clear();
       _replyHighlightTimer?.cancel();
@@ -1002,18 +1268,10 @@ class _ChatWindowState extends State<ChatWindow> {
       Future.microtask(() {
         if (mounted) FocusScope.of(context).requestFocus(_messageFocusNode);
       });
-    }
-    if (userChanged || limitChanged) {
-      _cachedLimit = _currentLimit;
-      _messagesStream = chatProvider.id == null
-          ? null
-          : _firestore
-              .collection('adminchat')
-              .where('senderid', whereIn: [senderId.toString(), chatProvider.id.toString()])
-              .where('receiverid', whereIn: [senderId.toString(), chatProvider.id.toString()])
-              .orderBy('timestamp', descending: true)
-              .limit(_currentLimit)
-              .snapshots();
+      // Leave previous room and join new one, then reload messages.
+      if (chatProvider.id != null) {
+        Future.microtask(() => _loadMessages(reset: true));
+      }
     }
 
     return Scaffold(
@@ -1253,73 +1511,13 @@ class _ChatWindowState extends State<ChatWindow> {
           Expanded(
             child: Stack(
               children: [
-                StreamBuilder<QuerySnapshot>(
-              stream: _messagesStream,
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.error_outline, color: Colors.red, size: 40),
-                        const SizedBox(height: 12),
-                        const Text(
-                          "Firebase Error",
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.red),
-                        ),
-                        const SizedBox(height: 8),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Text(
-                            snapshot.error.toString(),
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 11, color: c.muted),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: c.primary,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          onPressed: () => _handleIndexError(snapshot.error.toString()),
-                          child: const Text("Create Index", style: TextStyle(fontSize: 12)),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                if (snapshot.connectionState == ConnectionState.waiting && _lastSnapshot == null) {
-                  return Center(child: CircularProgressIndicator(color: c.primary));
-                }
-
-                final rawMessages = snapshot.hasData
-                    ? snapshot.data!.docs
-                    : _lastSnapshot?.docs ?? <QueryDocumentSnapshot>[];
+                Builder(
+              builder: (context) {
                 final isActiveSearch = _isSearching && _searchController.text.isNotEmpty;
-                final messages = isActiveSearch ? _filteredMessages : rawMessages;
-                final previousSnapshot = _lastSnapshot;
-                final previousCount = previousSnapshot?.docs.length ?? 0;
+                final messages = isActiveSearch ? _filteredMessages : _messages;
 
-                if (snapshot.hasData) {
-                  _lastSnapshot = snapshot.data;
-                  // If we received fewer docs than requested, there are no older messages.
-                  final bool noMore = snapshot.data!.docs.length < _currentLimit;
-                  if (noMore != !_hasMoreMessages || _isLoadingMore) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) setState(() {
-                        _hasMoreMessages = !noMore;
-                        _isLoadingMore = false;
-                        _suppressNextAutoScroll = false;
-                      });
-                    });
-                  }
-                  // Mark incoming messages as seen by admin.
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) _markIncomingMessagesAsSeen(snapshot.data!.docs);
-                  });
+                if (_isInitialLoad) {
+                  return Center(child: CircularProgressIndicator(color: c.primary));
                 }
 
                 if (messages.isEmpty) {
@@ -1344,7 +1542,7 @@ class _ChatWindowState extends State<ChatWindow> {
                 }
 
                 final itemCount = messages.length;
-                final activeMessageIds = messages.map((doc) => doc.id).toSet();
+                final activeMessageIds = messages.map((m) => m['messageId'] as String).toSet();
                 for (final messageId in _messageKeys.keys.toList()) {
                   if (!activeMessageIds.contains(messageId)) {
                     _messageKeys.remove(messageId);
@@ -1353,36 +1551,15 @@ class _ChatWindowState extends State<ChatWindow> {
                 _messageIndexMap
                   ..clear()
                   ..addEntries(
-                    List.generate(
-                      itemCount,
-                      (index) => MapEntry(messages[index].id, index),
-                    ),
+                    List.generate(itemCount, (i) => MapEntry(messages[i]['messageId'] as String, i)),
                   );
                 final messageGroups = _groupMessagesByDate(messages);
-                // Keep a reference so the floating date overlay can use it.
-                // Direct assignment — no setState needed since the overlay
-                // is driven by _floatingDateNotifier (ValueListenableBuilder).
                 _currentMessageGroups = messageGroups;
-                final shouldAutoScroll = _shouldAutoScrollToBottom(
-                  hasSnapshotData: snapshot.hasData,
-                  isSearching: isActiveSearch,
-                  previousCount: previousCount,
-                  currentCount: itemCount,
-                );
-
-                if (shouldAutoScroll) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) _scrollToBottom();
-                  });
-                }
 
                 return NotificationListener<ScrollUpdateNotification>(
                   onNotification: (notification) {
-                    final offset = _scrollController.hasClients
-                        ? _scrollController.offset
-                        : 0.0;
-                    final label = _dateGroupAtScrollOffset(
-                        offset, _currentMessageGroups);
+                    final offset = _scrollController.hasClients ? _scrollController.offset : 0.0;
+                    final label = _dateGroupAtScrollOffset(offset, _currentMessageGroups);
                     if (label != null) _showFloatingDateLabel(label);
                     return false;
                   },
@@ -1430,12 +1607,12 @@ class _ChatWindowState extends State<ChatWindow> {
                         sliver: SliverList(
                           delegate: SliverChildBuilderDelegate(
                             (context, index) {
-                              final doc = group.messages[index];
-                              final data = doc.data() as Map<String, dynamic>;
+                              final data = group.messages[index];
+                              final String msgId = data['messageId'] as String;
                               final isSentByMe = data['senderid'] == senderId.toString();
                               final timestamp = _messageTimestampFromData(data);
                               final replyPayload = _buildReplyPayload(
-                                docId: doc.id,
+                                docId: msgId,
                                 data: data,
                                 senderId: isSentByMe
                                     ? senderId.toString()
@@ -1447,11 +1624,11 @@ class _ChatWindowState extends State<ChatWindow> {
                               final canMutate = _canMutateMessage(data, isSentByMe);
 
                               return GestureDetector(
-                                key: ValueKey(doc.id),
+                                key: ValueKey(msgId),
                                 onLongPress: () {
                                   _showMessageOptions(
                                     context,
-                                    doc.id,
+                                    msgId,
                                     replyPayload,
                                     isSentByMe,
                                     canEdit: canEdit,
@@ -1459,8 +1636,8 @@ class _ChatWindowState extends State<ChatWindow> {
                                   );
                                 },
                                 child: _HighlightableMessageContainer(
-                                  key: _messageKeyFor(doc.id),
-                                  isHighlighted: _highlightedMessageId == doc.id,
+                                  key: _messageKeyFor(msgId),
+                                  isHighlighted: _highlightedMessageId == msgId,
                                   child: _buildChatBubble(
                                     data['message'],
                                     isSentByMe,
@@ -1474,7 +1651,7 @@ class _ChatWindowState extends State<ChatWindow> {
                                     data['callType']?.toString(),
                                     data['callStatus']?.toString(),
                                     (data['callDuration'] as num?)?.toInt() ?? 0,
-                                    doc.id,
+                                    msgId,
                                     data['replyto'] is Map<String, dynamic>
                                         ? data['replyto'] as Map<String, dynamic>
                                         : null,

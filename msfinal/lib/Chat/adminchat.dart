@@ -885,6 +885,8 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       'messageType': type,
       'senderName': senderName,
       if (type == 'image')
+        // For image messages the socket server stores the URL in 'message';
+        // 'imageUrl' is the redundant alias written by admin chathome.dart.
         'imageUrl': data['message']?.toString() ?? data['imageUrl']?.toString(),
     };
   }
@@ -1636,9 +1638,10 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     }
 
     // Prefer the full cached message for type detection; fall back to inline.
-    final String msgType = replyData != null
-        ? (replyData['messageType'] ?? replyData['type'] ?? 'text')
-        : (inlinePayload!['messageType'] ?? inlinePayload['type'] ?? 'text');
+    final Map<String, dynamic> source = replyData ?? inlinePayload!;
+
+    final String msgType =
+        source['messageType']?.toString() ?? source['type']?.toString() ?? 'text';
 
     final String senderName;
     if (replyData != null) {
@@ -1658,13 +1661,15 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         ? _messagePreviewText(replyData)
         : (inlinePayload!['message']?.toString() ?? '📷 Photo');
 
-    // Image URL for thumbnail (only for image type)
-    final String? imageUrl = msgType == 'image'
-        ? (replyData != null
-            ? (replyData['message']?.toString() ??
-                replyData['imageUrl']?.toString())
-            : inlinePayload!['imageUrl']?.toString())
-        : null;
+    // Image URL for the thumbnail, present only for image-type replies.
+    // Cached message stores the URL under 'message'; inline payload stores it
+    // under 'imageUrl' (set by _buildReplyPayload).
+    String? imageUrl;
+    if (msgType == 'image') {
+      imageUrl = replyData != null
+          ? (replyData['message']?.toString() ?? replyData['imageUrl']?.toString())
+          : inlinePayload!['imageUrl']?.toString();
+    }
     final bool hasImage = imageUrl != null && imageUrl.isNotEmpty;
 
     return Container(

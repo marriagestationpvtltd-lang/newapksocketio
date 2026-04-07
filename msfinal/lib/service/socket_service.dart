@@ -480,8 +480,13 @@ class SocketService {
     required String type,
     required MediaType mimeType,
   }) async {
-    final request = http.MultipartRequest(
-        'POST', Uri.parse('$kSocketServerUrl/upload?type=$type'))
+    // Validate type against allowlist to prevent URL injection
+    final safeType = (type == 'voice') ? 'voice' : 'image';
+    final uri = Uri.parse(kSocketServerUrl).replace(
+      path: '/upload',
+      queryParameters: {'type': safeType},
+    );
+    final request = http.MultipartRequest('POST', uri)
       ..files.add(await http.MultipartFile.fromPath(
         'file',
         file.path,

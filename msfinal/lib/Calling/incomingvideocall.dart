@@ -276,6 +276,9 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
             print('✅ Joined channel successfully');
             setState(() => _joined = true);
             unawaited(_startForegroundService());
+            // setEnableSpeakerphone must be called after joining the channel (Agora SDK v4.x)
+            unawaited(_engine.setEnableSpeakerphone(_speakerOn)
+                .catchError((e) => debugPrint('setEnableSpeakerphone error: $e')));
 
             // Notify caller AFTER successfully joining Agora channel
             // This prevents race condition where caller receives accept before recipient joins
@@ -361,7 +364,6 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
       );
 
       await _engine.enableAudio();
-      await _engine.setEnableSpeakerphone(_speakerOn);
       if (_isVideoCall) {
         print('📹 Enabling video...');
         await _engine.enableVideo();

@@ -428,20 +428,22 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
       if (!connected) throw Exception('Socket not connected');
 
       final profileData = {
-        'id':           profileId,
-        'name':         '$firstName $lastName',
-        'profileImage': profilePicture ?? 'https://via.placeholder.com/150',
-        'bio':          '$matched% Matched',
-        'Member ID':    memberid,
-        'occupation':   occupation,
-        'marit':        marit,
-        'education':    education,
-        'gender':       gender,
-        'age':          age,
-        'last':         lastName,
-        'first':        firstName,
-        'is_paid':      chatProvider.ispaid,
-        'country':      country,
+        'id':              profileId,
+        'name':            '$firstName $lastName',
+        'profileImage':    profilePicture ?? 'https://via.placeholder.com/150',
+        'bio':             '$matched% Matched',
+        'Member ID':       memberid,
+        'occupation':      occupation,
+        'marit':           marit,
+        'education':       education,
+        'gender':          gender,
+        'age':             age,
+        'last':            lastName,
+        'first':           firstName,
+        'is_paid':         chatProvider.ispaid,
+        'country':         country,
+        // Admin-shared profiles should always be visible without lock/blur
+        'shouldBlurPhoto': false,
       };
 
       _socketService.sendMessage(

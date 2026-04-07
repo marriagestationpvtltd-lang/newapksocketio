@@ -239,7 +239,10 @@ class _ChatWindowState extends State<ChatWindow> {
       try {
         profileData = jsonDecode(rawMessage) as Map<String, dynamic>;
         displayMessage = 'Match Profile';
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Failed to parse profile_card JSON: $e');
+        displayMessage = 'Match Profile';
+      }
     } else if (msgType == 'call') {
       try {
         final decoded = jsonDecode(rawMessage) as Map<String, dynamic>;
@@ -247,7 +250,10 @@ class _ChatWindowState extends State<ChatWindow> {
         callStatus = decoded['callStatus']?.toString();
         callDuration = (decoded['callDuration'] as num?)?.toInt() ?? 0;
         displayMessage = decoded['label']?.toString() ?? rawMessage;
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Failed to parse call JSON: $e');
+        displayMessage = 'Call';
+      }
     }
 
     // Treat a message as deleted if it is deleted for both or either side
@@ -623,7 +629,28 @@ class _ChatWindowState extends State<ChatWindow> {
       );
       if (!mounted) return;
       final msgs = (result['messages'] as List? ?? [])
-          .map((m) => _socketMsgToAdminData(Map<String, dynamic>.from(m as Map)))
+          .map((m) {
+            try {
+              return _socketMsgToAdminData(Map<String, dynamic>.from(m as Map));
+            } catch (e) {
+              debugPrint('Failed to convert message: $e');
+              // Return a safe fallback message
+              return <String, dynamic>{
+                'messageId': m['messageId']?.toString() ?? 'unknown',
+                'senderid': m['senderId']?.toString() ?? '',
+                'receiverid': m['receiverId']?.toString() ?? '',
+                'message': 'Error loading message',
+                'type': 'text',
+                'liked': false,
+                'seen': false,
+                'deleted': false,
+                'unsent': false,
+                'edited': false,
+                'replyto': null,
+                'timestamp': m['timestamp']?.toString() ?? DateTime.now().toIso8601String(),
+              };
+            }
+          })
           .toList();
       final hasMore = result['hasMore'] == true;
 

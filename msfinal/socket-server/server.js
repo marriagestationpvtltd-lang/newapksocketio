@@ -368,7 +368,32 @@ async function getMessages({ chatRoomId, page = 1, limit = 20 }) {
     [chatRoomId, limit + 1, offset],
   );
   const hasMore = rows.length > limit;
-  const messages = rows.slice(0, limit).reverse().map(toMessageMap);
+  const messages = rows.slice(0, limit).reverse().map(row => {
+    try {
+      return toMessageMap(row);
+    } catch (err) {
+      console.error(`Failed to transform message ${row.message_id}:`, err.message);
+      // Return a safe fallback message object
+      return {
+        messageId: row.message_id || 'unknown',
+        chatRoomId: row.chat_room_id || chatRoomId,
+        senderId: row.sender_id || '',
+        receiverId: row.receiver_id || '',
+        message: 'Error loading message',
+        messageType: 'text',
+        isRead: false,
+        isDelivered: false,
+        isDeletedForSender: false,
+        isDeletedForReceiver: false,
+        isEdited: false,
+        isUnsent: false,
+        editedAt: null,
+        repliedTo: null,
+        timestamp: row.created_at ? row.created_at.toISOString() : new Date().toISOString(),
+        liked: false,
+      };
+    }
+  });
   return { messages, hasMore, page };
 }
 
@@ -448,6 +473,16 @@ async function upsertOnlineStatus(userId, isOnline, activeChatRoomId = null) {
 
 // Convert a DB row to the format Flutter expects (mirrors Firestore document shape)
 function toMessageMap(row) {
+  let repliedTo = null;
+  if (row.replied_to) {
+    try {
+      repliedTo = JSON.parse(row.replied_to);
+    } catch (err) {
+      console.error(`Failed to parse replied_to JSON for message ${row.message_id}:`, err.message);
+      // Leave repliedTo as null if parsing fails
+    }
+  }
+
   return {
     messageId:             row.message_id,
     chatRoomId:            row.chat_room_id,
@@ -462,7 +497,7 @@ function toMessageMap(row) {
     isEdited:              row.is_edited === 1,
     isUnsent:              row.is_unsent === 1,
     editedAt:              row.edited_at ? row.edited_at.toISOString() : null,
-    repliedTo:             row.replied_to ? JSON.parse(row.replied_to) : null,
+    repliedTo:             repliedTo,
     timestamp:             row.created_at ? row.created_at.toISOString() : null,
     liked:                 row.liked === 1,
   };

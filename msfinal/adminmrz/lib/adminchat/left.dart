@@ -381,10 +381,13 @@ class _ChatSidebarState extends State<ChatSidebar> {
       unreadCounts[otherUserId] = (room['unreadCount'] as num?)?.toInt() ?? 0;
       _prevLastTimestamps[otherUserId] = lastTime;
 
-      final user = _users.cast<Map<String, dynamic>?>().firstWhere(
-            (u) => u?['id']?.toString() == otherUserId,
-            orElse: () => null,
-          );
+      Map<String, dynamic>? user;
+      for (final candidate in _users) {
+        if (candidate['id']?.toString() == otherUserId) {
+          user = Map<String, dynamic>.from(candidate as Map);
+          break;
+        }
+      }
       if (user != null && addedIds.add(otherUserId)) {
         sortedUsers.add(user);
       }

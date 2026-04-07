@@ -3623,13 +3623,14 @@ class _ChatWindowState extends State<ChatWindow> {
   }
 
   void _searchMessages(String query) {
+    final normalizedQuery = query.toLowerCase();
     setState(() {
       if (query.isEmpty) {
         _filteredMessages.clear();
       } else {
         _filteredMessages = _messages.where((message) {
           final text = message['message']?.toString().toLowerCase() ?? '';
-          return text.contains(query.toLowerCase());
+          return text.contains(normalizedQuery);
         }).toList();
       }
     });

@@ -107,8 +107,8 @@ class _ChatWindowState extends State<ChatWindow> {
   bool _userIsTyping = false;
 
   // Inline reply / edit state
-  Map<String, dynamic>? _replyingTo; // {docId, message, senderid, senderName}
-  String? _editingDocId;
+  Map<String, dynamic>? _replyingTo; // {messageId, message, senderid, senderName}
+  String? _editingMessageId;
   String _editingOriginalText = ''; // original message text before user edits it
 
   static const int _kMaxQuoteLength = 80; // max chars shown in reply/edit preview
@@ -214,6 +214,18 @@ class _ChatWindowState extends State<ChatWindow> {
     final bool deleted = msg['isDeletedForSender'] == true ||
         msg['isDeletedForReceiver'] == true;
 
+    final Map<String, dynamic>? repliedTo =
+        msg['repliedTo'] is Map<String, dynamic>
+            ? Map<String, dynamic>.from(msg['repliedTo'] as Map<String, dynamic>)
+            : null;
+    if (repliedTo != null &&
+        (repliedTo['messageId'] == null || repliedTo['messageId'].toString().isEmpty)) {
+      final legacyId = repliedTo['docId']?.toString();
+      if (legacyId != null && legacyId.isNotEmpty) {
+        repliedTo['messageId'] = legacyId;
+      }
+    }
+
     return {
       'messageId': msg['messageId']?.toString() ?? '',
       'senderid': msg['senderId']?.toString() ?? '',
@@ -225,7 +237,7 @@ class _ChatWindowState extends State<ChatWindow> {
       'deleted': deleted,
       'unsent': msg['isUnsent'] == true,
       'edited': msg['isEdited'] == true,
-      'replyto': msg['repliedTo'],
+      'replyto': repliedTo,
       'timestamp': msg['timestamp']?.toString(),
       if (imageUrl != null) 'imageUrl': imageUrl,
       if (callType != null) 'callType': callType,
@@ -233,6 +245,12 @@ class _ChatWindowState extends State<ChatWindow> {
       'callDuration': callDuration,
       if (profileData != null) 'profileData': profileData,
     };
+  }
+
+  String _replyTargetMessageId(Map<String, dynamic>? replyTo) {
+    return replyTo?['messageId']?.toString() ??
+        replyTo?['docId']?.toString() ??
+        '';
   }
 
   /// Set up persistent Socket.IO event listeners.
@@ -585,13 +603,13 @@ class _ChatWindowState extends State<ChatWindow> {
   }
 
   Map<String, dynamic> _buildReplyPayload({
-    required String docId,
+    required String messageId,
     required Map<String, dynamic> data,
     required String senderId,
     required String senderName,
   }) {
     return {
-      'docId': docId,
+      'messageId': messageId,
       'message': _messagePreviewText(data),
       'senderid': senderId,
       'senderName': senderName,
@@ -603,13 +621,13 @@ class _ChatWindowState extends State<ChatWindow> {
   }
 
   Map<String, dynamic> _buildFallbackReplyPayload({
-    required String docId,
+    required String messageId,
     required String message,
     required String senderId,
     required String senderName,
   }) {
     return _buildReplyPayload(
-      docId: docId,
+      messageId: messageId,
       data: {
         'message': message,
         'type': 'text',
@@ -634,14 +652,16 @@ class _ChatWindowState extends State<ChatWindow> {
   }
 
   Future<void> _syncReplySnapshots(
-    String sourceDocId,
+    String sourceMessageId,
     Map<String, dynamic> replyData,
   ) async {
     // Update reply previews locally in the in-memory message list.
     setState(() {
       for (int i = 0; i < _messages.length; i++) {
         final replyto = _messages[i]['replyto'];
-        if (replyto is Map && replyto['docId'] == sourceDocId) {
+        if (replyto is Map &&
+            _replyTargetMessageId(Map<String, dynamic>.from(replyto)) ==
+                sourceMessageId) {
           _messages[i] = {
             ..._messages[i],
             'replyto': replyData,
@@ -652,7 +672,7 @@ class _ChatWindowState extends State<ChatWindow> {
   }
 
   Future<void> _applyMessageMutation({
-    required String docId,
+    required String messageId,
     required Map<String, dynamic> updates,
   }) async {
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
@@ -663,20 +683,20 @@ class _ChatWindowState extends State<ChatWindow> {
 
     // Determine mutation type and emit the appropriate Socket.IO event.
     if (updates['unsent'] == true) {
-      _socketService.unsendMessage(chatRoomId: roomId, messageId: docId);
+      _socketService.unsendMessage(chatRoomId: roomId, messageId: messageId);
     } else if (updates['deleted'] == true) {
-      _socketService.deleteMessage(chatRoomId: roomId, messageId: docId);
+      _socketService.deleteMessage(chatRoomId: roomId, messageId: messageId);
     } else if (updates.containsKey('message') && updates['edited'] == true) {
       _socketService.editMessage(
         chatRoomId: roomId,
-        messageId: docId,
+        messageId: messageId,
         newMessage: updates['message'] as String,
       );
     }
 
     // Optimistically update the local list immediately.
     setState(() {
-      final idx = _messages.indexWhere((m) => m['messageId'] == docId);
+      final idx = _messages.indexWhere((m) => m['messageId'] == messageId);
       if (idx >= 0) {
         _messages[idx] = {..._messages[idx], ...updates};
         _syncFilteredMessages();
@@ -684,11 +704,11 @@ class _ChatWindowState extends State<ChatWindow> {
     });
 
     // Update reply-preview snapshots locally.
-    final idx = _messages.indexWhere((m) => m['messageId'] == docId);
+    final idx = _messages.indexWhere((m) => m['messageId'] == messageId);
     if (idx >= 0) {
       final latestData = _messages[idx];
       final replyData = {
-        'docId': docId,
+        'messageId': messageId,
         'message': _messagePreviewText(latestData),
         'senderid': latestData['senderid']?.toString() ?? senderId.toString(),
         'senderName': latestData['senderid']?.toString() == senderId.toString()
@@ -699,7 +719,7 @@ class _ChatWindowState extends State<ChatWindow> {
         'deleted': latestData['deleted'] == true,
         'unsent': latestData['unsent'] == true,
       };
-      await _syncReplySnapshots(docId, replyData);
+      await _syncReplySnapshots(messageId, replyData);
     }
   }
 
@@ -1012,7 +1032,7 @@ class _ChatWindowState extends State<ChatWindow> {
   }
 
   Future<void> _handleReplyPreviewTap(Map<String, dynamic>? replyTo) async {
-    final String messageId = replyTo?['docId']?.toString() ?? '';
+    final String messageId = _replyTargetMessageId(replyTo);
     if (messageId.isEmpty) return;
     await _scrollToMessage(messageId);
   }
@@ -1597,7 +1617,7 @@ class _ChatWindowState extends State<ChatWindow> {
                               final isSentByMe = data['senderid'] == senderId.toString();
                               final timestamp = _messageTimestampFromData(data);
                               final replyPayload = _buildReplyPayload(
-                                docId: msgId,
+                                messageId: msgId,
                                 data: data,
                                 senderId: isSentByMe
                                     ? senderId.toString()
@@ -2058,7 +2078,7 @@ class _ChatWindowState extends State<ChatWindow> {
       String? callType,
       String? callStatus,
       int callDuration = 0,
-      String? docId,
+      String? messageId,
       Map<String, dynamic>? replyTo,
       bool edited = false,
       bool deleted = false,
@@ -2149,7 +2169,7 @@ class _ChatWindowState extends State<ChatWindow> {
         isSentByMe: isSentByMe,
         canEdit: false,
         canMutate: canMutate,
-        docId: docId,
+        messageId: messageId,
         replyPayload: replyPayload,
       );
     }
@@ -2221,7 +2241,7 @@ class _ChatWindowState extends State<ChatWindow> {
         isSentByMe: isSentByMe,
         canEdit: false,
         canMutate: canMutate,
-        docId: docId,
+        messageId: messageId,
         replyPayload: replyPayload,
       );
     }
@@ -2572,7 +2592,7 @@ class _ChatWindowState extends State<ChatWindow> {
         isSentByMe: isSentByMe,
         canEdit: false,
         canMutate: canMutate,
-        docId: docId,
+        messageId: messageId,
         replyPayload: replyPayload,
       );
     }
@@ -2632,7 +2652,7 @@ class _ChatWindowState extends State<ChatWindow> {
       isSentByMe: isSentByMe,
       canEdit: canEdit,
       canMutate: canMutate,
-      docId: docId,
+      messageId: messageId,
       replyPayload: replyPayload,
     );
   }
@@ -2642,10 +2662,10 @@ class _ChatWindowState extends State<ChatWindow> {
     required bool isSentByMe,
     required bool canEdit,
     required bool canMutate,
-    required String? docId,
+    required String? messageId,
     required Map<String, dynamic>? replyPayload,
   }) {
-    if (docId == null || replyPayload == null) return bubble;
+    if (messageId == null || replyPayload == null) return bubble;
 
     return _HoverableMessageBubble(
       bubble: bubble,
@@ -2654,15 +2674,16 @@ class _ChatWindowState extends State<ChatWindow> {
       canDelete: canMutate,
       canUnsend: canMutate,
       onReply: () => _startReply(
-        docId,
+        messageId,
         replyPayload['message']?.toString() ?? '',
         replyPayload['senderid']?.toString() ?? '',
         replyPayload['senderName']?.toString() ?? 'User',
         replyPayload,
       ),
-      onEdit: canEdit ? () => _startEdit(docId, replyPayload['message']?.toString() ?? '') : null,
-      onDelete: canMutate ? () => _deleteMessage(docId) : null,
-      onUnsend: canMutate ? () => _unsendMessage(docId) : null,
+      onEdit:
+          canEdit ? () => _startEdit(messageId, replyPayload['message']?.toString() ?? '') : null,
+      onDelete: canMutate ? () => _deleteMessage(messageId) : null,
+      onUnsend: canMutate ? () => _unsendMessage(messageId) : null,
     );
   }
 
@@ -2676,7 +2697,7 @@ class _ChatWindowState extends State<ChatWindow> {
 
     final String quotedMsg = replyTo['message'] as String;
     final String quotedSender = replyTo['senderName'] as String? ?? 'User';
-    final bool canNavigate = (replyTo['docId']?.toString() ?? '').isNotEmpty;
+    final bool canNavigate = _replyTargetMessageId(replyTo).isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 4, left: 6, right: 6),
@@ -2896,7 +2917,7 @@ class _ChatWindowState extends State<ChatWindow> {
   /// Inline reply/edit banner shown above the message input.
   Widget _buildActionBanner(ChatColors colors) {
     const kPrimary = Color(0xFFD81B60);
-    final bool isEditing = _editingDocId != null;
+    final bool isEditing = _editingMessageId != null;
     final bool replyingToEdited = _replyingTo?['edited'] == true &&
         _replyingTo?['deleted'] != true &&
         _replyingTo?['unsent'] != true;
@@ -2985,7 +3006,7 @@ class _ChatWindowState extends State<ChatWindow> {
       child: Column(
         children: [
           // ── Inline reply / edit banner ──────────────────────────────────
-          if (_replyingTo != null || _editingDocId != null)
+          if (_replyingTo != null || _editingMessageId != null)
             _buildActionBanner(colors),
           if (_selectedImage != null || _selectedImageBytes != null)
             Padding(
@@ -3344,19 +3365,19 @@ class _ChatWindowState extends State<ChatWindow> {
     final String messageText = _messageController.text.trim();
 
     // --- Inline Edit Mode ---
-    if (_editingDocId != null) {
-      final docId = _editingDocId!;
+    if (_editingMessageId != null) {
+      final messageId = _editingMessageId!;
       _messageController.clear();
       _textBeforeVoice = '';
       setState(() {
-        _editingDocId = null;
+        _editingMessageId = null;
         _editingOriginalText = '';
       });
       FocusScope.of(context).requestFocus(_messageFocusNode);
       _clearAdminTypingStatus();
       try {
         await _applyMessageMutation(
-          docId: docId,
+          messageId: messageId,
           updates: {
             'message': messageText,
             'edited': true,
@@ -3424,7 +3445,7 @@ class _ChatWindowState extends State<ChatWindow> {
 
   void _showMessageOptions(
     BuildContext context,
-    String docId,
+    String messageId,
     Map<String, dynamic> replyPayload,
     bool isSentByMe, {
     required bool canEdit,
@@ -3444,7 +3465,7 @@ class _ChatWindowState extends State<ChatWindow> {
               onTap: () {
                 Navigator.pop(context);
                 _startReply(
-                  docId,
+                  messageId,
                   replyPayload['message']?.toString() ?? '',
                   replyPayload['senderid']?.toString() ?? '',
                   replyPayload['senderName']?.toString() ?? 'User',
@@ -3458,7 +3479,7 @@ class _ChatWindowState extends State<ChatWindow> {
                 title: const Text("Edit", style: TextStyle(fontSize: 14)),
                 onTap: () {
                   Navigator.pop(context);
-                  _startEdit(docId, replyPayload['message']?.toString() ?? '');
+                  _startEdit(messageId, replyPayload['message']?.toString() ?? '');
                 },
               ),
             ],
@@ -3468,14 +3489,14 @@ class _ChatWindowState extends State<ChatWindow> {
                 title: const Text("Delete", style: TextStyle(fontSize: 14)),
                 onTap: () {
                   Navigator.pop(context);
-                  _deleteMessage(docId);
+                  _deleteMessage(messageId);
                 },
               ),
               ListTile(
                 leading: const Icon(Icons.remove_circle_outline_rounded, size: 20, color: Color(0xFFF59E0B)),
                 title: const Text("Unsend", style: TextStyle(fontSize: 14)),
                 onTap: () {
-                  _unsendMessage(docId);
+                  _unsendMessage(messageId);
                   Navigator.pop(context);
                 },
               ),
@@ -3486,17 +3507,22 @@ class _ChatWindowState extends State<ChatWindow> {
     );
   }
 
-  void _editMessage(String docId, String currentMessage) {
-    _startEdit(docId, currentMessage);
+  void _editMessage(String messageId, String currentMessage) {
+    _startEdit(messageId, currentMessage);
   }
 
-  void _replyToMessage(String originalMessage, String docId, String senderid, String senderName) {
-    _startReply(docId, originalMessage, senderid, senderName);
+  void _replyToMessage(
+    String originalMessage,
+    String messageId,
+    String senderid,
+    String senderName,
+  ) {
+    _startReply(messageId, originalMessage, senderid, senderName);
   }
 
-  void _deleteMessage(String docId) {
+  void _deleteMessage(String messageId) {
     _applyMessageMutation(
-      docId: docId,
+      messageId: messageId,
       updates: {
         'message': _kDeletedMessageText,
         'deleted': true,
@@ -3512,9 +3538,9 @@ class _ChatWindowState extends State<ChatWindow> {
     });
   }
 
-  void _unsendMessage(String docId) {
+  void _unsendMessage(String messageId) {
     _applyMessageMutation(
-      docId: docId,
+      messageId: messageId,
       updates: {
         'message': _kUnsentMessageText,
         'unsent': true,
@@ -3533,7 +3559,7 @@ class _ChatWindowState extends State<ChatWindow> {
   // ── INLINE REPLY / EDIT ─────────────────────────────────────────────────
 
   void _startReply(
-    String docId,
+    String messageId,
     String message,
     String senderid,
     String senderName, [
@@ -3542,19 +3568,19 @@ class _ChatWindowState extends State<ChatWindow> {
     setState(() {
       _replyingTo = payload ??
           _buildFallbackReplyPayload(
-            docId: docId,
+            messageId: messageId,
             message: message,
             senderId: senderid,
             senderName: senderName,
           );
-      _editingDocId = null;
+      _editingMessageId = null;
     });
     FocusScope.of(context).requestFocus(_messageFocusNode);
   }
 
-  void _startEdit(String docId, String message) {
+  void _startEdit(String messageId, String message) {
     setState(() {
-      _editingDocId = docId;
+      _editingMessageId = messageId;
       _editingOriginalText = message;
       _replyingTo = null;
       _messageController.text = message;
@@ -3567,8 +3593,8 @@ class _ChatWindowState extends State<ChatWindow> {
   void _cancelAction() {
     setState(() {
       _replyingTo = null;
-      if (_editingDocId != null) {
-        _editingDocId = null;
+      if (_editingMessageId != null) {
+        _editingMessageId = null;
         _editingOriginalText = '';
         _messageController.clear();
       }

@@ -147,12 +147,11 @@ class _DashboardPageState extends State<DashboardPage> {
       WebNotificationService.playMessageSound();
     }
 
-    // Always show the browser notification popup (admin is on a different page).
+    // Only show the browser notification when the admin tab is backgrounded.
     WebNotificationService.showMessageNotification(
       senderName: senderName,
       message: displayMessage,
       userId: userId,
-      showInForeground: true,
     );
   }
 

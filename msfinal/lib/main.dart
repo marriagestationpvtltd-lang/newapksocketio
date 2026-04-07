@@ -125,15 +125,10 @@ Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
     return;
   }
 
-  // Standard notifications (Type 3 & 4): Chat messages, requests, etc.
-  // Show notification for all other types when in background
-  // Admin messages are handled silently – no system notification stored.
-  if (type == 'chat_message' || type == 'chat' ||
-      type == 'request' || type == 'request_accepted' ||
-      type == 'request_rejected' || type == 'profile_view') {
-    if (!_isAdminMessage(data)) {
-      await _displayStandardNotification(message);
-    }
+  // Standard notifications (Type 3 & 4): chat, requests, profile views, etc.
+  // Show them only while the app is backgrounded.
+  if (_shouldDisplayStandardNotification(type)) {
+    await _displayStandardNotification(message);
   }
 }
 
@@ -290,9 +285,26 @@ Future<void> _displayStandardNotification(RemoteMessage message) async {
   );
 }
 
+bool _isChatNotificationType(String type) {
+  return type == 'chat' || type == 'chat_message';
+}
+
+bool _isRequestNotificationType(String type) {
+  return type == 'request' ||
+      type == 'request_sent' ||
+      type == 'request_reminder' ||
+      type == 'request_reminder_sent' ||
+      type == 'request_accepted' ||
+      type == 'request_rejected';
+}
+
+bool _shouldDisplayStandardNotification(String type) {
+  return _isChatNotificationType(type) ||
+      _isRequestNotificationType(type) ||
+      type == 'profile_view';
+}
+
 // Returns true when the notification was sent by the admin (senderId == '1').
-// Admin messages should be handled silently – navigate to AdminChatScreen
-// instead of showing a persistent system notification.
 // NOTE: '1' matches AdminChatScreen._adminUserId which is a fixed constant in this app.
 bool _isAdminMessage(Map<String, dynamic> data) {
   const adminUserId = '1'; // Same constant as AdminChatScreen._adminUserId
@@ -772,14 +784,14 @@ void _navigateToCallPage(Map<String, dynamic> data) {
 
 Future<void> setupFirebaseMessaging() async {
   // Set up iOS foreground notification presentation.
-  // For iOS, we enable selective presentation - show alerts for important notifications
-  // like calls, but our onMessage handler controls when to show other notifications
-  // (e.g. suppressing chat messages while user is on that chat screen).
+  // Keep foreground push alerts disabled so chat/request notifications only
+  // surface while the app is backgrounded. Incoming calls still open their UI
+  // directly from onMessage.
   if (defaultTargetPlatform == TargetPlatform.iOS) {
     await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
-      alert: true,  // Enable alerts for important notifications
-      badge: true,  // Update badge count
-      sound: true,  // Play sound for notifications
+      alert: false,
+      badge: true,
+      sound: false,
     );
   }
 
@@ -891,13 +903,7 @@ Future<void> setupFirebaseMessaging() async {
     }
 
     // Type 3: Context-Aware Messages (Chat)
-    if (type == 'chat_message' || type == 'chat') {
-      // Admin messages: navigate directly to AdminChatScreen – no notification banner.
-      if (_isAdminMessage(data)) {
-        debugPrint('🔔 Admin message received in foreground – opening AdminChatScreen');
-        _navigateToAdminChatFromNotification(data);
-        return;
-      }
+    if (_isChatNotificationType(type)) {
       // Suppress chat notifications when the recipient is actively viewing that chat
       if (!shouldShowChatNotification(data)) {
         debugPrint('💬 Chat notification suppressed - user viewing this chat');
@@ -905,7 +911,13 @@ Future<void> setupFirebaseMessaging() async {
       }
     }
 
-    // Type 3 & 4: Show standard notification for chat messages, requests, profile views
+    // Standard foreground notifications are suppressed; they should only
+    // appear while the app is in the background.
+    if (_shouldDisplayStandardNotification(type)) {
+      debugPrint('🔕 Foreground standard notification suppressed: $type');
+      return;
+    }
+
     await _showStandardNotification(message);
   });
 
@@ -944,7 +956,7 @@ Future<void> setupFirebaseMessaging() async {
         await prefs.remove('pending_incoming_call');
       } catch (_) {}
       await CallStateRecoveryManager().handleNotificationTap(data);
-    } else if (data['type'] == 'chat_message' || data['type'] == 'chat') {
+    } else if (_isChatNotificationType(data['type']?.toString() ?? '')) {
       if (_isAdminMessage(data)) {
         _navigateToAdminChatFromNotification(data);
       } else {
@@ -971,7 +983,7 @@ Future<void> setupFirebaseMessaging() async {
         // Navigate based on notification type
         if (data['type'] == 'call' || data['type'] == 'video_call') {
           await CallStateRecoveryManager().handleNotificationTap(data);
-        } else if (data['type'] == 'chat_message' || data['type'] == 'chat') {
+        } else if (_isChatNotificationType(data['type']?.toString() ?? '')) {
           if (_isAdminMessage(data)) {
             _navigateToAdminChatFromNotification(data);
           } else {

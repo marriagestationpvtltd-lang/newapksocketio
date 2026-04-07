@@ -8,7 +8,7 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 /// Example: 'https://socket.yourserver.com:3001'
 const String kAdminSocketUrl = String.fromEnvironment(
   'ADMIN_SOCKET_URL',
-  defaultValue: 'http://localhost:3001',
+  defaultValue: 'http://192.168.18.214:3001',
 );
 
 /// Admin user ID — always '1'.
@@ -50,6 +50,16 @@ class AdminSocketService {
   final _userStatusCtrl =
       StreamController<Map<String, dynamic>>.broadcast();
   final _chatRoomsUpdateCtrl = StreamController<List<dynamic>>.broadcast();
+  final _incomingCallCtrl =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _callAcceptedCtrl =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _callRejectedCtrl =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _callCancelledCtrl =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _callEndedCtrl =
+      StreamController<Map<String, dynamic>>.broadcast();
   final _connectionCtrl = StreamController<bool>.broadcast();
 
   // ── Public streams ────────────────────────────────────────────────────────
@@ -70,6 +80,12 @@ class AdminSocketService {
   Stream<Map<String, dynamic>> get onUserStatusChange =>
       _userStatusCtrl.stream;
   Stream<List<dynamic>> get onChatRoomsUpdate => _chatRoomsUpdateCtrl.stream;
+  Stream<Map<String, dynamic>> get onIncomingCall => _incomingCallCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallAccepted => _callAcceptedCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallRejected => _callRejectedCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallCancelled =>
+      _callCancelledCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallEnded => _callEndedCtrl.stream;
   Stream<bool> get onConnectionChange => _connectionCtrl.stream;
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -102,6 +118,11 @@ class AdminSocketService {
 
     _socket!.onDisconnect((_) {
       _connectionCtrl.add(false);
+    });
+
+    _socket!.onConnectError((err) {
+      _connectionCtrl.add(false);
+      print('❌ Admin socket connect error: $err');
     });
 
     _socket!.on('new_message', (data) {
@@ -149,6 +170,26 @@ class AdminSocketService {
       final map = _toMap(data);
       final rooms = map['chatRooms'];
       if (rooms is List) _chatRoomsUpdateCtrl.add(rooms);
+    });
+
+    _socket!.on('incoming_call', (data) {
+      _incomingCallCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_accepted', (data) {
+      _callAcceptedCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_rejected', (data) {
+      _callRejectedCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_cancelled', (data) {
+      _callCancelledCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_ended', (data) {
+      _callEndedCtrl.add(_toMap(data));
     });
 
     _socket!.connect();
@@ -350,6 +391,64 @@ class AdminSocketService {
     );
 
     return completer.future;
+  }
+
+  void emitCallInvite({
+    required String recipientId,
+    required String callerId,
+    required String callerName,
+    required String callerImage,
+    required String channelName,
+    required String callerUid,
+    required String callType,
+    String? chatRoomId,
+  }) {
+    _socket?.emit('call_invite', {
+      'recipientId': recipientId,
+      'callerId': callerId,
+      'callerName': callerName,
+      'callerImage': callerImage,
+      'channelName': channelName,
+      'callerUid': callerUid,
+      'callType': callType,
+      if (chatRoomId != null) 'chatRoomId': chatRoomId,
+      'type': callType == 'video' ? 'video_call' : 'call',
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
+  void emitCallCancel({
+    required String recipientId,
+    required String callerId,
+    required String callerName,
+    required String channelName,
+    required String callType,
+  }) {
+    _socket?.emit('call_cancel', {
+      'recipientId': recipientId,
+      'callerId': callerId,
+      'callerName': callerName,
+      'channelName': channelName,
+      'callType': callType,
+      'type': callType == 'video' ? 'video_call_cancelled' : 'call_cancelled',
+    });
+  }
+
+  void emitCallEnd({
+    required String callerId,
+    required String recipientId,
+    required String channelName,
+    required String callType,
+    int duration = 0,
+  }) {
+    _socket?.emit('call_end', {
+      'callerId': callerId,
+      'recipientId': recipientId,
+      'channelName': channelName,
+      'callType': callType,
+      'duration': duration,
+      'type': callType == 'video' ? 'video_call_ended' : 'call_ended',
+    });
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

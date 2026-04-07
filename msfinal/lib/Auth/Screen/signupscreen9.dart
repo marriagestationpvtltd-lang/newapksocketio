@@ -1,0 +1,1753 @@
+// Professional Redesigned Partner Preferences Page - Step 10
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:ms2026/Auth/Screen/signupscreen10.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../constant/app_colors.dart';
+import '../../ReUsable/registration_progress.dart';
+import '../../ReUsable/enhanced_form_fields.dart';
+import '../../ReUsable/dropdownwidget.dart';
+import '../../service/location_service.dart';
+import '../../service/partner_age_preferences.dart';
+import '../../service/partner_pref_api.dart';
+import '../../service/updatepage.dart';
+
+class PartnerPreferencesPage extends StatefulWidget {
+  const PartnerPreferencesPage({super.key});
+
+  @override
+  State<PartnerPreferencesPage> createState() => _PartnerPreferencesPageState();
+}
+
+class _PartnerPreferencesPageState extends State<PartnerPreferencesPage> with SingleTickerProviderStateMixin {
+  static const int _defaultMaximumPartnerAge =
+      PartnerAgePreferenceBounds.defaultMaximumAge;
+
+  // Form state
+  String? _minAge;
+  String? _maxAge;
+  String? _minHeight;
+  String? _maxHeight;
+  List<String> _selectedMaritalStatus = [];
+  List<String> _selectedReligion = [];
+  List<String> _selectedCommunity = [];
+  List<String> _selectedMotherTongue = [];
+  List<String> _selectedCountry = [];
+  List<String> _selectedState = [];
+  List<String> _selectedDistrict = [];
+  List<String> _selectedEducation = [];
+  List<String> _selectedOccupation = [];
+  List<String> _countryOptions = ['Any'];
+  List<String> _stateOptions = ['Any'];
+  List<String> _districtOptions = ['Any'];
+  final Map<String, int> _countryMap = {'Any': 0};
+  final Map<String, int> _stateMap = {'Any': 0};
+  final Map<String, int> _districtMap = {'Any': 0};
+
+  // Validation
+  bool _hasValidationErrors = false;
+  Map<String, String?> _fieldErrors = {};
+  bool _isSubmitting = false;
+  bool _isLoadingInitialData = false;
+  bool _isLoadingCountries = false;
+  bool _isLoadingStates = false;
+  bool _isLoadingDistricts = false;
+
+  // Animation
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+
+  // Options data
+  int _minimumPartnerAge = PartnerAgePreferenceBounds.minimumAllowedAge;
+  int _maximumPartnerAge = _defaultMaximumPartnerAge;
+  List<String> _ageOptions = List.generate(
+    (_defaultMaximumPartnerAge - PartnerAgePreferenceBounds.minimumAllowedAge) + 1,
+    (index) => (PartnerAgePreferenceBounds.minimumAllowedAge + index).toString(),
+  );
+
+  late final List<String> _heightOptions;
+
+  final List<String> _maritalStatusOptions = [
+    'Any',
+    'Single',
+    'Married',
+    'Divorced',
+    'Widowed',
+    'Annulled',
+  ];
+
+  final List<String> _religionOptions = [
+    'Any',
+    'Hindu',
+    'Buddhist',
+    'Christian',
+    'Islam',
+    'Sikh',
+    'Jain',
+    'Other',
+  ];
+
+  final List<String> _communityOptions = [
+    'Any',
+    'Brahmin',
+    'Chhetri',
+    'Newar',
+    'Tamang',
+    'Magar',
+    'Tharu',
+    'Rai',
+    'Gurung',
+    'Limbu',
+    'Sherpa',
+    'Other',
+  ];
+
+  final List<String> _motherTongueOptions = [
+    'Any',
+    'Nepali',
+    'Maithili',
+    'Bhojpuri',
+    'Tharu',
+    'Tamang',
+    'Newar',
+    'Magar',
+    'Bajjika',
+    'Urdu',
+    'Rai',
+    'Other',
+  ];
+
+  final List<String> _educationOptions = [
+    'Any',
+    'High School',
+    'Undergraduate',
+    'Graduate',
+    'Post Graduate',
+    'Doctorate',
+    'Diploma',
+    'Professional',
+  ];
+
+  final List<String> _occupationOptions = [
+    'Any',
+    'Software Engineer',
+    'Doctor',
+    'Teacher',
+    'Business Owner',
+    'Government Employee',
+    'Private Sector',
+    'Freelancer',
+    'Student',
+    'Other',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Cache large list once to avoid repeated generation during build
+    _heightOptions = List.generate(121, (index) {
+      int cm = 100 + index;
+      double totalInches = cm / 2.54;
+      int feet = totalInches ~/ 12;
+      int inches = (totalInches % 12).round();
+      return "$cm cm ($feet' $inches\")";
+    });
+
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+
+    _fadeAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    );
+
+    _animationController.forward();
+    _loadInitialData();
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  // Validation
+  bool _validateForm() {
+    setState(() {
+      _fieldErrors = {
+        'age': (_minAge == null || _maxAge == null) ? 'Please select age range' : null,
+        'height': (_minHeight == null || _maxHeight == null) ? 'Please select height range' : null,
+        'maritalStatus': _selectedMaritalStatus.isEmpty ? 'Please select at least one option' : null,
+        'religion': _selectedReligion.isEmpty ? 'Please select at least one option' : null,
+      };
+
+      // Validate age range
+      if (_minAge != null && _maxAge != null) {
+        final min = int.parse(_minAge!);
+        final max = int.parse(_maxAge!);
+        if (min > max) {
+          _fieldErrors['age'] = 'Min age cannot be greater than max age';
+        }
+      }
+
+      // Validate height range
+      if (_minHeight != null && _maxHeight != null) {
+        final minCm = int.parse(_minHeight!.split(' ').first);
+        final maxCm = int.parse(_maxHeight!.split(' ').first);
+        if (minCm > maxCm) {
+          _fieldErrors['height'] = 'Min height cannot be greater than max height';
+        }
+      }
+
+      _hasValidationErrors = _fieldErrors.values.any((error) => error != null);
+    });
+
+    return !_hasValidationErrors;
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? AppColors.error : AppColors.success,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  List<String> _normalizeAnySelection(List<String> values) {
+    final cleaned = values
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+
+    if (cleaned.contains('Any')) {
+      return ['Any'];
+    }
+
+    return cleaned.where((item) => item != 'Any').toList();
+  }
+
+  List<String> _parsePreferenceList(dynamic value) {
+    if (value == null) {
+      return [];
+    }
+
+    if (value is List) {
+      return _normalizeAnySelection(value.map((item) => item.toString()).toList());
+    }
+
+    if (value is String) {
+      return _normalizeAnySelection(value.split(','));
+    }
+
+    return [];
+  }
+
+  List<String> _resolveLocationSelection(
+    List<String> values,
+    Map<String, int> source,
+  ) {
+    return _normalizeAnySelection(
+      values.map((item) {
+        if (source.containsKey(item)) {
+          return item;
+        }
+
+        final id = int.tryParse(item);
+        if (id == null) {
+          return item;
+        }
+
+        return source.entries
+            .firstWhere(
+              (entry) => entry.value == id,
+              orElse: () => MapEntry(item, id),
+            )
+            .key;
+      }).toList(),
+    );
+  }
+
+  String? _heightValueFromApi(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+
+    final number = value.toString().trim();
+    if (number.isEmpty) {
+      return null;
+    }
+
+    for (final option in _heightOptions) {
+      if (option.startsWith('$number cm')) {
+        return option;
+      }
+    }
+
+    return '$number cm';
+  }
+
+  String? _clampAgeValue(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return null;
+    }
+
+    final parsedAge = int.tryParse(value);
+    if (parsedAge == null) {
+      return null;
+    }
+
+    if (parsedAge < _minimumPartnerAge) {
+      return _minimumPartnerAge.toString();
+    }
+
+    if (parsedAge > _maximumPartnerAge) {
+      return _maximumPartnerAge.toString();
+    }
+
+    return parsedAge.toString();
+  }
+
+  void _applyAgeRange({
+    String? minAge,
+    String? maxAge,
+  }) {
+    final normalizedMin = _clampAgeValue(minAge);
+    final normalizedMax = _clampAgeValue(maxAge);
+
+    if (normalizedMin != null &&
+        normalizedMax != null &&
+        int.parse(normalizedMin) > int.parse(normalizedMax)) {
+      _minAge = normalizedMax;
+      _maxAge = normalizedMin;
+      return;
+    }
+
+    _minAge = normalizedMin;
+    _maxAge = normalizedMax;
+  }
+
+  Future<void> _loadAgePreferenceBounds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userDataString = prefs.getString('user_data');
+
+    Map<String, dynamic>? userData;
+    if (userDataString != null) {
+      final decoded = jsonDecode(userDataString);
+      if (decoded is Map<String, dynamic>) {
+        userData = decoded;
+      }
+    }
+
+    final bounds = resolvePartnerAgePreferenceBounds(
+      userData: userData,
+      fallbackMaxAge: _maximumPartnerAge,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _minimumPartnerAge = bounds.minAge;
+      _maximumPartnerAge = bounds.maxAge;
+      _ageOptions = bounds.buildAgeOptions();
+      _applyAgeRange(
+        minAge: _minAge,
+        maxAge: _maxAge,
+      );
+    });
+  }
+
+  Future<void> _loadInitialData() async {
+    setState(() => _isLoadingInitialData = true);
+
+    try {
+      await _loadAgePreferenceBounds();
+      await _loadCountries();
+      await _loadSavedPreferences();
+    } catch (e) {
+      debugPrint('Partner preferences init error: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingInitialData = false);
+      }
+    }
+  }
+
+  Future<void> _loadCountries() async {
+    setState(() => _isLoadingCountries = true);
+
+    try {
+      final data = await LocationService.fetchCountries()
+          .timeout(const Duration(seconds: 30));
+      final countries = ['Any'];
+      final countryMap = <String, int>{'Any': 0};
+
+      for (final item in data) {
+        final name = item['name']?.toString().trim();
+        final id = int.tryParse(item['id'].toString());
+        if (name == null || name.isEmpty || id == null) {
+          continue;
+        }
+        countries.add(name);
+        countryMap[name] = id;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _countryOptions = countries;
+        _countryMap
+          ..clear()
+          ..addAll(countryMap);
+      });
+    } catch (e) {
+      debugPrint('Country load error: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingCountries = false);
+      }
+    }
+  }
+
+  Future<void> _loadStatesForSelectedCountries({List<String>? preferredSelection}) async {
+    if (_selectedCountry.isEmpty || _selectedCountry.contains('Any')) {
+      if (!mounted) return;
+      setState(() {
+        _stateOptions = ['Any'];
+        _stateMap
+          ..clear()
+          ..addAll({'Any': 0});
+        _selectedState = _selectedCountry.contains('Any') ? ['Any'] : [];
+        _districtOptions = ['Any'];
+        _districtMap
+          ..clear()
+          ..addAll({'Any': 0});
+        _selectedDistrict = _selectedCountry.contains('Any') ? ['Any'] : [];
+      });
+      return;
+    }
+
+    setState(() => _isLoadingStates = true);
+
+    try {
+      final states = ['Any'];
+      final stateMap = <String, int>{'Any': 0};
+
+      for (final countryName in _selectedCountry) {
+        final countryId = _countryMap[countryName];
+        if (countryId == null || countryId == 0) {
+          continue;
+        }
+
+        final data = await LocationService.fetchStates(countryId)
+            .timeout(const Duration(seconds: 30));
+
+        for (final item in data) {
+          final name = item['name']?.toString().trim();
+          final id = int.tryParse(item['id'].toString());
+          if (name == null || name.isEmpty || id == null || stateMap.containsKey(name)) {
+            continue;
+          }
+          states.add(name);
+          stateMap[name] = id;
+        }
+      }
+
+      final selected = _normalizeAnySelection(preferredSelection ?? _selectedState)
+          .where((item) => stateMap.containsKey(item))
+          .toList();
+
+      if (!mounted) return;
+      setState(() {
+        _stateOptions = states;
+        _stateMap
+          ..clear()
+          ..addAll(stateMap);
+        _selectedState = selected;
+      });
+    } catch (e) {
+      debugPrint('State load error: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingStates = false);
+      }
+    }
+
+    await _loadDistrictsForSelectedStates(
+      preferredSelection: preferredSelection == null ? null : _selectedDistrict,
+    );
+  }
+
+  Future<void> _loadDistrictsForSelectedStates({List<String>? preferredSelection}) async {
+    if (_selectedState.isEmpty || _selectedState.contains('Any')) {
+      if (!mounted) return;
+      setState(() {
+        _districtOptions = ['Any'];
+        _districtMap
+          ..clear()
+          ..addAll({'Any': 0});
+        _selectedDistrict = _selectedState.contains('Any') ? ['Any'] : [];
+      });
+      return;
+    }
+
+    setState(() => _isLoadingDistricts = true);
+
+    try {
+      final districts = ['Any'];
+      final districtMap = <String, int>{'Any': 0};
+
+      for (final stateName in _selectedState) {
+        final stateId = _stateMap[stateName];
+        if (stateId == null || stateId == 0) {
+          continue;
+        }
+
+        final data = await LocationService.fetchCities(stateId)
+            .timeout(const Duration(seconds: 30));
+
+        for (final item in data) {
+          final name = item['name']?.toString().trim();
+          final id = int.tryParse(item['id'].toString());
+          if (name == null || name.isEmpty || id == null || districtMap.containsKey(name)) {
+            continue;
+          }
+          districts.add(name);
+          districtMap[name] = id;
+        }
+      }
+
+      final selected = _normalizeAnySelection(preferredSelection ?? _selectedDistrict)
+          .where((item) => districtMap.containsKey(item))
+          .toList();
+
+      if (!mounted) return;
+      setState(() {
+        _districtOptions = districts;
+        _districtMap
+          ..clear()
+          ..addAll(districtMap);
+        _selectedDistrict = selected;
+      });
+    } catch (e) {
+      debugPrint('District load error: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingDistricts = false);
+      }
+    }
+  }
+
+  Future<void> _loadSavedPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userDataString = prefs.getString('user_data');
+    if (userDataString == null) {
+      return;
+    }
+
+    final userData = jsonDecode(userDataString);
+    final userId = int.tryParse(userData["id"].toString());
+    if (userId == null) {
+      return;
+    }
+
+    final result = await UserPartnerPreferenceService().fetchPartnerPreference(userId: userId);
+    final data = result?['data'];
+
+    final status = result?['status'];
+    if ((status != 'success' && status != true) || data is! Map<String, dynamic>) {
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _applyAgeRange(
+        minAge: data['minage']?.toString(),
+        maxAge: data['maxage']?.toString(),
+      );
+      _minHeight = _heightValueFromApi(data['minheight']);
+      _maxHeight = _heightValueFromApi(data['maxheight']);
+      _selectedMaritalStatus = _parsePreferenceList(data['maritalstatus']);
+      _selectedReligion = _parsePreferenceList(data['religion']);
+      _selectedCommunity = _parsePreferenceList(data['caste'] ?? data['community']);
+      _selectedMotherTongue = _parsePreferenceList(data['mothertoungue'] ?? data['mother_tongue']);
+      _selectedCountry = _resolveLocationSelection(
+        _parsePreferenceList(data['country']),
+        _countryMap,
+      );
+      _selectedState = _parsePreferenceList(data['state']);
+      _selectedDistrict = _parsePreferenceList(data['city'] ?? data['district']);
+      _selectedEducation = _parsePreferenceList(data['qualification'] ?? data['education']);
+      _selectedOccupation = _parsePreferenceList(data['proffession'] ?? data['occupation']);
+    });
+
+    await _loadStatesForSelectedCountries(preferredSelection: List<String>.from(_selectedState));
+    if (!mounted) return;
+    setState(() {
+      _selectedState = _resolveLocationSelection(_selectedState, _stateMap);
+    });
+    await _loadDistrictsForSelectedStates(preferredSelection: List<String>.from(_selectedDistrict));
+    if (!mounted) return;
+    setState(() {
+      _selectedDistrict = _resolveLocationSelection(_selectedDistrict, _districtMap);
+    });
+  }
+
+  Future<void> _validateAndSubmit() async {
+    if (!_validateForm()) {
+      _showSnackBar('Please fill all required fields correctly', isError: true);
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userDataString = prefs.getString('user_data');
+
+      if (userDataString == null) {
+        _showSnackBar('Session expired. Please login again', isError: true);
+        setState(() => _isSubmitting = false);
+        return;
+      }
+
+      final userData = jsonDecode(userDataString);
+      final userId = int.tryParse(userData["id"].toString());
+
+      if (userId == null) {
+        _showSnackBar('Invalid user data', isError: true);
+        setState(() => _isSubmitting = false);
+        return;
+      }
+
+      final service = UserPartnerPreferenceService();
+
+      // Extract cm values from height strings (e.g., "170 cm (5' 7")" -> "170")
+      final minHeightCm = _minHeight!.split(' ').first;
+      final maxHeightCm = _maxHeight!.split(' ').first;
+      final countryIds = _selectedCountry.contains('Any')
+          ? ['0']
+          : _selectedCountry
+              .map((item) => _countryMap[item]?.toString())
+              .whereType<String>()
+              .toList();
+      final stateIds = _selectedState.contains('Any')
+          ? ['0']
+          : _selectedState
+              .map((item) => _stateMap[item]?.toString())
+              .whereType<String>()
+              .toList();
+      final districtIds = _selectedDistrict.contains('Any')
+          ? ['0']
+          : _selectedDistrict
+              .map((item) => _districtMap[item]?.toString())
+              .whereType<String>()
+              .toList();
+
+      final result = await service.savePartnerPreference(
+        userId: userId,
+        ageFrom: _minAge!,
+        ageTo: _maxAge!,
+        heightFrom: minHeightCm,
+        heightTo: maxHeightCm,
+        maritalStatus: _selectedMaritalStatus.join(', '),
+        religion: _selectedReligion.join(', '),
+        countryIds: countryIds,
+        stateIds: stateIds,
+        cityIds: districtIds,
+        community: _selectedCommunity.isNotEmpty ? _selectedCommunity.join(', ') : null,
+        motherTongue: _selectedMotherTongue.isNotEmpty ? _selectedMotherTongue.join(', ') : null,
+        country: _selectedCountry.isNotEmpty ? _selectedCountry.join(', ') : null,
+        state: _selectedState.isNotEmpty ? _selectedState.join(', ') : null,
+        district: _selectedDistrict.isNotEmpty ? _selectedDistrict.join(', ') : null,
+        education: _selectedEducation.isNotEmpty ? _selectedEducation.join(', ') : null,
+        occupation: _selectedOccupation.isNotEmpty ? _selectedOccupation.join(', ') : null,
+      );
+
+      setState(() => _isSubmitting = false);
+
+      if (result['status'] == 'success' || result['status'] == true) {
+        await UpdateService.updatePageNumber(
+          userId: userId.toString(),
+          pageNo: 8,
+        );
+
+        _showSnackBar('Partner preferences saved successfully!');
+
+        Navigator.push(
+          context,
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) => const IDVerificationScreen(),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              const begin = Offset(1.0, 0.0);
+              const end = Offset.zero;
+              const curve = Curves.easeInOutCubic;
+              var tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+              var offsetAnimation = animation.drive(tween);
+              return SlideTransition(position: offsetAnimation, child: child);
+            },
+            transitionDuration: const Duration(milliseconds: 400),
+          ),
+        );
+      } else {
+        final errorMsg = result['message'] ?? "Something went wrong";
+        print('Partner preference save error: $errorMsg');
+        print('Result: $result');
+        _showSnackBar(errorMsg, isError: true);
+      }
+    } catch (e) {
+      setState(() => _isSubmitting = false);
+      print('Partner preference save exception: $e');
+      _showSnackBar('Error: ${e.toString()}', isError: true);
+    }
+  }
+
+  void _showMultiSelectDialog({
+    required String title,
+    required List<String> options,
+    required List<String> selectedOptions,
+    required Function(List<String>) onConfirm,
+    IconData? icon,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return _PartnerPreferenceMultiSelectSheet(
+          title: title,
+          options: options,
+          selectedOptions: selectedOptions,
+          onConfirm: onConfirm,
+          icon: icon,
+        );
+      },
+    );
+  }
+
+  Widget _buildMultiSelectField({
+    required String label,
+    required List<String> selectedItems,
+    required VoidCallback onTap,
+    required IconData icon,
+    bool isRequired = false,
+    String? errorText,
+  }) {
+    final hasError = errorText != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8, left: 4),
+          child: Row(
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              if (isRequired) ...[
+                const SizedBox(width: 4),
+                const Text(
+                  '*',
+                  style: TextStyle(
+                    color: AppColors.error,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: hasError ? AppColors.error : AppColors.border,
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: hasError
+                      ? AppColors.error.withOpacity(0.1)
+                      : AppColors.shadowLight,
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      icon,
+                      color: AppColors.textSecondary,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        selectedItems.isEmpty
+                            ? 'Tap to select $label'
+                            : '${selectedItems.length} ${label.toLowerCase()} selected',
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: selectedItems.isEmpty
+                              ? AppColors.textHint
+                              : AppColors.textPrimary,
+                          fontWeight: selectedItems.isEmpty
+                              ? FontWeight.w400
+                              : FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      selectedItems.isEmpty
+                          ? Icons.keyboard_arrow_down
+                          : Icons.edit,
+                      color: AppColors.textSecondary,
+                    ),
+                  ],
+                ),
+                if (selectedItems.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: selectedItems.take(5).map((item) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: AppColors.primaryGradient,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primary.withOpacity(0.3),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          item,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.white,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  if (selectedItems.length > 5) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '+${selectedItems.length - 5} more',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ],
+              ],
+            ),
+          ),
+        ),
+        if (hasError) ...[
+          const SizedBox(height: 6),
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  size: 14,
+                  color: AppColors.error,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  errorText,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.error,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      resizeToAvoidBottomInset: true,
+      body: SafeArea(
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: RegistrationStepContainer(
+            onContinue: (_isSubmitting || _isLoadingInitialData) ? null : _validateAndSubmit,
+            onBack: () => Navigator.pop(context),
+            onStepBack: () => Navigator.pop(context), // Allow step-by-step back navigation
+            continueText: 'Continue',
+            canContinue: !_isSubmitting && !_isLoadingInitialData,
+            isLoading: _isSubmitting || _isLoadingInitialData,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                RegistrationStepHeader(
+                  title: 'Partner Preferences',
+                  subtitle: 'Help us understand your ideal life partner. Your preferences help us find better matches.',
+                  currentStep: 10,
+                  totalSteps: 11,
+                  onBack: () => Navigator.pop(context),
+                  onStepBack: () => Navigator.pop(context), // Allow step-by-step back navigation
+                ),
+
+                const SizedBox(height: 32),
+
+                if (_isLoadingInitialData) ...[
+                  const LinearProgressIndicator(minHeight: 2),
+                  const SizedBox(height: 24),
+                ],
+
+                // Age Range Section
+                SectionHeader(
+                  title: 'Age Range',
+                  subtitle: 'Preferred age range for your partner',
+                  icon: Icons.calendar_today,
+                ),
+
+                const SizedBox(height: 16),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: TypingDropdown<String>(
+                        title: 'Min Age',
+                        items: _ageOptions,
+                        itemLabel: (age) => '$age years',
+                        hint: 'Min',
+                        selectedItem: _minAge,
+                        showError: _fieldErrors['age'] != null && _minAge == null,
+                        prefixIcon: Icons.calendar_today,
+                        onChanged: (value) {
+                          setState(() {
+                            _minAge = value;
+                            if (_hasValidationErrors) {
+                              _fieldErrors['age'] = null;
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TypingDropdown<String>(
+                        title: 'Max Age',
+                        items: _ageOptions,
+                        itemLabel: (age) => '$age years',
+                        hint: 'Max',
+                        selectedItem: _maxAge,
+                        showError: _fieldErrors['age'] != null && _maxAge == null,
+                        prefixIcon: Icons.calendar_today,
+                        onChanged: (value) {
+                          setState(() {
+                            _maxAge = value;
+                            if (_hasValidationErrors) {
+                              _fieldErrors['age'] = null;
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+
+                if (_fieldErrors['age'] != null) ...[
+                  const SizedBox(height: 6),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 14,
+                          color: AppColors.error,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _fieldErrors['age']!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.error,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 32),
+
+                // Height Range Section
+                SectionHeader(
+                  title: 'Height Range',
+                  subtitle: 'Preferred height range for your partner',
+                  icon: Icons.height,
+                ),
+
+                const SizedBox(height: 16),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: TypingDropdown<String>(
+                        title: 'Min Height',
+                        items: _heightOptions,
+                        itemLabel: (height) => height,
+                        hint: 'Min',
+                        selectedItem: _minHeight,
+                        showError: _fieldErrors['height'] != null && _minHeight == null,
+                        prefixIcon: Icons.height,
+                        onChanged: (value) {
+                          setState(() {
+                            _minHeight = value;
+                            if (_hasValidationErrors) {
+                              _fieldErrors['height'] = null;
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TypingDropdown<String>(
+                        title: 'Max Height',
+                        items: _heightOptions,
+                        itemLabel: (height) => height,
+                        hint: 'Max',
+                        selectedItem: _maxHeight,
+                        showError: _fieldErrors['height'] != null && _maxHeight == null,
+                        prefixIcon: Icons.height,
+                        onChanged: (value) {
+                          setState(() {
+                            _maxHeight = value;
+                            if (_hasValidationErrors) {
+                              _fieldErrors['height'] = null;
+                            }
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+
+                if (_fieldErrors['height'] != null) ...[
+                  const SizedBox(height: 6),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 14,
+                          color: AppColors.error,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _fieldErrors['height']!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.error,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 32),
+
+                // Personal Preferences Section
+                SectionHeader(
+                  title: 'Personal Preferences',
+                  subtitle: 'Marital status and religious preferences',
+                  icon: Icons.favorite_outline,
+                ),
+
+                const SizedBox(height: 16),
+
+                // Marital Status
+                _buildMultiSelectField(
+                  label: 'Marital Status',
+                  selectedItems: _selectedMaritalStatus,
+                  icon: Icons.favorite_border,
+                  isRequired: true,
+                  errorText: _fieldErrors['maritalStatus'],
+                  onTap: () {
+                    _showMultiSelectDialog(
+                      title: 'Select Marital Status',
+                      options: _maritalStatusOptions,
+                      selectedOptions: _selectedMaritalStatus,
+                      icon: Icons.favorite_border,
+                       onConfirm: (selected) {
+                          setState(() {
+                            _selectedMaritalStatus = _normalizeAnySelection(selected);
+                            if (_hasValidationErrors) {
+                              _fieldErrors['maritalStatus'] = _selectedMaritalStatus.isEmpty
+                                  ? 'Please select at least one option'
+                                  : null;
+                            }
+                        });
+                      },
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 16),
+
+                // Religion
+                _buildMultiSelectField(
+                  label: 'Religion',
+                  selectedItems: _selectedReligion,
+                  icon: Icons.church,
+                  isRequired: true,
+                  errorText: _fieldErrors['religion'],
+                  onTap: () {
+                    _showMultiSelectDialog(
+                      title: 'Select Religion',
+                      options: _religionOptions,
+                      selectedOptions: _selectedReligion,
+                      icon: Icons.church,
+                       onConfirm: (selected) {
+                          setState(() {
+                            _selectedReligion = _normalizeAnySelection(selected);
+                            if (_hasValidationErrors) {
+                              _fieldErrors['religion'] = _selectedReligion.isEmpty
+                                  ? 'Please select at least one option'
+                                  : null;
+                            }
+                        });
+                      },
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 32),
+
+                // Cultural Preferences Section
+                SectionHeader(
+                  title: 'Cultural Preferences',
+                  subtitle: 'Community and language preferences (Optional)',
+                  icon: Icons.public,
+                ),
+
+                const SizedBox(height: 16),
+
+                // Community
+                _buildMultiSelectField(
+                  label: 'Community',
+                  selectedItems: _selectedCommunity,
+                  icon: Icons.group,
+                  onTap: () {
+                    _showMultiSelectDialog(
+                      title: 'Select Community',
+                      options: _communityOptions,
+                      selectedOptions: _selectedCommunity,
+                      icon: Icons.group,
+                       onConfirm: (selected) {
+                         setState(() => _selectedCommunity = _normalizeAnySelection(selected));
+                       },
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 16),
+
+                // Mother Tongue
+                _buildMultiSelectField(
+                  label: 'Mother Tongue',
+                  selectedItems: _selectedMotherTongue,
+                  icon: Icons.language,
+                  onTap: () {
+                    _showMultiSelectDialog(
+                      title: 'Select Mother Tongue',
+                      options: _motherTongueOptions,
+                      selectedOptions: _selectedMotherTongue,
+                      icon: Icons.language,
+                       onConfirm: (selected) {
+                         setState(() => _selectedMotherTongue = _normalizeAnySelection(selected));
+                       },
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 32),
+
+                // Location Preferences Section
+                SectionHeader(
+                  title: 'Location Preferences',
+                  subtitle: 'Country and state preferences (Optional)',
+                  icon: Icons.location_on_outlined,
+                ),
+
+                const SizedBox(height: 16),
+
+                // Country
+                _buildMultiSelectField(
+                  label: 'Country',
+                  selectedItems: _selectedCountry,
+                  icon: Icons.flag,
+                  onTap: () {
+                    if (_isLoadingCountries) return;
+                    _showMultiSelectDialog(
+                      title: 'Select Country',
+                      options: _countryOptions,
+                      selectedOptions: _selectedCountry,
+                      icon: Icons.flag,
+                       onConfirm: (selected) {
+                         final normalized = _normalizeAnySelection(selected);
+                         setState(() {
+                           _selectedCountry = normalized;
+                           _selectedState = normalized.contains('Any') ? ['Any'] : [];
+                           _selectedDistrict = normalized.contains('Any') ? ['Any'] : [];
+                         });
+                         _loadStatesForSelectedCountries();
+                      },
+                    );
+                  },
+                ),
+
+                if (_isLoadingCountries) ...[
+                  const SizedBox(height: 8),
+                  const LinearProgressIndicator(minHeight: 2),
+                ],
+
+                const SizedBox(height: 16),
+
+                _buildMultiSelectField(
+                  label: 'State',
+                  selectedItems: _selectedState,
+                  icon: Icons.map_outlined,
+                  onTap: () {
+                    if (_selectedCountry.isEmpty || _isLoadingStates) return;
+                    _showMultiSelectDialog(
+                      title: 'Select State',
+                      options: _stateOptions,
+                      selectedOptions: _selectedState,
+                      icon: Icons.map_outlined,
+                      onConfirm: (selected) {
+                        final normalized = _normalizeAnySelection(selected);
+                        setState(() {
+                          _selectedState = normalized;
+                          _selectedDistrict = normalized.contains('Any') ? ['Any'] : [];
+                        });
+                         _loadDistrictsForSelectedStates();
+                      },
+                    );
+                  },
+                ),
+
+                if (_isLoadingStates) ...[
+                  const SizedBox(height: 8),
+                  const LinearProgressIndicator(minHeight: 2),
+                ],
+
+                const SizedBox(height: 16),
+
+                _buildMultiSelectField(
+                  label: 'District',
+                  selectedItems: _selectedDistrict,
+                  icon: Icons.location_city_outlined,
+                  onTap: () {
+                    if (_selectedState.isEmpty || _isLoadingDistricts) return;
+                    _showMultiSelectDialog(
+                      title: 'Select District',
+                      options: _districtOptions,
+                      selectedOptions: _selectedDistrict,
+                      icon: Icons.location_city_outlined,
+                      onConfirm: (selected) {
+                        setState(() {
+                          _selectedDistrict = _normalizeAnySelection(selected);
+                        });
+                      },
+                    );
+                  },
+                ),
+
+                if (_isLoadingDistricts) ...[
+                  const SizedBox(height: 8),
+                  const LinearProgressIndicator(minHeight: 2),
+                ],
+
+                const SizedBox(height: 32),
+
+                // Professional Preferences Section
+                SectionHeader(
+                  title: 'Professional Preferences',
+                  subtitle: 'Education and occupation preferences (Optional)',
+                  icon: Icons.work_outline,
+                ),
+
+                const SizedBox(height: 16),
+
+                // Education
+                _buildMultiSelectField(
+                  label: 'Education',
+                  selectedItems: _selectedEducation,
+                  icon: Icons.school,
+                  onTap: () {
+                    _showMultiSelectDialog(
+                      title: 'Select Education',
+                      options: _educationOptions,
+                      selectedOptions: _selectedEducation,
+                      icon: Icons.school,
+                       onConfirm: (selected) {
+                         setState(() => _selectedEducation = _normalizeAnySelection(selected));
+                       },
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 16),
+
+                // Occupation
+                _buildMultiSelectField(
+                  label: 'Occupation',
+                  selectedItems: _selectedOccupation,
+                  icon: Icons.business_center,
+                  onTap: () {
+                    _showMultiSelectDialog(
+                      title: 'Select Occupation',
+                      options: _occupationOptions,
+                      selectedOptions: _selectedOccupation,
+                      icon: Icons.business_center,
+                       onConfirm: (selected) {
+                         setState(() => _selectedOccupation = _normalizeAnySelection(selected));
+                       },
+                    );
+                  },
+                ),
+
+                const SizedBox(height: 32),
+
+                // Info Card
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        AppColors.secondary.withOpacity(0.1),
+                        AppColors.secondaryLight.withOpacity(0.05),
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.secondary.withOpacity(0.2),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.secondary.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.tips_and_updates,
+                          color: AppColors.secondary,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Setting broader preferences increases your chances of finding compatible matches. You can always refine these later.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PartnerPreferenceMultiSelectSheet extends StatefulWidget {
+  final String title;
+  final List<String> options;
+  final List<String> selectedOptions;
+  final Function(List<String>) onConfirm;
+  final IconData? icon;
+
+  const _PartnerPreferenceMultiSelectSheet({
+    required this.title,
+    required this.options,
+    required this.selectedOptions,
+    required this.onConfirm,
+    this.icon,
+  });
+
+  @override
+  State<_PartnerPreferenceMultiSelectSheet> createState() =>
+      _PartnerPreferenceMultiSelectSheetState();
+}
+
+class _PartnerPreferenceMultiSelectSheetState
+    extends State<_PartnerPreferenceMultiSelectSheet> {
+  late List<String> _tempSelected;
+  final TextEditingController _searchController = TextEditingController();
+
+  bool get _shouldShowSearch => widget.options.length >= 5;
+
+  List<String> get _visibleOptions {
+    final query = _searchController.text.trim().toLowerCase();
+
+    return widget.options.where((option) {
+      if (_tempSelected.contains(option)) {
+        return false;
+      }
+
+      if (!_shouldShowSearch || query.isEmpty) {
+        return true;
+      }
+
+      return option.toLowerCase().contains(query);
+    }).toList();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _tempSelected = List<String>.from(widget.selectedOptions);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _updateSelection(List<String> values) {
+    widget.onConfirm(List<String>.from(values));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: const EdgeInsets.all(20),
+      height: MediaQuery.of(context).size.height * 0.75,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (widget.icon != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    gradient: AppColors.primaryGradient,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(widget.icon, color: AppColors.white, size: 20),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Text(
+                  widget.title,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.primary.withOpacity(0.1),
+                  AppColors.primaryLight.withOpacity(0.05),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: AppColors.primary.withOpacity(0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.check_circle,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${_tempSelected.length} selected',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_tempSelected.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _tempSelected.map((item) {
+                return Chip(
+                  label: Text(item),
+                  backgroundColor: AppColors.primary.withOpacity(0.08),
+                  deleteIcon: const Icon(
+                    Icons.close,
+                    size: 16,
+                    color: AppColors.primary,
+                  ),
+                  side: BorderSide(
+                    color: AppColors.primary.withOpacity(0.25),
+                  ),
+                  onDeleted: () {
+                    setState(() {
+                      _tempSelected.remove(item);
+                    });
+                    _updateSelection(_tempSelected);
+                  },
+                  labelStyle: const TextStyle(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+          if (_shouldShowSearch) ...[
+            const SizedBox(height: 16),
+            TextField(
+              controller: _searchController,
+              textInputAction: TextInputAction.search,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'Search...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Expanded(
+            child: _visibleOptions.isEmpty
+                ? Center(
+                    child: Text(
+                      _shouldShowSearch && _searchController.text.trim().isNotEmpty
+                          ? 'No options found'
+                          : 'All options already selected',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _visibleOptions.length,
+                    itemBuilder: (context, index) {
+                      final option = _visibleOptions[index];
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: InkWell(
+                          onTap: () {
+                            if (option == 'Any') {
+                              setState(() {
+                                _tempSelected = ['Any'];
+                              });
+                              _updateSelection(_tempSelected);
+                              Navigator.pop(context);
+                            } else {
+                              setState(() {
+                                _tempSelected.remove('Any');
+                                if (!_tempSelected.contains(option)) {
+                                  _tempSelected.add(option);
+                                }
+                              });
+                              _updateSelection(_tempSelected);
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: AppColors.border,
+                                width: 1.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.shadowLight,
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: AppColors.background,
+                                  ),
+                                  child: const Icon(
+                                    Icons.add_circle_outline,
+                                    color: AppColors.textSecondary,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    option,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () {
+                    setState(() {
+                      _tempSelected.clear();
+                    });
+                    _updateSelection(_tempSelected);
+                  },
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    side: const BorderSide(color: AppColors.border, width: 1.5),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Clear All',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton(
+                  onPressed: () {
+                    _updateSelection(_tempSelected);
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: AppColors.primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text(
+                    'Done',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}

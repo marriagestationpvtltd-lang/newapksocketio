@@ -1,0 +1,1067 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/material.dart';
+import 'package:agora_rtc_engine/agora_rtc_engine.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../Chat/call_overlay_manager.dart';
+import '../navigation/app_navigation.dart';
+import '../pushnotification/pushservice.dart';
+import 'tokengenerator.dart';
+import 'call_history_model.dart';
+import 'call_history_service.dart';
+import 'call_foreground_service.dart';
+import 'widgets/connection_status_overlay.dart';
+
+class VideoCallScreen extends StatefulWidget {
+  final String currentUserId;
+  final String currentUserName;
+  final String currentUserImage;
+  final String otherUserId;
+  final String otherUserName;
+  final String otherUserImage;
+  final bool isOutgoingCall; // Add this
+  final String? chatRoomId; // For writing inline call message to chat
+  final bool isAdminChat; // True when called from AdminChatScreen
+  final String? adminChatReceiverId; // Receiver ID for admin chat call messages
+
+  const VideoCallScreen({
+    super.key,
+    required this.currentUserId,
+    required this.currentUserName,
+    required this.currentUserImage,
+    required this.otherUserId,
+    required this.otherUserName,
+    required this.otherUserImage,
+    this.isOutgoingCall = true, // Default to outgoing
+    this.chatRoomId,
+    this.isAdminChat = false,
+    this.adminChatReceiverId,
+  });
+
+  @override
+  State<VideoCallScreen> createState() => _VideoCallScreenState();
+}
+
+class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingObserver {
+  late RtcEngine _engine;
+  bool _engineInitialized = false;
+
+  int _localUid = 0;
+  int? _remoteUid;
+
+  String _channel = '';
+  String _token = '';
+
+  bool _joined = false;
+  bool _callActive = false;
+  bool _micMuted = false;
+  bool _speakerOn = false;
+  bool _cameraOn = true;
+  bool _frontCamera = true;
+  bool _ending = false;
+  bool _remoteAccepted = false;
+  bool _isCallRinging = true; // Add ringing state
+  bool _foregroundServiceStarted = false;
+
+  Timer? _timeoutTimer;
+  Timer? _callTimer;
+  Duration _duration = Duration.zero;
+
+  StreamSubscription? _responseSubscription;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  String? _connectionStatus;
+
+  // Network quality tracking
+  int _networkQuality = 0; // 0=unknown, 1=excellent, 2=good, 3=poor, 4=bad, 5=very bad, 6=down
+  String _networkQualityText = 'Unknown';
+  Timer? _qualityUpdateTimer;
+
+  // Ringtone state
+  final AudioPlayer _ringtonePlayer = AudioPlayer();
+  bool _isPlayingRingtone = false;
+
+  // PiP (local video preview) draggable offset (from top-right)
+  Offset _pipOffset = const Offset(20, 40);
+  static const double _kPipWidth = 120.0;
+  static const double _kPipHeight = 160.0;
+  static const double _kPipPadding = 8.0;
+
+  // Auto-hide controls after 3 s idle
+  static const Duration _kControlsHideDelay = Duration(seconds: 3);
+  bool _showControls = true;
+  Timer? _controlsHideTimer;
+
+  // Remote camera muted state
+  bool _remoteCameraOff = false;
+
+  // Call history tracking
+  String? _callHistoryId;
+  DateTime? _callStartTime;
+  static const Duration _kOutgoingCallTimeout = Duration(seconds: 30);
+  static const Duration _kPostAcceptConnectionTimeout = Duration(seconds: 20);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startCall();
+    _listenForCallResponse();
+    _listenConnectivity();
+    _scheduleControlsHide();
+  }
+
+  // ================= PLAY RINGTONE =================
+  Future<void> _playRingtone() async {
+    if (!widget.isOutgoingCall) return;
+
+    try {
+      await _stopRingtone();
+
+      await _ringtonePlayer.setReleaseMode(ReleaseMode.loop);
+      await _ringtonePlayer.play(AssetSource('images/outcall.mp3'));
+
+      if (mounted) {
+        setState(() => _isPlayingRingtone = true);
+      }
+      debugPrint('Started playing calling tone');
+    } catch (e) {
+      debugPrint('Error playing calling tone: $e');
+    }
+  }
+
+  Future<void> _stopRingtone() async {
+    try {
+      await _ringtonePlayer.stop();
+
+      if (!mounted) return;
+      setState(() => _isPlayingRingtone = false);
+    } catch (e) {
+      debugPrint('Error stopping calling tone: $e');
+    }
+  }
+
+  // ================= STOP RINGTONE =================
+
+
+  // ================= LISTEN FOR CALL RESPONSE =================
+  void _listenForCallResponse() {
+    _responseSubscription = NotificationService.callResponses.listen((data) {
+      final type = data['type']?.toString();
+      final channelName = data['channelName']?.toString();
+      if (_channel.isNotEmpty &&
+          channelName != null &&
+          channelName.isNotEmpty &&
+          channelName != _channel) {
+        return;
+      }
+
+      if (type == 'video_call_response') {
+        final accepted = data['accepted'] == 'true';
+        if (mounted) {
+          setState(() {
+            _remoteAccepted = accepted;
+            if (accepted) {
+              _isCallRinging = false;
+            }
+          });
+        }
+
+        if (!accepted) {
+          unawaited(_stopRingtone());
+          _endCall();
+        } else {
+          unawaited(_stopRingtone());
+          _armOutgoingTimeout(_kPostAcceptConnectionTimeout);
+          _syncOverlayState();
+        }
+      } else if (type == 'video_call_ended') {
+        _endCall();
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_ending) {
+      _checkPendingCallEvent();
+    }
+  }
+
+  /// Reads any call-termination event that was saved by the background isolate
+  /// and processes it to close the video call screen.
+  static const int _kCallEventExpiryMs = 300000; // 5 minutes
+
+  /// Reads any call-termination event that was saved by the background isolate
+  /// and processes it to close the video call screen.
+  Future<void> _checkPendingCallEvent() async {
+    if (_ending) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final eventStr = prefs.getString('pending_call_event');
+      if (eventStr == null) return;
+
+      final event = json.decode(eventStr) as Map<String, dynamic>;
+      final receivedAt = event['_receivedAt'] as int?;
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      // Always remove stale / expired events to prevent re-processing
+      if (receivedAt == null || now - receivedAt > _kCallEventExpiryMs) {
+        await prefs.remove('pending_call_event');
+        return;
+      }
+
+      final eventType = event['type']?.toString() ?? '';
+      final eventChannel = event['channelName']?.toString() ?? '';
+
+      if (_channel.isNotEmpty && eventChannel.isNotEmpty && eventChannel != _channel) {
+        return;
+      }
+
+      // Remove the event before acting on it
+      await prefs.remove('pending_call_event');
+
+      // Don't process rejection if call is already connected
+      if (_callActive) return;
+
+      if ((eventType == 'call_response' || eventType == 'video_call_response') &&
+          event['accepted'] == 'false') {
+        if (mounted) {
+          setState(() {
+            _remoteAccepted = false;
+          });
+        }
+        unawaited(_stopRingtone());
+        _endCall();
+      } else if (eventType == 'call_ended' ||
+          eventType == 'video_call_ended' ||
+          eventType == 'call_cancelled' ||
+          eventType == 'video_call_cancelled') {
+        _endCall();
+      }
+    } catch (e) {
+      debugPrint('❌ Error checking pending call event: $e');
+    }
+  }
+
+  void _initializeOverlay() {
+    CallOverlayManager().startCall(
+      callType: 'video',
+      otherUserName: widget.otherUserName,
+      otherUserId: widget.otherUserId,
+      currentUserId: widget.currentUserId,
+      currentUserName: widget.currentUserName,
+      onMaximize: () {
+        navigatorKey.currentState?.popUntil(
+          (route) => route.settings.name == activeCallRouteName || route.isFirst,
+        );
+      },
+      onEnd: _endCall,
+      onToggleMute: _toggleMute,
+      onToggleCamera: _toggleVideo,
+      isMicMuted: _micMuted,
+      isCameraEnabled: _cameraOn,
+    );
+    _syncOverlayState();
+  }
+
+  void _syncOverlayState() {
+    final statusText = _callActive
+        ? 'Connected'
+        : (_isCallRinging
+            ? (_remoteAccepted ? 'Connecting video...' : 'Calling...')
+            : 'Connecting...');
+
+    CallOverlayManager().updateCallState(
+      statusText: statusText,
+      duration: _duration,
+      isMicMuted: _micMuted,
+      isCameraEnabled: _cameraOn,
+    );
+  }
+
+  Future<void> _minimizeCall() async {
+    await openMinimizedCallHost(context);
+  }
+
+  // ================= START CALL =================
+  Future<void> _startCall() async {
+    try {
+      if (widget.isOutgoingCall) {
+        await _playRingtone();
+      }
+
+      // Permissions
+      if (!(await Permission.microphone.request()).isGranted) return;
+      if (!(await Permission.camera.request()).isGranted) return;
+
+      // ✅ UID FIRST
+      _localUid = Random().nextInt(999999);
+
+      // ✅ CHANNEL FIRST
+      _channel =
+      'videocall_${widget.currentUserId.substring(0, min(4, widget.currentUserId.length))}'
+          '_${widget.otherUserId.substring(0, min(4, widget.otherUserId.length))}'
+          '_${DateTime.now().millisecondsSinceEpoch}';
+
+      if (_channel.length > 64) {
+        _channel = _channel.substring(0, 64);
+      }
+
+      _initializeOverlay();
+
+      // ✅ TOKEN
+      _token = await AgoraTokenService.getToken(
+        channelName: _channel,
+        uid: _localUid,
+      );
+
+      // ✅ SEND NOTIFICATION AFTER CHANNEL EXISTS
+      if (widget.isOutgoingCall) {
+        await NotificationService.sendVideoCallNotification(
+          recipientUserId: widget.otherUserId,
+          callerName: widget.currentUserName,
+          channelName: _channel,
+          callerId: widget.currentUserId,
+          callerUid: _localUid.toString(),
+          agoraAppId: AgoraTokenService.appId,
+          agoraCertificate: 'SERVER_ONLY',
+          chatRoomId: widget.chatRoomId,
+        );
+
+        // Log call to history
+        _callHistoryId = await CallHistoryService.logCall(
+          callerId: widget.currentUserId,
+          callerName: widget.currentUserName,
+          callerImage: widget.currentUserImage,
+          recipientId: widget.otherUserId,
+          recipientName: widget.otherUserName,
+          recipientImage: widget.otherUserImage,
+          callType: CallType.video,
+          initiatedBy: widget.currentUserId,
+        );
+        _callStartTime = DateTime.now();
+      }
+
+      // Agora init
+      _engine = createAgoraRtcEngine();
+
+      await _engine.initialize(
+        RtcEngineContext(
+          appId: AgoraTokenService.appId,
+          channelProfile: ChannelProfileType.channelProfileCommunication,
+        ),
+      );
+      _engineInitialized = true;
+
+      _engine.registerEventHandler(
+        RtcEngineEventHandler(
+          onJoinChannelSuccess: (_, __) {
+            if (mounted) setState(() => _joined = true);
+            _syncOverlayState();
+            unawaited(_startForegroundService());
+          },
+          onUserJoined: (_, uid, __) {
+            if (mounted) {
+              setState(() {
+                _remoteUid = uid;
+                _isCallRinging = false;
+                _callActive = true;
+              });
+            }
+            _stopRingtone();
+            _startCallTimer();
+            _syncOverlayState();
+            _scheduleControlsHide(); // Start auto-hide once call is active
+          },
+          onUserOffline: (_, __, ___) => _endCall(),
+          onUserMuteVideo: (_, uid, muted) {
+            if (uid == _remoteUid && mounted) {
+              setState(() => _remoteCameraOff = muted);
+            }
+          },
+          onError: (code, msg) => debugPrint('Agora error: $code $msg'),
+          onNetworkQuality: (connection, remoteUid, txQuality, rxQuality) {
+            // Track network quality for adaptive bitrate
+            final quality = max(txQuality.index, rxQuality.index);
+            if (mounted && quality != _networkQuality) {
+              setState(() {
+                _networkQuality = quality;
+                _networkQualityText = _getQualityText(quality);
+              });
+              _adaptVideoQuality(quality);
+            }
+          },
+          onConnectionStateChanged: (connection, state, reason) {
+            debugPrint('Connection state: $state, reason: $reason');
+            // Handle reconnection scenarios
+            if (state == ConnectionStateType.connectionStateReconnecting) {
+              if (mounted) {
+                setState(() => _connectionStatus = 'Reconnecting...');
+              }
+            } else if (state == ConnectionStateType.connectionStateConnected) {
+              if (mounted) {
+                setState(() => _connectionStatus = null);
+              }
+            } else if (state == ConnectionStateType.connectionStateFailed) {
+              if (mounted) {
+                setState(() => _connectionStatus = 'Connection failed');
+              }
+            }
+          },
+        ),
+      );
+
+      await _engine.enableVideo();
+      await _engine.enableAudio();
+      await _engine.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
+
+      // Configure video encoder with adaptive bitrate support
+      await _engine.setVideoEncoderConfiguration(
+        const VideoEncoderConfiguration(
+          dimensions: VideoDimensions(width: 640, height: 480),
+          frameRate: 15,
+          bitrate: 0, // 0 = let SDK determine based on resolution
+          minBitrate: -1, // -1 = SDK default minimum
+          orientationMode: OrientationMode.orientationModeAdaptive,
+          degradationPreference: DegradationPreference.maintainBalanced, // Balance quality and framerate
+          mirrorMode: VideoMirrorModeType.videoMirrorModeAuto,
+        ),
+      );
+
+      await _engine.startPreview();
+
+      await _engine.joinChannel(
+        token: _token,
+        channelId: _channel,
+        uid: _localUid,
+        options: const ChannelMediaOptions(
+          publishCameraTrack: true,
+          publishMicrophoneTrack: true,
+          autoSubscribeAudio: true,
+          autoSubscribeVideo: true,
+        ),
+      );
+
+      _armOutgoingTimeout(_kOutgoingCallTimeout);
+
+    } catch (e) {
+      debugPrint("Video call init error: $e");
+      await _exit();
+    }
+  }
+
+  void _armOutgoingTimeout(Duration duration) {
+    _timeoutTimer?.cancel();
+    _timeoutTimer = Timer(duration, () {
+      if (_remoteUid == null) {
+        _endCall();
+      }
+    });
+  }
+
+
+  // ================= CALL TIMER =================
+  void _startCallTimer() {
+    _timeoutTimer?.cancel();
+    if (mounted) setState(() => _callActive = true);
+    _syncOverlayState();
+
+    _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() => _duration += const Duration(seconds: 1));
+        _syncOverlayState();
+      }
+    });
+  }
+
+  // ================= END CALL =================
+  Future<void> _endCall() async {
+    if (_ending) return;
+    _ending = true;
+    final wasMinimized = CallOverlayManager().isMinimized;
+
+    _callTimer?.cancel();
+    _timeoutTimer?.cancel();
+    _responseSubscription?.cancel();
+
+    // Always stop ringtone when ending call
+    await _stopRingtone();
+
+    // Update call history and write inline call message to chat (outgoing only)
+    if (_callHistoryId != null && _callHistoryId!.isNotEmpty) {
+      CallStatus callStatus;
+      if (_callActive && _remoteUid != null) {
+        callStatus = CallStatus.completed;
+      } else if (_remoteUid == null) {
+        callStatus = CallStatus.missed;
+      } else {
+        callStatus = CallStatus.cancelled;
+      }
+
+      await CallHistoryService.updateCallEnd(
+        callId: _callHistoryId!,
+        status: callStatus,
+        duration: _duration.inSeconds,
+      );
+
+      if (widget.isOutgoingCall) {
+        unawaited(CallHistoryService.logCallMessageInChat(
+          callerId: widget.currentUserId,
+          callType: 'video',
+          callStatus: callStatus.toString().split('.').last,
+          duration: _duration.inSeconds,
+          chatRoomId: widget.chatRoomId,
+          isAdminChat: widget.isAdminChat,
+          adminChatSenderId: widget.isAdminChat ? widget.currentUserId : null,
+          adminChatReceiverId: widget.isAdminChat ? widget.adminChatReceiverId : null,
+          messageDocId: _channel.isNotEmpty ? 'call_$_channel' : null,
+        ));
+      }
+    }
+
+    // Send end/cancel notifications
+    if (_callActive) {
+      unawaited(NotificationService.sendVideoCallEndedNotification(
+        recipientUserId: widget.otherUserId,
+        callerName: widget.currentUserName,
+        reason: 'ended',
+        duration: _duration.inSeconds,
+        channelName: _channel,
+      ));
+    } else if (!_callActive && widget.isOutgoingCall && _channel.isNotEmpty) {
+      unawaited(NotificationService.sendVideoCallCancelledNotification(
+        recipientUserId: widget.otherUserId,
+        callerName: widget.currentUserName,
+        channelName: _channel,
+        callerId: widget.currentUserId,
+      ));
+    }
+
+    // Navigate away FIRST so the user never sees the black AgoraRTC screen
+    if (wasMinimized) {
+      navigatorKey.currentState?.popUntil(
+        (route) => route.settings.name == activeCallRouteName || route.isFirst,
+      );
+    }
+    CallOverlayManager().reset();
+    await _exit();
+
+    // Release engine resources after navigation (fire-and-forget)
+    if (_engineInitialized) unawaited(_releaseEngineAsync());
+    unawaited(_stopForegroundService());
+  }
+
+  Future<void> _exit() async {
+    if (mounted && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  Future<void> _startForegroundService() async {
+    if (_channel.isEmpty) return;
+    if (_foregroundServiceStarted) return;
+    _foregroundServiceStarted = true;
+    await CallForegroundServiceManager.startOngoingCall(
+      callType: 'video',
+      otherUserName: widget.otherUserName,
+      callId: _channel,
+    );
+  }
+
+  /// Releases the Agora engine; safe to call fire-and-forget from dispose().
+  Future<void> _releaseEngineAsync() async {
+    try {
+      if (_joined) await _engine.leaveChannel();
+      await _engine.release();
+    } catch (_) {}
+  }
+
+  Future<void> _stopForegroundService() async {
+    if (!_foregroundServiceStarted) return;
+    try {
+      await CallForegroundServiceManager.stopCallService();
+      _foregroundServiceStarted = false;
+    } catch (e) {
+      debugPrint('Error stopping call foreground service: $e');
+    }
+  }
+
+  // ================= TOGGLE CAMERA =================
+  Future<void> _toggleCamera() async {
+    if (_joined) {
+      await _engine.switchCamera();
+      setState(() => _frontCamera = !_frontCamera);
+    }
+  }
+
+  Future<void> _toggleMute() async {
+    setState(() => _micMuted = !_micMuted);
+    if (_engineInitialized) {
+      await _engine.muteLocalAudioStream(_micMuted);
+    }
+    _syncOverlayState();
+  }
+
+  Future<void> _toggleVideo() async {
+    setState(() => _cameraOn = !_cameraOn);
+    if (_engineInitialized) {
+      await _engine.enableLocalVideo(_cameraOn);
+    }
+    _syncOverlayState();
+  }
+
+  // ================= TOGGLE SPEAKER =================
+  Future<void> _toggleSpeaker() async {
+    setState(() => _speakerOn = !_speakerOn);
+    if (_engineInitialized) {
+      await _engine.setEnableSpeakerphone(_speakerOn);
+    }
+  }
+
+  // ================= CONNECTIVITY =================
+  void _listenConnectivity() {
+    _connectivitySubscription =
+        Connectivity().onConnectivityChanged.listen((results) {
+      if (!mounted) return;
+      final hasConnection = results.any((r) => r != ConnectivityResult.none);
+      setState(() {
+        _connectionStatus = hasConnection ? null : 'Reconnecting...';
+      });
+    });
+  }
+
+  // ================= AUTO-HIDE CONTROLS =================
+  void _scheduleControlsHide() {
+    _controlsHideTimer?.cancel();
+    if (_callActive) {
+      _controlsHideTimer = Timer(_kControlsHideDelay, () {
+        if (mounted) setState(() => _showControls = false);
+      });
+    }
+  }
+
+  void _onTapScreen() {
+    setState(() => _showControls = true);
+    _scheduleControlsHide();
+  }
+
+  // ================= UI =================
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (bool didPop) async {
+        if (didPop) return;
+        // When back button is pressed, minimize the call instead of closing
+        await _minimizeCall();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(
+          child: GestureDetector(
+            onTap: _onTapScreen,
+            child: Stack(
+              children: [
+              // Remote video (full screen) — show avatar when camera is off
+              if (_remoteUid != null && !_remoteCameraOff)
+                AgoraVideoView(
+                  controller: VideoViewController.remote(
+                    rtcEngine: _engine,
+                    canvas: VideoCanvas(uid: _remoteUid),
+                    connection: RtcConnection(channelId: _channel),
+                  ),
+                )
+              else if (_remoteUid != null && _remoteCameraOff)
+                Container(
+                  color: Colors.black87,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircleAvatar(
+                          radius: 55,
+                          backgroundImage: widget.otherUserImage.isNotEmpty
+                              ? NetworkImage(widget.otherUserImage) as ImageProvider
+                              : null,
+                          backgroundColor: Colors.grey.shade700,
+                          child: widget.otherUserImage.isEmpty
+                              ? const Icon(Icons.person, size: 60, color: Colors.white70)
+                              : null,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          widget.otherUserName,
+                          style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text('Camera off', style: TextStyle(color: Colors.white60)),
+                      ],
+                    ),
+                  ),
+                )
+              else if (_callActive)
+                Container(
+                  color: Colors.black,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircleAvatar(
+                          radius: 50,
+                          backgroundColor: Colors.blue.shade800,
+                          child: const Icon(
+                            Icons.person,
+                            size: 60,
+                            color: Colors.white70,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          widget.otherUserName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          _remoteAccepted ? 'Connecting video...' : 'Calling...',
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  color: Colors.black,
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Ringing animation for outgoing calls
+                        if (_isCallRinging && widget.isOutgoingCall)
+                          _buildRingingAnimation(),
+
+                        Icon(
+                          _isCallRinging ? Icons.videocam_outlined : Icons.videocam,
+                          color: Colors.white54,
+                          size: 100,
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          widget.otherUserName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          _isCallRinging ? 'Calling...' : 'Connecting...',
+                          style: const TextStyle(color: Colors.white70, fontSize: 18),
+                        ),
+                        const SizedBox(height: 10),
+                        if (_isCallRinging && _joined)
+                          Text(
+                            'Waiting for answer...',
+                            style: TextStyle(color: Colors.orange.shade300),
+                          ),
+
+                        // Ringtone status indicator
+                        if (_isPlayingRingtone && widget.isOutgoingCall)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 20),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.music_note, color: Colors.green, size: 16),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Playing ringtone ${_speakerOn ? '(Speaker)' : '(Earpiece)'}',
+                                  style: const TextStyle(color: Colors.green, fontSize: 14),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              // Draggable local video preview (PiP)
+              if (_cameraOn && _joined)
+                Positioned(
+                  top: _pipOffset.dy,
+                  right: _pipOffset.dx,
+                  width: _kPipWidth,
+                  height: _kPipHeight,
+                  child: GestureDetector(
+                    onPanUpdate: (details) {
+                      final size = MediaQuery.sizeOf(context);
+                      setState(() {
+                        double newRight = _pipOffset.dx - details.delta.dx;
+                        double newTop = _pipOffset.dy + details.delta.dy;
+                        newRight = newRight.clamp(
+                            _kPipPadding, size.width - _kPipWidth - _kPipPadding);
+                        newTop = newTop.clamp(
+                            _kPipPadding, size.height - _kPipHeight - _kPipPadding);
+                        _pipOffset = Offset(newRight, newTop);
+                      });
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white, width: 2),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: AgoraVideoView(
+                          controller: VideoViewController(
+                            rtcEngine: _engine,
+                            canvas: const VideoCanvas(uid: 0),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+              // Animated controls overlay (auto-hide)
+              AnimatedOpacity(
+                opacity: _showControls ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: Stack(
+                  children: [
+                    // Top info bar
+                    Positioned(
+                      top: 40,
+                      left: 20,
+                      right: 20,
+                      child: Row(
+                        children: [
+                          Container(
+                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                           decoration: BoxDecoration(
+                             color: Colors.black54,
+                             borderRadius: BorderRadius.circular(20),
+                           ),
+                           child: Row(
+                             children: [
+                               Icon(
+                                 _callActive ? Icons.videocam :
+                                 (_isCallRinging ? Icons.videocam_outlined : Icons.videocam),
+                                 color: Colors.white,
+                                 size: 20,
+                               ),
+                               const SizedBox(width: 8),
+                               Text(
+                                 _callActive
+                                     ? _format(_duration)
+                                     : (_isCallRinging ? 'Calling...' : 'Connecting...'),
+                                 style: const TextStyle(color: Colors.white),
+                               ),
+                             ],
+                           ),
+                          ),
+                          const Spacer(),
+                          CallMinimizeButton(onPressed: _minimizeCall),
+                        ],
+                      ),
+                    ),
+
+                    // Bottom controls
+                    Positioned(
+                      bottom: 40,
+                      left: 0,
+                      right: 0,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                           _controlButton(
+                             icon: _micMuted ? Icons.mic_off : Icons.mic,
+                             color: Colors.white,
+                             onPressed: _callActive ? _toggleMute : null,
+                           ),
+                           _controlButton(
+                             icon: _cameraOn ? Icons.videocam : Icons.videocam_off,
+                             color: Colors.white,
+                             onPressed: _joined ? _toggleVideo : null,
+                           ),
+                          _controlButton(
+                            icon: Icons.call_end,
+                            color: Colors.red,
+                            onPressed: _endCall,
+                            size: 56,
+                          ),
+                          _controlButton(
+                            icon: Icons.switch_camera,
+                            color: Colors.white,
+                            onPressed: _joined ? _toggleCamera : null,
+                          ),
+                          _controlButton(
+                            icon: _speakerOn ? Icons.volume_up : Icons.volume_off,
+                            color: Colors.white,
+                            onPressed: (_joined || _isCallRinging) ? _toggleSpeaker : null,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Connectivity overlay banner (always on top)
+              ConnectionStatusOverlay(message: _connectionStatus),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ================= RINGING ANIMATION =================
+  Widget _buildRingingAnimation() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(3, (index) {
+          return TweenAnimationBuilder<double>(
+            tween: Tween(begin: 8.0, end: 12.0),
+            duration: Duration(milliseconds: 600 + (index * 200)),
+            curve: Curves.easeInOut,
+            builder: (context, size, child) {
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                width: size,
+                height: size,
+                decoration: BoxDecoration(
+                  color: Colors.blue,
+                  borderRadius: BorderRadius.circular(size / 2),
+                ),
+              );
+            },
+            child: null,
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _controlButton({
+    required IconData icon,
+    required Color color,
+    required VoidCallback? onPressed,
+    double size = 48,
+  }) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: onPressed != null ? Colors.black54 : Colors.black26,
+        shape: BoxShape.circle,
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: onPressed != null ? color : Colors.white30, size: size * 0.6),
+        onPressed: onPressed,
+        padding: EdgeInsets.zero,
+      ),
+    );
+  }
+
+  String _format(Duration d) =>
+      '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+
+  // ================= ADAPTIVE VIDEO QUALITY =================
+  String _getQualityText(int quality) {
+    switch (quality) {
+      case 0: return 'Unknown';
+      case 1: return 'Excellent';
+      case 2: return 'Good';
+      case 3: return 'Poor';
+      case 4: return 'Bad';
+      case 5: return 'Very Bad';
+      case 6: return 'Disconnected';
+      default: return 'Unknown';
+    }
+  }
+
+  Future<void> _adaptVideoQuality(int quality) async {
+    if (!_engineInitialized || !_joined) return;
+
+    try {
+      // Adaptive bitrate based on network quality
+      // Quality: 1=excellent, 2=good, 3=poor, 4=bad, 5=very bad, 6=down
+      VideoEncoderConfiguration config;
+
+      if (quality <= 2) {
+        // Excellent or Good - HD quality
+        config = const VideoEncoderConfiguration(
+          dimensions: VideoDimensions(width: 640, height: 480),
+          frameRate: 15,
+          bitrate: 0, // SDK determines optimal
+          minBitrate: -1,
+          orientationMode: OrientationMode.orientationModeAdaptive,
+          degradationPreference: DegradationPreference.maintainBalanced,
+          mirrorMode: VideoMirrorModeType.videoMirrorModeAuto,
+        );
+        debugPrint('📶 Network quality $quality: Maintaining HD video (640x480@15fps)');
+      } else if (quality == 3) {
+        // Poor - Reduce to standard quality
+        config = const VideoEncoderConfiguration(
+          dimensions: VideoDimensions(width: 480, height: 360),
+          frameRate: 12,
+          bitrate: 0,
+          minBitrate: -1,
+          orientationMode: OrientationMode.orientationModeAdaptive,
+          degradationPreference: DegradationPreference.maintainBalanced,
+          mirrorMode: VideoMirrorModeType.videoMirrorModeAuto,
+        );
+        debugPrint('📶 Network quality $quality: Reducing to standard video (480x360@12fps)');
+      } else if (quality >= 4) {
+        // Bad or Very Bad - Reduce to low quality
+        config = const VideoEncoderConfiguration(
+          dimensions: VideoDimensions(width: 320, height: 240),
+          frameRate: 10,
+          bitrate: 0,
+          minBitrate: -1,
+          orientationMode: OrientationMode.orientationModeAdaptive,
+          degradationPreference: DegradationPreference.maintainFramerate, // Prioritize smooth video
+          mirrorMode: VideoMirrorModeType.videoMirrorModeAuto,
+        );
+        debugPrint('📶 Network quality $quality: Reducing to low video (320x240@10fps)');
+      } else {
+        return; // Unknown quality
+      }
+
+      await _engine.setVideoEncoderConfiguration(config);
+    } catch (e) {
+      debugPrint('Error adapting video quality: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _callTimer?.cancel();
+    _timeoutTimer?.cancel();
+    _qualityUpdateTimer?.cancel();
+    _responseSubscription?.cancel();
+    _connectivitySubscription?.cancel();
+    _controlsHideTimer?.cancel();
+    // Release Agora engine if not already released by _endCall
+    if (_engineInitialized) {
+      unawaited(_releaseEngineAsync());
+    }
+    unawaited(_stopForegroundService());
+    super.dispose();
+  }
+}

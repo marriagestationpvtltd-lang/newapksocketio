@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "477405059891",
+    "project_id": "digitallamicomnp",
+    "storage_bucket": "digitallamicomnp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:477405059891:android:d38bc46dcbeb60b54d7c46",
+        "android_client_info": {
+          "package_name": "com.Marriage.Station"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDtihED7bReUPkjkhAOBFDp3zw3chUTmgU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

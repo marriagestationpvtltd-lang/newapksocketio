@@ -34,7 +34,10 @@ const pool = mysql.createPool({
   password:           process.env.DB_PASSWORD || '',
   database:           process.env.DB_NAME     || 'marriagestation',
   waitForConnections: true,
-  connectionLimit:    20,
+  connectionLimit:    50,
+  // 0 = unlimited connection request queuing; safe because we also cap at
+  // MAX_QUEUE_SIZE in the message queue, preventing unbounded work growth.
+  queueLimit:         0,
   charset:            'utf8mb4',
 });
 
@@ -96,9 +99,59 @@ pool.getConnection()
     `);
     console.log('✅ call_history table ready');
 
+    // Ensure standalone index on created_at for range queries (idempotent).
+    const [[idxCreatedAt]] = await conn.query(
+      `SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'chat_messages' AND INDEX_NAME = 'idx_created_at'
+        LIMIT 1`,
+      [dbName],
+    );
+    if (!idxCreatedAt) {
+      await conn.query(
+        `ALTER TABLE chat_messages ADD INDEX idx_created_at (created_at)`
+      ).catch(e => console.warn('idx_created_at already exists:', e.message));
+      console.log('✅ Added idx_created_at index to chat_messages');
+    }
+
     conn.release();
   })
   .catch(err => { console.error('❌ MySQL connection failed:', err.message); });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Rate limiting & in-memory message queue
+// ──────────────────────────────────────────────────────────────────────────────
+const RATE_LIMIT_MAX  = 10;     // max messages a socket may send per second
+const RATE_LIMIT_WIN  = 1000;   // sliding window in ms
+const BATCH_INTERVAL  = 750;    // worker fires every 750 ms
+const BATCH_SIZE      = 200;    // max messages processed per worker tick
+const MAX_QUEUE_SIZE  = 10000;  // hard cap; oldest entries dropped when exceeded
+const MAX_RETRIES     = 3;      // retry failed batch inserts up to this many times
+
+/** socketId → { count, windowStart } */
+const socketRateLimits = new Map();
+
+/**
+ * Returns true if the socket has exceeded RATE_LIMIT_MAX messages in the
+ * current RATE_LIMIT_WIN window.  Increments the counter otherwise.
+ */
+function isRateLimited(socketId) {
+  const now = Date.now();
+  const rl  = socketRateLimits.get(socketId);
+  if (!rl || (now - rl.windowStart) >= RATE_LIMIT_WIN) {
+    socketRateLimits.set(socketId, { count: 1, windowStart: now });
+    return false;
+  }
+  rl.count += 1;
+  return rl.count > RATE_LIMIT_MAX;
+}
+
+/**
+ * Queue of pending message objects.
+ * Shape: { messageId, chatRoomId, senderId, receiverId, message, messageType,
+ *          isRead, isDelivered, repliedTo, timestamp,
+ *          user1Name, user2Name, user1Image, user2Image, _retries }
+ */
+const messageQueue = [];
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Express + Socket.IO setup
@@ -274,11 +327,8 @@ const userActiveChatRoom = new Map(); // userId → chatRoomId | null
 // ──────────────────────────────────────────────────────────────────────────────
 
 async function ensureChatRoom({ chatRoomId, user1Id, user2Id, user1Name, user2Name, user1Image, user2Image }) {
-  const [rows] = await pool.query('SELECT id FROM chat_rooms WHERE id = ?', [chatRoomId]);
-  if (rows.length) return;
-
   await pool.query(
-    `INSERT INTO chat_rooms
+    `INSERT IGNORE INTO chat_rooms
        (id, participants, participant_names, participant_images, last_message, last_message_type, last_message_time, last_message_sender_id)
      VALUES (?, ?, ?, ?, '', 'text', NOW(), '')`,
     [
@@ -314,6 +364,38 @@ async function saveMessage(msg) {
       msg.repliedTo ? JSON.stringify(msg.repliedTo) : null,
       msg.timestamp ? new Date(msg.timestamp) : new Date(),
     ],
+  );
+}
+
+/**
+ * Batch-insert an array of message objects in a single query.
+ * Uses INSERT IGNORE so duplicate message_ids are silently skipped.
+ */
+async function saveMessageBatch(messages) {
+  if (!messages.length) return;
+  const values       = [];
+  const placeholders = messages.map(msg => {
+    values.push(
+      msg.messageId,
+      msg.chatRoomId,
+      msg.senderId,
+      msg.receiverId,
+      msg.message || '',
+      msg.messageType || 'text',
+      msg.isRead     ? 1 : 0,
+      msg.isDelivered ? 1 : 0,
+      msg.repliedTo ? JSON.stringify(msg.repliedTo) : null,
+      msg.timestamp ? new Date(msg.timestamp) : new Date(),
+    );
+    return '(?,?,?,?,?,?,?,?,?,?,0)';
+  }).join(',');
+
+  await pool.query(
+    `INSERT IGNORE INTO chat_messages
+       (message_id, chat_room_id, sender_id, receiver_id, message, message_type,
+        is_read, is_delivered, replied_to, created_at, liked)
+     VALUES ${placeholders}`,
+    values,
   );
 }
 
@@ -553,66 +635,53 @@ io.on('connection', (socket) => {
   });
 
   // ── send_message ──────────────────────────────────────────────────────────
-  socket.on('send_message', async (data) => {
-    try {
-      const {
-        chatRoomId, senderId, receiverId,
-        message, messageType = 'text',
-        messageId = uuidv4(),
-        repliedTo, isReceiverViewing = false,
-        user1Name, user2Name, user1Image, user2Image,
-      } = data;
+  socket.on('send_message', (data) => {
+    // ── Rate limit check (synchronous, no DB) ────────────────────────────
+    if (isRateLimited(socket.id)) return; // silently drop
 
-      if (!chatRoomId || !senderId || !receiverId) return;
+    const {
+      chatRoomId, senderId, receiverId,
+      message, messageType = 'text',
+      messageId = uuidv4(),
+      repliedTo, isReceiverViewing = false,
+      user1Name, user2Name, user1Image, user2Image,
+    } = data || {};
 
-      // Resolve names/images from data or use empty defaults
-      const names  = { [senderId]: user1Name || '', [receiverId]: user2Name || '' };
-      const images = { [senderId]: user1Image || '', [receiverId]: user2Image || '' };
+    if (!chatRoomId || !senderId || !receiverId) return;
 
-      await ensureChatRoom({
-        chatRoomId,
-        user1Id: senderId,    user2Id: receiverId,
-        user1Name: names[senderId],  user2Name: names[receiverId],
-        user1Image: images[senderId], user2Image: images[receiverId],
-      });
+    const timestamp = new Date().toISOString();
+    const isReceiverCurrentlyViewing = isReceiverViewing ||
+      userActiveChatRoom.get(receiverId.toString()) === chatRoomId;
 
-      const timestamp = new Date().toISOString();
-      const isReceiverCurrentlyViewing = isReceiverViewing ||
-        userActiveChatRoom.get(receiverId.toString()) === chatRoomId;
+    const msgDoc = {
+      messageId, chatRoomId, senderId, receiverId,
+      message:    message || '',
+      messageType,
+      timestamp,
+      isRead:               isReceiverCurrentlyViewing,
+      isDelivered:          isReceiverCurrentlyViewing,
+      isDeletedForSender:   false,
+      isDeletedForReceiver: false,
+      repliedTo:            repliedTo || null,
+      // metadata for worker (not emitted to clients)
+      user1Name:  user1Name  || '',
+      user2Name:  user2Name  || '',
+      user1Image: user1Image || '',
+      user2Image: user2Image || '',
+      _retries:   0,
+    };
 
-      const msgDoc = {
-        messageId, chatRoomId, senderId, receiverId,
-        message:    message || '',
-        messageType,
-        timestamp,
-        isRead:                isReceiverCurrentlyViewing,
-        isDelivered:           isReceiverCurrentlyViewing,
-        isDeletedForSender:    false,
-        isDeletedForReceiver:  false,
-        repliedTo:             repliedTo || null,
-      };
-
-      await saveMessage(msgDoc);
-      await updateChatRoomLastMessage({
-        chatRoomId, message: message || '', messageType,
-        senderId, receiverId,
-        isReceiverViewing: isReceiverCurrentlyViewing,
-      });
-
-      // Broadcast to all room members (including sender for confirmation)
-      io.to(chatRoomId).emit('new_message', msgDoc);
-
-      // Update chat-list for both participants
-      const rooms1 = await getChatRooms(senderId);
-      io.to(`user:${senderId}`).emit('chat_rooms_update', { chatRooms: rooms1 });
-
-      const rooms2 = await getChatRooms(receiverId);
-      io.to(`user:${receiverId}`).emit('chat_rooms_update', { chatRooms: rooms2 });
-
-    } catch (err) {
-      console.error('send_message error:', err.message);
-      socket.emit('error', { message: 'Failed to send message' });
+    // ── Enqueue (non-blocking) ────────────────────────────────────────────
+    if (messageQueue.length >= MAX_QUEUE_SIZE) {
+      messageQueue.shift(); // drop oldest to prevent unbounded growth
+      console.warn(`⚠️  Message queue at capacity (${MAX_QUEUE_SIZE}); oldest message dropped`);
     }
+    messageQueue.push(msgDoc);
+
+    // ── Immediate broadcast (optimistic, no DB wait) ──────────────────────
+    // Emit only the client-facing fields (omit worker-only metadata).
+    const { user1Name: _u1n, user2Name: _u2n, user1Image: _u1i, user2Image: _u2i, _retries, ...clientMsg } = msgDoc;
+    io.to(chatRoomId).emit('new_message', clientMsg);
   });
 
   // ── get_messages ──────────────────────────────────────────────────────────
@@ -849,6 +918,7 @@ io.on('connection', (socket) => {
   // ── disconnect ────────────────────────────────────────────────────────────
   socket.on('disconnect', async () => {
     console.log(`🔌 Socket disconnected: ${socket.id}`);
+    socketRateLimits.delete(socket.id);
     if (!authenticatedUserId) return;
 
     userSockets.delete(authenticatedUserId);
@@ -866,7 +936,116 @@ io.on('connection', (socket) => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Start server
+// Batch worker — drains the message queue every BATCH_INTERVAL ms
+// ──────────────────────────────────────────────────────────────────────────────
+let totalMsgsSinceLastStat = 0;
+
+setInterval(async () => {
+  if (!messageQueue.length) return;
+
+  const batch = messageQueue.splice(0, BATCH_SIZE);
+  totalMsgsSinceLastStat += batch.length;
+
+  // 1. Ensure chat rooms exist for every unique room in the batch (INSERT IGNORE).
+  const uniqueRooms = new Map(); // chatRoomId → first msg with that room
+  for (const msg of batch) {
+    if (!uniqueRooms.has(msg.chatRoomId)) uniqueRooms.set(msg.chatRoomId, msg);
+  }
+  for (const [chatRoomId, msg] of uniqueRooms) {
+    try {
+      await ensureChatRoom({
+        chatRoomId,
+        user1Id:    msg.senderId,   user2Id:    msg.receiverId,
+        user1Name:  msg.user1Name,  user2Name:  msg.user2Name,
+        user1Image: msg.user1Image, user2Image: msg.user2Image,
+      });
+    } catch (err) {
+      console.error(`Worker ensureChatRoom error [${chatRoomId}]:`, err.message);
+    }
+  }
+
+  // 2. Batch-insert all messages; retry on failure.
+  const dbStart = Date.now();
+  try {
+    await saveMessageBatch(batch);
+    const dbMs = Date.now() - dbStart;
+    if (dbMs > 500) console.warn(`⚠️  Slow batch insert: ${dbMs}ms for ${batch.length} messages`);
+  } catch (err) {
+    console.error('Worker batch insert error:', err.message);
+    // Re-queue messages that haven't exceeded max retries
+    const toRetry = batch.filter(m => (m._retries || 0) < MAX_RETRIES).map(m => {
+      m._retries = (m._retries || 0) + 1;
+      return m;
+    });
+    if (toRetry.length) {
+      // Use a loop instead of spread to avoid stack overflow on large arrays.
+      for (let i = toRetry.length - 1; i >= 0; i--) {
+        messageQueue.unshift(toRetry[i]);
+      }
+    }
+    const dropped = batch.length - toRetry.length;
+    if (dropped > 0) console.error(`Worker dropped ${dropped} messages after ${MAX_RETRIES} retries`);
+    return; // skip chat_rooms update for this failed batch
+  }
+
+  // 3. Update chat_rooms with the latest message per room.
+  const roomLatest = new Map(); // chatRoomId → most recent msg
+  for (const msg of batch) {
+    const existing = roomLatest.get(msg.chatRoomId);
+    if (!existing || new Date(msg.timestamp) > new Date(existing.timestamp)) {
+      roomLatest.set(msg.chatRoomId, msg);
+    }
+  }
+  for (const [, msg] of roomLatest) {
+    try {
+      await updateChatRoomLastMessage({
+        chatRoomId:         msg.chatRoomId,
+        message:            msg.message,
+        messageType:        msg.messageType,
+        senderId:           msg.senderId,
+        receiverId:         msg.receiverId,
+        isReceiverViewing:  msg.isRead,
+      });
+    } catch (err) {
+      console.error('Worker updateChatRoomLastMessage error:', err.message);
+    }
+  }
+
+  // 4. Broadcast updated chat-room lists to all affected users (deduplicated).
+  const affectedUsers = new Set();
+  for (const msg of batch) {
+    affectedUsers.add(msg.senderId.toString());
+    affectedUsers.add(msg.receiverId.toString());
+  }
+  for (const uid of affectedUsers) {
+    try {
+      const rooms = await getChatRooms(uid);
+      io.to(`user:${uid}`).emit('chat_rooms_update', { chatRooms: rooms });
+    } catch (err) {
+      console.error(`Worker getChatRooms error [userId=${uid}]:`, err.message);
+    }
+  }
+}, BATCH_INTERVAL);
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Monitoring — log key stats every 10 s
+// ──────────────────────────────────────────────────────────────────────────────
+const MONITOR_INTERVAL = 10000; // ms (10 seconds)
+setInterval(() => {
+  const mem        = process.memoryUsage();
+  const heapMB     = (mem.heapUsed  / 1024 / 1024).toFixed(1);
+  const rssMB      = (mem.rss       / 1024 / 1024).toFixed(1);
+  const rate       = (totalMsgsSinceLastStat / (MONITOR_INTERVAL / 1000)).toFixed(1);
+  const queueSize  = messageQueue.length;
+  const connCount  = userSockets.size;
+
+  console.log(
+    `📊 Stats | msg/s: ${rate} | queue: ${queueSize}` +
+    ` | sockets: ${connCount} | heap: ${heapMB}MB | rss: ${rssMB}MB`,
+  );
+  totalMsgsSinceLastStat = 0;
+}, MONITOR_INTERVAL);
+
 // ──────────────────────────────────────────────────────────────────────────────
 server.listen(PORT, () => {
   console.log(`🚀 Socket.IO server running on port ${PORT}`);

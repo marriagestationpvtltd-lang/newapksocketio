@@ -72,6 +72,20 @@ class CallHistoryService {
     }
   }
 
+  // Get call history as a one-shot Stream (emits once with current data).
+  // Used in ChatDetailsScreen to listen for updates via a StreamSubscription.
+  static Stream<List<CallHistory>> getCallHistory(String userId, {int limit = 100}) {
+    return Stream.fromFuture(getCallHistoryFuture(userId, limit: limit));
+  }
+
+  // Get call history with named parameters for use in admin chat (returns a Future).
+  static Future<List<CallHistory>> getCallHistoryPaginated({
+    required String userId,
+    int limit = 50,
+  }) {
+    return getCallHistoryFuture(userId, limit: limit);
+  }
+
   // Get call history for a specific user (returns a Future for use with FutureBuilder)
   static Future<List<CallHistory>> getCallHistoryFuture(String userId, {int limit = 100}) async {
     try {

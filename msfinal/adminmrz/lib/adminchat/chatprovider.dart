@@ -292,7 +292,7 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Update a single user's online status in chatList (called by Firestore listener)
+  // Update a single user's online status in chatList from socket presence events.
   void updateUserOnlineStatus(String userId, bool isOnline, String lastSeenText) {
     final idx = _chatList.indexWhere((u) => u['id'] == userId);
     if (idx == -1) {

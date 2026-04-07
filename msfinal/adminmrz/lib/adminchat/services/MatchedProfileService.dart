@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:adminmrz/adminchat/services/admin_socket_service.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../model/MatchedProfile.dart';
@@ -20,8 +20,8 @@ class MatchedProfileProvider with ChangeNotifier {
   String _searchQuery = '';
   String _filterType = 'matched'; // 'matched' | 'all'
 
-  // Firestore presence listener for matched profiles
-  StreamSubscription<QuerySnapshot>? _presenceSub;
+  final AdminSocketService _socketService = AdminSocketService();
+  StreamSubscription<Map<String, dynamic>>? _presenceSub;
 
   String get memberid => _memberid;
   String get name => _name;
@@ -276,31 +276,21 @@ class MatchedProfileProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Start a Firestore real-time listener that immediately reflects online/offline
-  // changes for matched profiles as soon as the user-side app writes to 'users'.
-  // The full collection is listened to for simplicity; changes not matching any
-  // loaded matched profile are ignored (no-op).
+  // Start a socket-based presence listener that immediately reflects
+  // online/offline changes for the currently loaded matched profiles.
   void startPresenceListener() {
     _presenceSub?.cancel();
-    _presenceSub = FirebaseFirestore.instance
-        .collection('users')
-        .snapshots()
-        .listen((snapshot) {
+    _socketService.connect();
+    _presenceSub = _socketService.onUserStatusChange.listen((data) {
       bool changed = false;
-      for (final change in snapshot.docChanges) {
-        if (change.type == DocumentChangeType.removed) continue;
-        final data = change.doc.data();
-        if (data == null) continue;
+      final int userId = int.tryParse(data['userId']?.toString() ?? '') ?? -1;
+      if (userId == -1) return;
+      final bool isOnline = data['isOnline'] == true;
 
-        final int userId = int.tryParse(change.doc.id) ?? -1;
-        if (userId == -1) continue;
-        final isOnline = data['isOnline'] as bool? ?? false;
-
-        final idx = _matchedProfiles.indexWhere((p) => p.id == userId);
-        if (idx != -1 && _matchedProfiles[idx].isOnline != isOnline) {
-          _matchedProfiles[idx] = _matchedProfiles[idx].copyWith(isOnline: isOnline);
-          changed = true;
-        }
+      final idx = _matchedProfiles.indexWhere((p) => p.id == userId);
+      if (idx != -1 && _matchedProfiles[idx].isOnline != isOnline) {
+        _matchedProfiles[idx] = _matchedProfiles[idx].copyWith(isOnline: isOnline);
+        changed = true;
       }
       if (changed) notifyListeners();
     }, onError: (e) {

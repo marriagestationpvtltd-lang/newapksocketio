@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:html' as html;
 import 'package:adminmrz/auth/service.dart';
+import 'package:adminmrz/adminchat/services/admin_socket_service.dart';
 import 'package:adminmrz/core/theme_provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -54,12 +54,9 @@ class _DashboardPageState extends State<DashboardPage> {
   late final List<Widget> _pages;
 
   // ── Global chat notification listener ────────────────────────────────────
-  // Listens to Firestore conversations at all times so that chat notifications
-  // are delivered even when the admin is on a page other than the Chat tab.
   static const int _adminSenderId = 1;
-  StreamSubscription<QuerySnapshot>? _globalConversationSub;
-  final Map<String, Timestamp?> _globalPrevTimestamps = {};
-  bool _isFirstGlobalSnapshot = true;
+  final AdminSocketService _socketService = AdminSocketService();
+  StreamSubscription<Map<String, dynamic>>? _globalMessageSub;
   // Tracks known user names fetched lazily for notification display.
   final Map<String, String> _globalUserNames = {};
   // JS event listener reference kept so we can remove it on dispose.
@@ -84,7 +81,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   void dispose() {
-    _globalConversationSub?.cancel();
+    _globalMessageSub?.cancel();
     html.window.removeEventListener('chatNotification', _onChatNotifEvent);
     super.dispose();
   }
@@ -102,71 +99,18 @@ class _DashboardPageState extends State<DashboardPage> {
     _openChatForUser(userId);
   }
 
-  /// Firestore listener that runs regardless of which page is active.
-  /// When a new message arrives and the Chat tab is NOT open, a browser
-  /// notification is shown so the admin is always informed.
   void _startGlobalConversationListener() {
-    _isFirstGlobalSnapshot = true;
-    _globalConversationSub = FirebaseFirestore.instance
-        .collection('conversations')
-        .where('participants', arrayContains: _adminSenderId.toString())
-        .orderBy('lastTimestamp', descending: true)
-        .snapshots()
-        .listen((snapshot) {
+    _socketService.connect();
+    _globalMessageSub?.cancel();
+    _globalMessageSub = _socketService.onNewMessage.listen((data) {
       if (!mounted) return;
-
-      if (!_isFirstGlobalSnapshot) {
-        for (final change in snapshot.docChanges) {
-          if (change.type != DocumentChangeType.added &&
-              change.type != DocumentChangeType.modified) continue;
-
-          final data = change.doc.data() as Map<String, dynamic>;
-
-          // Only react to messages sent by the user (not the admin).
-          final lastSenderId = data['lastSenderId']?.toString() ?? '';
-          if (lastSenderId == _adminSenderId.toString()) continue;
-
-          final List participants =
-              List<String>.from(data['participants'] ?? []);
-          final String otherUserId = participants.firstWhere(
-            (id) => id != _adminSenderId.toString(),
-            orElse: () => '',
-          );
-          if (otherUserId.isEmpty) continue;
-
-          final Timestamp? newTs = data['lastTimestamp'] as Timestamp?;
-          final Timestamp? prevTs = _globalPrevTimestamps[otherUserId];
-
-          final bool isNewMessage = newTs != null &&
-              (prevTs == null || newTs.compareTo(prevTs) > 0);
-          if (!isNewMessage) continue;
-
-          // Skip if the Chat tab is currently visible — ChatSidebar handles it.
-          if (_selectedIndex == 5) continue;
-
-          final String lastMessage = data['lastMessage']?.toString() ?? '';
-          _showGlobalNotification(
-            userId: otherUserId,
-            message: lastMessage,
-          );
-          break; // one notification per snapshot batch is enough (matches ChatSidebar behaviour)
-        }
-      }
-      _isFirstGlobalSnapshot = false;
-
-      // Update previous timestamps.
-      for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        final List participants = List<String>.from(data['participants'] ?? []);
-        final String otherUserId = participants.firstWhere(
-          (id) => id != _adminSenderId.toString(),
-          orElse: () => '',
-        );
-        if (otherUserId.isNotEmpty) {
-          _globalPrevTimestamps[otherUserId] =
-              data['lastTimestamp'] as Timestamp?;
-        }
-      }
+      final senderId = data['senderId']?.toString() ?? '';
+      if (senderId.isEmpty || senderId == _adminSenderId.toString()) return;
+      if (_selectedIndex == 5) return;
+      _showGlobalNotification(
+        userId: senderId,
+        message: _messagePreviewFromSocket(data),
+      );
     });
   }
 
@@ -180,17 +124,16 @@ class _DashboardPageState extends State<DashboardPage> {
     // Resolve a display name; use the cache when available.
     String senderName = _globalUserNames[userId] ?? '';
     if (senderName.isEmpty) {
-      try {
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(userId)
-            .get();
-        if (doc.exists) {
-          final data = doc.data();
-          senderName =
-              data?['name']?.toString() ?? data?['displayName']?.toString() ?? '';
-        }
-      } catch (_) {}
+      final chatProvider = context.read<ChatProvider>();
+      final user = chatProvider.getUserById(int.tryParse(userId) ?? -1);
+      senderName = user?['namee']?.toString() ?? '';
+      if (senderName.isEmpty && chatProvider.chatList.isEmpty) {
+        await chatProvider.fetchChatList();
+        senderName =
+            chatProvider.getUserById(int.tryParse(userId) ?? -1)?['namee']
+                ?.toString() ??
+            '';
+      }
       if (senderName.isEmpty) senderName = 'Someone';
       // Limit the cache size to avoid unbounded growth in long-running sessions.
       if (_globalUserNames.length >= 200) _globalUserNames.clear();
@@ -211,6 +154,21 @@ class _DashboardPageState extends State<DashboardPage> {
       userId: userId,
       showInForeground: true,
     );
+  }
+
+  String _messagePreviewFromSocket(Map<String, dynamic> data) {
+    final type = data['messageType']?.toString() ?? 'text';
+    switch (type) {
+      case 'image':
+        return '📷 Photo';
+      case 'profile_card':
+        return '👤 Match Profile';
+      case 'call':
+        return '📞 Call';
+      default:
+        final text = data['message']?.toString() ?? '';
+        return text.isEmpty ? '📷 Photo' : text;
+    }
   }
 
   /// Navigate to the Chat tab and pre-select [userId] so the conversation

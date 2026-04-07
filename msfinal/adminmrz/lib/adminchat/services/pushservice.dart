@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
 import 'dart:async';
 
@@ -195,18 +194,6 @@ class NotificationService {
     required String recipientUid,
     String? channelName,
   }) async {
-    // When the user rejects the call, write a real-time rejection signal to
-    // Firestore so the admin call screen can drop immediately.
-    if (!accepted && channelName != null && channelName.isNotEmpty) {
-      await FirebaseFirestore.instance
-          .collection('call_signals')
-          .doc(channelName)
-          .set(
-            {'status': 'rejected', 'timestamp': FieldValue.serverTimestamp()},
-            SetOptions(merge: true),
-          )
-          .catchError((_) {});
-    }
     return await sendNotification(
       userId: callerId, // Send back to the CALLER
       title: accepted ? '✅ Call Accepted' : '❌ Call Rejected',
@@ -311,18 +298,6 @@ class NotificationService {
     required String recipientUid,
     String? channelName,
   }) async {
-    // When the user rejects the call, write a real-time rejection signal to
-    // Firestore so the admin call screen can drop immediately.
-    if (!accepted && channelName != null && channelName.isNotEmpty) {
-      await FirebaseFirestore.instance
-          .collection('call_signals')
-          .doc(channelName)
-          .set(
-            {'status': 'rejected', 'timestamp': FieldValue.serverTimestamp()},
-            SetOptions(merge: true),
-          )
-          .catchError((_) {});
-    }
     return await sendNotification(
       userId: callerId, // Send back to the CALLER
       title: accepted ? '✅ Video Call Accepted' : '❌ Video Call Rejected',

@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:math';
+import 'package:adminmrz/adminchat/services/admin_socket_service.dart';
 import 'package:adminmrz/adminchat/services/pushservice.dart';
 import 'package:adminmrz/settings/call_settings_provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -68,7 +68,9 @@ class _CallScreenState extends State<CallScreen>
   late AudioPlayer _ringtonePlayer;
   Timer? _ringtoneRepeatTimer;
 
-  StreamSubscription<DocumentSnapshot>? _callSignalSubscription;
+  final AdminSocketService _socketService = AdminSocketService();
+  StreamSubscription<Map<String, dynamic>>? _callRejectedSubscription;
+  StreamSubscription<Map<String, dynamic>>? _callEndedSubscription;
 
   // Animation controllers
   late AnimationController _pulseController;
@@ -172,6 +174,7 @@ class _CallScreenState extends State<CallScreen>
       );
 
       if (widget.isOutgoingCall) {
+        final socketReady = await _socketService.ensureConnected();
         await NotificationService.sendCallNotification(
           recipientUserId: widget.otherUserId,
           callerName: widget.currentUserName,
@@ -181,41 +184,41 @@ class _CallScreenState extends State<CallScreen>
           agoraAppId: AgoraTokenService.appId,
           agoraCertificate: 'SERVER_ONLY',
         );
-      }
+        if (socketReady) {
+          _socketService.emitCallInvite(
+            recipientId: widget.otherUserId,
+            callerId: widget.currentUserId,
+            callerName: widget.currentUserName,
+            callerImage: '',
+            channelName: _channel,
+            callerUid: _localUid.toString(),
+            callType: 'audio',
+            chatRoomId: AdminSocketService.chatRoomId(widget.otherUserId),
+          );
+        }
 
-      // ================= FIRESTORE SIGNAL =================
-      if (widget.isOutgoingCall) {
-        await FirebaseFirestore.instance
-            .collection('call_signals')
-            .doc(_channel)
-            .set({
-          'status': 'ringing',
-          'callerId': widget.currentUserId,
-          'receiverId': widget.otherUserId,
-          'type': 'audio',
-          'timestamp': FieldValue.serverTimestamp(),
-        });
-
-        // Phase 2 – transition to "Ringing..." once notification+Firestore are set
+        // Phase 2 – transition to "Ringing..." once notification+socket are set
         if (mounted) {
           setState(() => _callStatus = _CallStatus.ringing);
         }
 
-        // Listen for rejection from the user's app.
-        _callSignalSubscription = FirebaseFirestore.instance
-            .collection('call_signals')
-            .doc(_channel)
-            .snapshots()
-            .listen(
-          (snap) async {
-            if (!mounted || _ending) return;
-            final data = snap.data();
-            if (data != null && data['status'] == 'rejected') {
-              await _endCall();
-            }
-          },
-          onError: (_) {/* non-fatal; timeout will still fire */},
-        );
+        _callRejectedSubscription?.cancel();
+        _callRejectedSubscription =
+            _socketService.onCallRejected.listen((data) async {
+          if (!mounted || _ending) return;
+          if (data['channelName']?.toString() == _channel) {
+            await _endCall();
+          }
+        });
+
+        _callEndedSubscription?.cancel();
+        _callEndedSubscription =
+            _socketService.onCallEnded.listen((data) async {
+          if (!mounted || _ending) return;
+          if (data['channelName']?.toString() == _channel) {
+            await _endCall();
+          }
+        });
       }
 
       // ================= AGORA =================
@@ -270,9 +273,16 @@ class _CallScreenState extends State<CallScreen>
       // ================= TIMEOUT =================
       _timeoutTimer = Timer(const Duration(seconds: 30), () async {
         if (_remoteUid == null && !_ending) {
-          await NotificationService.sendMissedCallNotification(
-            callerId: widget.currentUserId,
-            callerName: widget.currentUserName,
+          await NotificationService.sendNotification(
+            userId: widget.otherUserId,
+            title: '⏰ Missed Call',
+            body: 'Missed call from ${widget.currentUserName}',
+            data: {
+              'type': 'missed_call',
+              'callerId': widget.currentUserId,
+              'callerName': widget.currentUserName,
+              'timestamp': DateTime.now().toIso8601String(),
+            },
           );
           await _endCall();
         }
@@ -346,15 +356,29 @@ class _CallScreenState extends State<CallScreen>
       _callTimer?.cancel();
       _timeoutTimer?.cancel();
 
-      await _callSignalSubscription?.cancel();
-      _callSignalSubscription = null;
+      await _callRejectedSubscription?.cancel();
+      await _callEndedSubscription?.cancel();
+      _callRejectedSubscription = null;
+      _callEndedSubscription = null;
 
       if (widget.isOutgoingCall) {
-        FirebaseFirestore.instance
-            .collection('call_signals')
-            .doc(_channel)
-            .delete()
-            .catchError((_) {});
+        if (_callActive) {
+          _socketService.emitCallEnd(
+            callerId: widget.currentUserId,
+            recipientId: widget.otherUserId,
+            channelName: _channel,
+            callType: 'audio',
+            duration: _duration.inSeconds,
+          );
+        } else {
+          _socketService.emitCallCancel(
+            recipientId: widget.otherUserId,
+            callerId: widget.currentUserId,
+            callerName: widget.currentUserName,
+            channelName: _channel,
+            callType: 'audio',
+          );
+        }
       }
 
       await _stopRingtone();
@@ -654,7 +678,8 @@ class _CallScreenState extends State<CallScreen>
     _callTimer?.cancel();
     _timeoutTimer?.cancel();
     _ringtoneRepeatTimer?.cancel();
-    _callSignalSubscription?.cancel();
+    _callRejectedSubscription?.cancel();
+    _callEndedSubscription?.cancel();
 
     try {
       _engine.leaveChannel();

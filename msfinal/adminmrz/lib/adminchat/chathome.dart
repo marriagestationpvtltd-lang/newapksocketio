@@ -2962,8 +2962,8 @@ class _ChatWindowState extends State<ChatWindow> {
             return msg.length > _kMaxQuoteLength ? '${msg.substring(0, _kMaxQuoteLength)}…' : msg;
           }());
     final IconData leadIcon = isEditing ? Icons.edit_outlined : Icons.reply_rounded;
-    final String? replyImageUrl = (!isEditing)
-        ? _replyingTo?['imageUrl']?.toString()
+    final String? replyImageUrl = !isEditing
+        ? (_replyingTo?['imageUrl']?.toString())
         : null;
     final bool hasReplyImage = replyImageUrl != null && replyImageUrl.isNotEmpty;
 

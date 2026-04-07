@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui'; // Required for ImageFilter
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:ms2026/Chat/ChatdetailsScreen.dart';
@@ -2633,47 +2632,15 @@ class _ContactInfoSection extends StatelessWidget {
               // ✅ VERIFIED DOCUMENT AND PAID MEMBER → Can chat
               if (docStatus == "approved" && userType == "paid") {
                 try {
-                  // 🔥 Generate chatRoomId (sorted)
+                  // Generate chatRoomId (sorted)
                   List<String> ids = [currentUserId, userId];
                   ids.sort();
                   String chatRoomId = ids.join('_');
 
-                  // 🔥 Check if chatRoom exists
-                  final chatRoomDoc = await FirebaseFirestore.instance
-                      .collection('chatRooms')
-                      .doc(chatRoomId)
-                      .get();
+                  // Chat room is auto-created by the Socket.IO server on first message send.
+                  // No need to pre-create it in Firestore.
 
-                  // 🔥 Create if not exists
-                  if (!chatRoomDoc.exists) {
-                    await FirebaseFirestore.instance
-                        .collection('chatRooms')
-                        .doc(chatRoomId)
-                        .set({
-                      'chatRoomId': chatRoomId,
-                      'participants': [currentUserId, userId],
-                      'participantNames': {
-                        currentUserId: currentUserName,
-                        userId: userName,
-                      },
-                      'participantImages': {
-                        currentUserId: resolveApiImageUrl(currentUserImage),
-                        userId: resolveApiImageUrl(userProfile.avatarUrl),
-                      },
-                      'unreadCount': {
-                        currentUserId: 0,
-                        userId: 0,
-                      },
-                      'lastMessage': '',
-                      'lastMessageType': 'text',
-                      'lastMessageTime': DateTime.now(),
-                      'lastMessageSenderId': '',
-                      'createdAt': DateTime.now(),
-                      'updatedAt': DateTime.now(),
-                    });
-                  }
-
-                  // ✅ Navigate
+                  // Navigate
                   Navigator.push(
                     context,
                     MaterialPageRoute(

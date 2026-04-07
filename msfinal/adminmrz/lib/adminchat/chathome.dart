@@ -1999,32 +1999,29 @@ class _ChatWindowState extends State<ChatWindow> {
     return DateFormat('MMM d, y').format(dateTime);
   }
 
-  List<QueryDocumentSnapshot> _sortMessagesChronologically(
-    List<QueryDocumentSnapshot> messages,
+  List<Map<String, dynamic>> _sortMessagesChronologically(
+    List<Map<String, dynamic>> messages,
   ) {
-    final sorted = List<QueryDocumentSnapshot>.from(messages);
+    final sorted = List<Map<String, dynamic>>.from(messages);
     final fallbackTimestamp = DateTime.now();
     sorted.sort((a, b) {
-      final aData = a.data() as Map<String, dynamic>;
-      final bData = b.data() as Map<String, dynamic>;
       final aTimestamp =
-          _messageTimestampFromData(aData, fallback: fallbackTimestamp);
+          _messageTimestampFromData(a, fallback: fallbackTimestamp);
       final bTimestamp =
-          _messageTimestampFromData(bData, fallback: fallbackTimestamp);
+          _messageTimestampFromData(b, fallback: fallbackTimestamp);
       return aTimestamp.compareTo(bTimestamp);
     });
     return sorted;
   }
 
   List<_ChatMessageDateGroup> _groupMessagesByDate(
-    List<QueryDocumentSnapshot> messages,
+    List<Map<String, dynamic>> messages,
   ) {
     final groups = <_ChatMessageDateGroup>[];
     final fallbackTimestamp = DateTime.now();
     final referenceNow = DateTime.now();
 
-    for (final doc in _sortMessagesChronologically(messages)) {
-      final data = doc.data() as Map<String, dynamic>;
+    for (final data in _sortMessagesChronologically(messages)) {
       final timestamp =
           _messageTimestampFromData(data, fallback: fallbackTimestamp);
       final date = _dateOnly(timestamp);
@@ -2034,11 +2031,11 @@ class _ChatWindowState extends State<ChatWindow> {
           _ChatMessageDateGroup(
             date: date,
             headerLabel: _formatDateHeader(timestamp, referenceNow),
-            messages: [doc],
+            messages: [data],
           ),
         );
       } else {
-        groups.last.messages.add(doc);
+        groups.last.messages.add(data);
       }
     }
 
@@ -3879,13 +3876,13 @@ enum _MsgAction { reply, edit, delete, unsend }
 class _ChatMessageDateGroup {
   final DateTime date;
   final String headerLabel;
-  final List<QueryDocumentSnapshot> messages;
+  final List<Map<String, dynamic>> messages;
 
   _ChatMessageDateGroup({
     required this.date,
     required this.headerLabel,
-    required List<QueryDocumentSnapshot> messages,
-  }) : messages = List<QueryDocumentSnapshot>.from(messages);
+    required List<Map<String, dynamic>> messages,
+  }) : messages = List<Map<String, dynamic>>.from(messages);
 }
 
 // ---------------------------------------------------------------------------

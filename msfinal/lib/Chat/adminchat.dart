@@ -561,6 +561,21 @@ class _AdminChatScreenState extends State<AdminChatScreen>
 
   void _startAdminStatusListener() {
     _adminStatusSubscription?.cancel();
+
+    // Fetch initial admin status
+    _socketService.getUserStatus(_adminUserId).then((statusData) {
+      if (!mounted) return;
+      final bool online = statusData['isOnline'] == true;
+      final DateTime? lastSeen = SocketService.parseTimestamp(statusData['lastSeen']);
+      setState(() {
+        _adminOnline = online;
+        if (!online && lastSeen != null) _adminLastSeen = lastSeen;
+      });
+    }).catchError((e) {
+      debugPrint('Error fetching admin status: $e');
+    });
+
+    // Listen for status changes
     _adminStatusSubscription =
         _socketService.onUserStatusChange.listen((data) {
       if (!mounted) return;

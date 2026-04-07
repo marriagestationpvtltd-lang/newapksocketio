@@ -38,7 +38,6 @@ class CallManager {
 
     print('📱 CallManager: Incoming call triggered: $data');
     _currentCallData = data;
-    _callScreenShowing = false; // reset for new incoming call
     _incomingCallController.add(data);
 
     // Cancel any previous auto-reject timer before arming a new one

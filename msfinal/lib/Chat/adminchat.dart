@@ -25,6 +25,7 @@ import '../pushnotification/pushservice.dart';
 import '../service/socket_service.dart';
 import 'call_overlay_manager.dart';
 import 'ChatdetailsScreen.dart';
+import 'screen_state_manager.dart';
 import '../Models/masterdata.dart';
 import '../Package/PackageScreen.dart';
 import '../otherenew/othernew.dart';
@@ -189,6 +190,11 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     _startAdminStatusListener();
     _setupCallListener();
     _setupMessageListeners();
+    ScreenStateManager().onChatScreenOpened(
+      _chatRoomId,
+      _mySenderId,
+      partnerUserId: _otherPartyId,
+    );
 
     // Connect / ensure socket is authenticated for this user
     if (!_socketService.isConnected) {
@@ -487,6 +493,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
 
   @override
   void dispose() {
+    ScreenStateManager().onChatScreenClosed();
     WidgetsBinding.instance.removeObserver(this);
     _msgSubscription?.cancel();
     _msgLikedSubscription?.cancel();
@@ -514,8 +521,17 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       if (!_socketService.isConnected) {
         _socketService.connect(_mySenderId);
       }
+      ScreenStateManager().onChatScreenOpened(
+        _chatRoomId,
+        _mySenderId,
+        partnerUserId: _otherPartyId,
+      );
       _socketService.setActiveChat(_mySenderId, _chatRoomId);
-    } else if (state == AppLifecycleState.paused) {
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.hidden) {
+      ScreenStateManager().onChatScreenClosed();
       _socketService.setActiveChat(_mySenderId, _chatRoomId, isActive: false);
     }
   }

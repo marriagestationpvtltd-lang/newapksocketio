@@ -515,6 +515,7 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
   Future<void> _endCall() async {
     if (_ending) return;
     _ending = true;
+    _ringTimer?.cancel(); // prevent the missed-call timer from firing after end
     _callTimer?.cancel();
     _cancelSubscription?.cancel();
     _socketCancelSubscription?.cancel();

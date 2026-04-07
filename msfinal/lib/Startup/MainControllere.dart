@@ -28,6 +28,7 @@ class _MainControllerScreenState extends State<MainControllerScreen> {
   String? _senderName;
   String? _currentUserImage;
   int _chatUnreadCount = 0;
+  final Set<String> _unreadChatRoomIds = {};
   StreamSubscription<List<dynamic>>? _unreadSubscription;
   StreamSubscription<Map<String, dynamic>>? _newMsgSubscription;
 
@@ -84,11 +85,14 @@ class _MainControllerScreenState extends State<MainControllerScreen> {
       }
     });
 
-    // Also increment unread badge when a new message arrives (user not on Chat tab)
+    // Also track unread rooms from new messages when user is not on Chat tab
     _newMsgSubscription = SocketService().onNewMessage.listen((msg) {
       final senderId = msg['senderId']?.toString() ?? '';
-      if (senderId != userId && _selectedIndex != _chatTabIndex && mounted) {
-        setState(() => _chatUnreadCount++);
+      final chatRoomId = msg['chatRoomId']?.toString() ?? '';
+      if (senderId != userId && chatRoomId.isNotEmpty && _selectedIndex != _chatTabIndex && mounted) {
+        if (_unreadChatRoomIds.add(chatRoomId)) {
+          setState(() => _chatUnreadCount = _unreadChatRoomIds.length);
+        }
       }
     });
   }
@@ -131,7 +135,10 @@ class _MainControllerScreenState extends State<MainControllerScreen> {
             setState(() {
               _selectedIndex = index;
               // Clear chat unread badge when user switches to Chat tab
-              if (index == _chatTabIndex) _chatUnreadCount = 0;
+              if (index == _chatTabIndex) {
+                _chatUnreadCount = 0;
+                _unreadChatRoomIds.clear();
+              }
             });
           },
         ),

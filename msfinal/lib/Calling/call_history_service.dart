@@ -93,11 +93,6 @@ class CallHistoryService {
     }
   }
 
-  // Compatibility wrapper: returns a one-shot stream for screens still using StreamBuilder
-  static Stream<List<CallHistory>> getCallHistory(String userId) async* {
-    yield await getCallHistoryFuture(userId);
-  }
-
   // Delete a specific call from history
   static Future<void> deleteCall(String callId) async {
     try {

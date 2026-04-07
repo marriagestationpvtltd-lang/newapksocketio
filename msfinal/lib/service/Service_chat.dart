@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../service/socket_service.dart';
 
@@ -94,24 +93,6 @@ class _ServiceChatPageState extends State<ServiceChatPage> {
   String _getChatId(String a, String b) {
     final ids = [a, b]..sort();
     return "chat_${ids[0]}_${ids[1]}";
-  }
-
-  // Load current user data for sending messages
-  Future<String> _getCurrentUserId() async {
-    final prefs = await SharedPreferences.getInstance();
-    final userDataString = prefs.getString('user_data');
-    if (userDataString != null) {
-      try {
-        final userData = Map<String, dynamic>.from(
-          Map.from(
-            // ignore: avoid_dynamic_calls
-            (userDataString.startsWith('{') ? userDataString : '{}') as dynamic,
-          ),
-        );
-        return userData['id']?.toString() ?? widget.senderId;
-      } catch (_) {}
-    }
-    return widget.senderId;
   }
 
   // ---------------- SEND FUNCTIONS ----------------

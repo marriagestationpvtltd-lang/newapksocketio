@@ -11,9 +11,6 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 /// building for production. Example: 'https://socket.yourserver.com:3001'
 const String kSocketServerUrl = 'http://192.168.18.214:3001';
 
-/// REST endpoint for uploading chat media (images / voice).
-/// NOTE: Kept for reference; the app now uploads via the Socket.IO server (/upload).
-// const String kChatUploadUrl = 'https://digitallami.com/Api2/chat_upload.php';
 
 /// ---------------------------------------------------------------------------
 /// SocketService — singleton that manages the Socket.IO connection and

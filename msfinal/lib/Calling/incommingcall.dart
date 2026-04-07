@@ -232,23 +232,6 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
         return;
       }
 
-      // Notify caller via Socket.IO (fast, online path) + FCM (fallback)
-      SocketService().emitCallAccept(
-        callerId: _callerId,
-        recipientId: _currentUserId,
-        recipientName: _recipientName,
-        recipientUid: _localUid.toString(),
-        channelName: _channel,
-        callType: 'audio',
-      );
-      await NotificationService.sendCallResponseNotification(
-        callerId: _callerId,
-        recipientName: _recipientName,
-        accepted: true,
-        recipientUid: _localUid.toString(),
-        channelName: _channel,
-      );
-
       // Token
       final token = await AgoraTokenService.getToken(
         channelName: _channel,
@@ -268,6 +251,24 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
           onJoinChannelSuccess: (_, __) {
             if (mounted) setState(() => _joined = true);
             unawaited(_startForegroundService());
+
+            // Notify caller AFTER successfully joining Agora channel
+            // This prevents race condition where caller receives accept before recipient joins
+            SocketService().emitCallAccept(
+              callerId: _callerId,
+              recipientId: _currentUserId,
+              recipientName: _recipientName,
+              recipientUid: _localUid.toString(),
+              channelName: _channel,
+              callType: 'audio',
+            );
+            unawaited(NotificationService.sendCallResponseNotification(
+              callerId: _callerId,
+              recipientName: _recipientName,
+              accepted: true,
+              recipientUid: _localUid.toString(),
+              channelName: _channel,
+            ));
           },
           onUserJoined: (_, uid, __) {
             if (mounted) {

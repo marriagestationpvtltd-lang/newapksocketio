@@ -84,6 +84,7 @@ class _ChatWindowState extends State<ChatWindow> {
   // Pagination
   static const int _pageSize = 20;
   static const double _autoScrollThreshold = 120;
+  static const int _incomingCallTimeoutSeconds = 30;
   int _currentPage = 1;
   bool _isLoadingMore = false;
   bool _hasMoreMessages = true;
@@ -453,7 +454,6 @@ class _ChatWindowState extends State<ChatWindow> {
 
   /// Show an incoming call dialog when a user calls the admin.
   void _handleIncomingCallFromUser(Map<String, dynamic> data) {
-    const incomingCallTimeoutSeconds = 30;
     final callerId = data['callerId']?.toString() ?? '';
     final callerName = data['callerName']?.toString() ?? 'User';
     final channelName = data['channelName']?.toString() ?? '';
@@ -468,8 +468,7 @@ class _ChatWindowState extends State<ChatWindow> {
     StreamSubscription<Map<String, dynamic>>? endedSub;
     BuildContext? incomingCallDialogContext;
     var dismissed = false;
-    var callerCancelled = false;
-    var callerEnded = false;
+    var remoteCallClosed = false;
 
     void dismissDialog(bool accepted) {
       if (dismissed) return;
@@ -482,13 +481,13 @@ class _ChatWindowState extends State<ChatWindow> {
 
     cancelSub = _socketService.onCallCancelled.listen((event) {
       if (event['channelName']?.toString() != channelName) return;
-      callerCancelled = true;
+      remoteCallClosed = true;
       dismissDialog(false);
     });
 
     endedSub = _socketService.onCallEnded.listen((event) {
       if (event['channelName']?.toString() != channelName) return;
-      callerEnded = true;
+      remoteCallClosed = true;
       dismissDialog(false);
     });
 
@@ -498,7 +497,7 @@ class _ChatWindowState extends State<ChatWindow> {
       builder: (ctx) {
         incomingCallDialogContext = ctx;
         autoRejectTimer = Timer(
-          const Duration(seconds: incomingCallTimeoutSeconds),
+          const Duration(seconds: _incomingCallTimeoutSeconds),
           () => dismissDialog(false),
         );
         final icon = isVideo ? Icons.videocam_rounded : Icons.call_rounded;
@@ -565,7 +564,7 @@ class _ChatWindowState extends State<ChatWindow> {
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    'Respond Within $incomingCallTimeoutSeconds Seconds',
+                    'Respond Within $_incomingCallTimeoutSeconds Seconds',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.62),
                       fontSize: 12,
@@ -624,7 +623,7 @@ class _ChatWindowState extends State<ChatWindow> {
           channelName: channelName,
           isVideo: isVideo,
         );
-      } else if (!callerCancelled && !callerEnded) {
+      } else if (!remoteCallClosed) {
         _socketService.emitCallReject(
           callerId: callerId,
           recipientId: kAdminUserId,

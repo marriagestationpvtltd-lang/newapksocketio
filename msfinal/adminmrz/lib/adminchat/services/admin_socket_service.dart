@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'callmanager.dart';
 
 /// URL of the Node.js Socket.IO server.
 /// ⚠️  Replace this with your actual deployed server URL before building.
@@ -147,7 +148,10 @@ class AdminSocketService {
     });
 
     _socket!.on('incoming_call', (data) {
-      _incomingCallCtrl.add(_toMap(data));
+      final map = _toMap(data);
+      _incomingCallCtrl.add(map);
+      // Bridge to CallManager so the incoming call UI can be shown.
+      CallManager().triggerIncomingCall(map);
     });
 
     _socket!.on('call_accepted', (data) {
@@ -419,6 +423,42 @@ class AdminSocketService {
       'channelName': channelName,
       'callType': callType,
       'type': callType == 'video' ? 'video_call_cancelled' : 'call_cancelled',
+    });
+  }
+
+  void emitCallAccept({
+    required String callerId,
+    required String recipientId,
+    required String recipientName,
+    required String recipientUid,
+    required String channelName,
+    required String callType,
+  }) {
+    _socket?.emit('call_accept', {
+      'callerId': callerId,
+      'recipientId': recipientId,
+      'recipientName': recipientName,
+      'recipientUid': recipientUid,
+      'channelName': channelName,
+      'callType': callType,
+      'type': callType == 'video' ? 'video_call_accepted' : 'call_accepted',
+    });
+  }
+
+  void emitCallReject({
+    required String callerId,
+    required String recipientId,
+    required String recipientName,
+    required String channelName,
+    required String callType,
+  }) {
+    _socket?.emit('call_reject', {
+      'callerId': callerId,
+      'recipientId': recipientId,
+      'recipientName': recipientName,
+      'channelName': channelName,
+      'callType': callType,
+      'type': callType == 'video' ? 'video_call_rejected' : 'call_rejected',
     });
   }
 

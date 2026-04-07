@@ -2275,6 +2275,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     );
   }
 
+  Widget _buildMessagesList() {
     // Show skeleton on very first load before the stream delivers any data.
     if (_isFirstLoad) {
       return _buildSkeletonLoader();

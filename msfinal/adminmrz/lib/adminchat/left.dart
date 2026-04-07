@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
@@ -12,6 +10,7 @@ import 'chat_theme.dart';
 import 'chatprovider.dart';
 import 'chatscreen.dart';
 import 'constant.dart';
+import 'services/admin_socket_service.dart';
 import 'services/web_notification_service.dart';
 
 class ChatSidebar extends StatefulWidget {
@@ -46,14 +45,14 @@ class _ChatSidebarState extends State<ChatSidebar> {
 
   Map<String, dynamic>? _selectedChat;
   final int senderId = 1;
-  StreamSubscription? _conversationSub;
-  StreamSubscription<QuerySnapshot>? _presenceSub;
-  StreamSubscription<QuerySnapshot>? _unreadSub;
+  final AdminSocketService _socketService = AdminSocketService();
+  StreamSubscription<List<dynamic>>? _chatRoomsSub;
+  StreamSubscription<Map<String, dynamic>>? _newMessageSub;
+  StreamSubscription<Map<String, dynamic>>? _statusSub;
 
   // Tracks the last known message timestamp per conversation so we can
   // detect truly NEW incoming messages (from users, not the admin).
-  final Map<String, Timestamp?> _prevLastTimestamps = {};
-  bool _isFirstConversationSnapshot = true;
+  final Map<String, DateTime?> _prevLastTimestamps = {};
 
   // Pagination
   int _page = 1;
@@ -77,10 +76,8 @@ class _ChatSidebarState extends State<ChatSidebar> {
       const Duration(seconds: 10),
       (_) => _refreshOnlineStatus(),
     );
-    // Real-time Firestore listener for immediate offline/online status updates
-    _startPresenceListener();
-    // Real-time listener for per-user unread message counts
-    _startUnreadListener();
+    _socketService.connect();
+    _startSocketListeners();
 
     // Sync selection when navigating from other modules (e.g., Members -> Chat)
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -92,9 +89,9 @@ class _ChatSidebarState extends State<ChatSidebar> {
 
   @override
   void dispose() {
-    _conversationSub?.cancel();
-    _presenceSub?.cancel();
-    _unreadSub?.cancel();
+    _chatRoomsSub?.cancel();
+    _newMessageSub?.cancel();
+    _statusSub?.cancel();
     _scrollController.dispose();
     _searchDebounce?.cancel();
     _onlineStatusTimer?.cancel();
@@ -123,8 +120,6 @@ class _ChatSidebarState extends State<ChatSidebar> {
       _users = [];
       _filteredUsers = [];
       _isInitialLoading = true;
-      _conversationSub?.cancel();
-      _conversationSub = null;
     }
 
     if (!_hasMore && !reset) return;
@@ -203,11 +198,7 @@ class _ChatSidebarState extends State<ChatSidebar> {
             // Sync ChatProvider so the ChatWindow shows the selected user immediately.
             _updateSelectedChat();
           }
-          listenToConversationChanges();
-          // Restart the Firestore presence listener now that _users is populated.
-          // The initial snapshot will immediately apply any pending online/offline
-          // changes that occurred before this page was opened.
-          _startPresenceListener();
+          await _refreshChatRooms();
         }
 
         _applyFilters();
@@ -235,84 +226,51 @@ class _ChatSidebarState extends State<ChatSidebar> {
     }
   }
 
-  // Firestore real-time presence listener — fires the instant a user's isOnline
-  // field changes in the 'users' collection (written by the user-side app).
-  // This gives immediate offline detection without waiting for the REST poll.
-  // The listener covers the full 'users' collection; only changes for users
-  // already in _users are applied, so extra documents are a no-op.
-  void _startPresenceListener() {
-    _presenceSub = FirebaseFirestore.instance
-        .collection('users')
-        .snapshots()
-        .listen((snapshot) {
+  void _startSocketListeners() {
+    _chatRoomsSub?.cancel();
+    _chatRoomsSub = _socketService.onChatRoomsUpdate.listen((rooms) {
+      _applyChatRoomsUpdate(
+        rooms.map((room) => Map<String, dynamic>.from(room as Map)).toList(),
+      );
+    });
+
+    _newMessageSub?.cancel();
+    _newMessageSub = _socketService.onNewMessage.listen((data) {
       if (!mounted) return;
-      bool changed = false;
-      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-      for (final change in snapshot.docChanges) {
-        if (change.type == DocumentChangeType.removed) continue;
-        final data = change.doc.data();
-        if (data == null) continue;
+      final senderIdStr = data['senderId']?.toString() ?? '';
+      if (senderIdStr.isEmpty || senderIdStr == senderId.toString()) return;
+      _handleIncomingMessage(
+        senderIdStr: senderIdStr,
+        message: _messagePreviewFromSocket(data),
+      );
+    });
 
-        final userId = change.doc.id;
-        final isOnline = data['isOnline'] as bool? ?? false;
-        final lastSeenText = data['lastSeen']?.toString() ?? '';
-
-        // Update sidebar user list
-        final idx = _users.indexWhere(
-            (u) => u['id']?.toString() == userId);
-        if (idx != -1) {
-          final prev = _users[idx]['is_online'];
-          if (prev != isOnline) {
-            _users[idx] = {
-              ..._users[idx] as Map<String, dynamic>,
-              'is_online': isOnline,
-              'last_seen_text': isOnline ? 'Online' : lastSeenText,
-            };
-            changed = true;
-            if (_selectedChat?['id']?.toString() == userId) {
-              _selectedChat = _users[idx];
-              _updateSelectedChat();
-            }
-          }
-        }
-
-        // Keep ChatProvider in sync so the dashboard live count stays accurate
-        chatProvider.updateUserOnlineStatus(userId, isOnline, lastSeenText);
-      }
-
-      if (changed && mounted) {
-        _applyFilters();
-      }
-    }, onError: (e) {
-      debugPrint('Presence listener error: $e');
+    _statusSub?.cancel();
+    _statusSub = _socketService.onUserStatusChange.listen((data) {
+      if (!mounted) return;
+      final userId = data['userId']?.toString() ?? '';
+      if (userId.isEmpty) return;
+      final isOnline = data['isOnline'] == true;
+      final lastSeen = AdminSocketService.parseTimestamp(data['lastSeen']);
+      _applyUserStatus(
+        userId: userId,
+        isOnline: isOnline,
+        lastSeenText: isOnline
+            ? 'Online'
+            : _formatLastSeen(lastSeen),
+      );
     });
   }
 
-  // Firestore real-time listener for unread message counts.
-  // Watches all messages sent TO the admin (receiverid == "1") that have not
-  // been seen yet.  Groups them by senderid to get per-user counts.
-  void _startUnreadListener() {
-    _unreadSub = FirebaseFirestore.instance
-        .collection('adminchat')
-        .where('receiverid', isEqualTo: senderId.toString())
-        .where('seen', isEqualTo: false)
-        .snapshots()
-        .listen((snapshot) {
-      if (!mounted) return;
-      final Map<String, int> counts = {};
-      for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        final uid = data['senderid']?.toString() ?? '';
-        if (uid.isNotEmpty) {
-          counts[uid] = (counts[uid] ?? 0) + 1;
-        }
-      }
-      // Update counts then re-apply filters in a single rebuild
-      _unreadCounts = counts;
-      if (mounted) _applyFilters();
-    }, onError: (e) {
-      debugPrint('Unread listener error: $e');
-    });
+  Future<void> _refreshChatRooms() async {
+    try {
+      final rooms = await _socketService.getChatRooms();
+      _applyChatRoomsUpdate(
+        rooms.map((room) => Map<String, dynamic>.from(room as Map)).toList(),
+      );
+    } catch (error) {
+      debugPrint('Error loading chat rooms: $error');
+    }
   }
 
   // Lightweight poll: fetch a large page and update only is_online / last_seen_text
@@ -396,149 +354,85 @@ class _ChatSidebarState extends State<ChatSidebar> {
     _saveLastSelectedUserId(targetId);
   }
 
-  void listenToConversationChanges() {
-    _isFirstConversationSnapshot = true;
+  void _applyChatRoomsUpdate(List<Map<String, dynamic>> rooms) {
+    if (!mounted) return;
 
-    _conversationSub = FirebaseFirestore.instance
-        .collection('conversations')
-        .where('participants', arrayContains: senderId.toString())
-        .orderBy('lastTimestamp', descending: true)
-        .snapshots()
-        .listen((snapshot) {
+    final Map<String, Map<String, dynamic>> tempMap = {};
+    final Map<String, int> unreadCounts = {};
+    final List<dynamic> sortedUsers = [];
+    final Set<String> addedIds = {};
 
-      // ── Detect new incoming messages ────────────────────────────────────
-      if (!_isFirstConversationSnapshot) {
-        for (final change in snapshot.docChanges) {
-          if (change.type == DocumentChangeType.added ||
-              change.type == DocumentChangeType.modified) {
-            final data = change.doc.data() as Map<String, dynamic>;
+    for (final room in rooms) {
+      final participants =
+          (room['participants'] as List? ?? []).map((e) => e.toString()).toList();
+      final otherUserId = participants.firstWhere(
+        (id) => id != senderId.toString(),
+        orElse: () => '',
+      );
+      if (otherUserId.isEmpty) continue;
 
-            // Only react to messages sent by the other person (not the admin).
-            final lastSenderId = data['lastSenderId']?.toString() ?? '';
-            if (lastSenderId == senderId.toString()) continue;
+      final lastTime =
+          AdminSocketService.parseTimestamp(room['lastMessageTime']);
+      tempMap[otherUserId] = {
+        'lastMessage': room['lastMessage'] ?? '',
+        'lastTimestamp': lastTime,
+        'lastMessageType': room['lastMessageType']?.toString() ?? 'text',
+      };
+      unreadCounts[otherUserId] = (room['unreadCount'] as num?)?.toInt() ?? 0;
+      _prevLastTimestamps[otherUserId] = lastTime;
 
-            final List participants =
-                List<String>.from(data['participants'] ?? []);
-            final String otherUserId = participants.firstWhere(
-              (id) => id != senderId.toString(),
-              orElse: () => '',
-            );
-            if (otherUserId.isEmpty) continue;
-
-            final Timestamp? newTs = data['lastTimestamp'] as Timestamp?;
-            final Timestamp? prevTs = _prevLastTimestamps[otherUserId];
-
-            // Only trigger if the timestamp is genuinely newer.
-            final bool isNewMessage = newTs != null &&
-                (prevTs == null ||
-                    newTs.compareTo(prevTs) > 0);
-            if (!isNewMessage) continue;
-
-            // Play sound and optionally show a browser notification.
-            final String lastMessage = data['lastMessage']?.toString() ?? '';
-            _handleIncomingMessage(
-              senderIdStr: otherUserId,
-              message: lastMessage,
-            );
-            break; // one notification per snapshot batch is enough
-          }
-        }
-      }
-      _isFirstConversationSnapshot = false;
-
-      // ── Update previous timestamps ──────────────────────────────────────
-      for (final doc in snapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
-        final List participants = List<String>.from(data['participants'] ?? []);
-        final String otherUserId = participants.firstWhere(
-          (id) => id != senderId.toString(),
-          orElse: () => '',
-        );
-        if (otherUserId.isNotEmpty) {
-          _prevLastTimestamps[otherUserId] =
-              data['lastTimestamp'] as Timestamp?;
-        }
-      }
-
-      // ── Update sidebar UI ───────────────────────────────────────────────
-      Map<String, Map<String, dynamic>> tempMap = {};
-      List<dynamic> sortedUsers = [];
-      // Track added user IDs to prevent any duplicates.
-      final Set<String> addedIds = {};
-
-      // First pass: users with conversations, already ordered by lastTimestamp
-      // (Firestore query uses orderBy('lastTimestamp', descending: true)).
-      for (var doc in snapshot.docs) {
-        final List participants =
-            List<String>.from(doc['participants'] ?? []);
-        final String otherUserId = participants.firstWhere(
-          (id) => id != senderId.toString(),
-          orElse: () => '',
-        );
-        if (otherUserId.isEmpty) continue;
-
-        tempMap[otherUserId] = {
-          'lastMessage': doc['lastMessage'] ?? '',
-          'lastTimestamp': doc['lastTimestamp'],
-        };
-
-        if (!addedIds.contains(otherUserId)) {
-          final user = _users.firstWhere(
-            (u) => u['id'].toString() == otherUserId,
+      final user = _users.cast<Map<String, dynamic>?>().firstWhere(
+            (u) => u?['id']?.toString() == otherUserId,
             orElse: () => null,
           );
-          if (user != null) {
-            sortedUsers.add(user);
-            addedIds.add(otherUserId);
-          }
-        }
+      if (user != null && addedIds.add(otherUserId)) {
+        sortedUsers.add(user);
       }
+    }
 
-      // Second pass: users who have no conversation yet (append to bottom).
-      for (var user in _users) {
-        final uid = user['id']?.toString() ?? '';
-        if (uid.isNotEmpty && !addedIds.contains(uid)) {
-          sortedUsers.add(user);
-          addedIds.add(uid);
-        }
+    for (final user in _users) {
+      final uid = user['id']?.toString() ?? '';
+      if (uid.isNotEmpty && addedIds.add(uid)) {
+        sortedUsers.add(user);
       }
+    }
 
-      setState(() {
-        conversationMap = tempMap;
-        _users = List.from(sortedUsers);
-
-        // Apply filters and deduplication in the same setState call to
-        // avoid a second rebuild from a subsequent _applyFilters() call.
-        final Set<String> seenIds = {};
-        _filteredUsers = _users.where((user) {
-          final uid = user["id"]?.toString() ?? '';
-          if (uid.isEmpty || seenIds.contains(uid)) return false;
-          seenIds.add(uid);
-
-          bool matchesSearch = user["name"]
-              .toLowerCase()
-              .contains(_searchQuery.toLowerCase());
-          bool matchesPaid = !_showOnlyPaid || (user["is_paid"] == true);
-          bool matchesOnline = !_showOnlyOnline || (user["is_online"] == true);
-          int matchesCount = int.tryParse(user["matches"].toString()) ?? 0;
-          bool matchesWithMatches = !_showWithMatches || (matchesCount > 0);
-          bool matchesUnread =
-              !_showOnlyUnread || (_unreadCounts[uid] ?? 0) > 0;
-
-          return matchesSearch && matchesPaid && matchesOnline &&
-              matchesWithMatches && matchesUnread;
-        }).toList();
-
-        if (_sortBy != 'recent') _sortUsers();
-
-        if (_selectedChat != null &&
-            !_filteredUsers.contains(_selectedChat)) {
-          _selectedChat =
-              _filteredUsers.isNotEmpty ? _filteredUsers[0] : null;
-          if (_selectedChat != null) _updateSelectedChat();
-        }
-      });
+    setState(() {
+      conversationMap = tempMap;
+      _unreadCounts = unreadCounts;
+      _users = List.from(sortedUsers);
     });
+    _applyFilters();
+  }
+
+  void _applyUserStatus({
+    required String userId,
+    required bool isOnline,
+    required String lastSeenText,
+  }) {
+    bool changed = false;
+    for (int i = 0; i < _users.length; i++) {
+      if (_users[i]['id']?.toString() != userId) continue;
+      _users[i] = {
+        ..._users[i] as Map<String, dynamic>,
+        'is_online': isOnline,
+        'last_seen_text': lastSeenText,
+      };
+      changed = true;
+      if (_selectedChat?['id']?.toString() == userId) {
+        _selectedChat = _users[i];
+      }
+      break;
+    }
+
+    context
+        .read<ChatProvider>()
+        .updateUserOnlineStatus(userId, isOnline, lastSeenText);
+
+    if (changed) {
+      _applyFilters();
+      _updateSelectedChat();
+    }
   }
 
   /// Called whenever a new message arrives from a user.
@@ -570,6 +464,29 @@ class _ChatSidebarState extends State<ChatSidebar> {
       message: displayMessage,
       userId: senderIdStr,
     );
+  }
+
+  String _messagePreviewFromSocket(Map<String, dynamic> data) {
+    final type = data['messageType']?.toString() ?? 'text';
+    switch (type) {
+      case 'image':
+        return '📷 Photo';
+      case 'profile_card':
+        return '👤 Match Profile';
+      case 'call':
+        return '📞 Call';
+      default:
+        return data['message']?.toString() ?? '';
+    }
+  }
+
+  String _formatLastSeen(DateTime? lastSeen) {
+    if (lastSeen == null) return '';
+    final diff = DateTime.now().difference(lastSeen);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+    if (diff.inDays < 1) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
   void _applyFilters() {
     setState(() {
@@ -627,11 +544,12 @@ class _ChatSidebarState extends State<ChatSidebar> {
           String aId = a['id'].toString();
           String bId = b['id'].toString();
 
-          Timestamp? aTs = conversationMap[aId]?['lastTimestamp'];
-          Timestamp? bTs = conversationMap[bId]?['lastTimestamp'];
-
-          DateTime aTime = aTs?.toDate() ?? DateTime(1970);
-          DateTime bTime = bTs?.toDate() ?? DateTime(1970);
+          final DateTime aTime =
+              conversationMap[aId]?['lastTimestamp'] as DateTime? ??
+                  DateTime(1970);
+          final DateTime bTime =
+              conversationMap[bId]?['lastTimestamp'] as DateTime? ??
+                  DateTime(1970);
 
           return bTime.compareTo(aTime);
         });

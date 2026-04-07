@@ -2,7 +2,6 @@ import 'package:adminmrz/adminchat/services/pushservice.dart';
 import 'package:adminmrz/adminchat/services/admin_socket_service.dart';
 import 'package:adminmrz/adminchat/video_call_page.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
@@ -17,7 +16,6 @@ import 'chat_screen.dart';
 import 'chatprovider.dart';
 import 'chatscreen.dart';
 import 'constant.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'dart:io';
@@ -26,7 +24,6 @@ import 'chat_theme.dart';
 import 'left.dart';
 import 'dart:html' as html;
 import 'dart:js' as js;
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
@@ -48,9 +45,6 @@ class _ChatWindowState extends State<ChatWindow> {
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _messageFocusNode = FocusNode();
-  // Firestore is kept only for typing indicators and image uploads.
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseStorage _storage = FirebaseStorage.instance;
 
   // Socket.IO service for all chat messaging.
   final AdminSocketService _socketService = AdminSocketService();
@@ -60,6 +54,8 @@ class _ChatWindowState extends State<ChatWindow> {
   StreamSubscription<Map<String, dynamic>>? _unsentMsgSub;
   StreamSubscription<Map<String, dynamic>>? _likedMsgSub;
   StreamSubscription<Map<String, dynamic>>? _readMsgSub;
+  StreamSubscription<Map<String, dynamic>>? _typingStartSub;
+  StreamSubscription<Map<String, dynamic>>? _typingStopSub;
 
   bool _isListening = false;
   bool _userStoppedListening = false;
@@ -106,9 +102,8 @@ class _ChatWindowState extends State<ChatWindow> {
   // Active call overlay
   OverlayEntry? _callOverlayEntry;
 
-  // Typing indicator state (kept in Firestore for simplicity)
+  // Typing indicator state
   Timer? _typingTimer;
-  StreamSubscription<DocumentSnapshot>? _typingSubscription;
   bool _userIsTyping = false;
 
   // Inline reply / edit state
@@ -359,6 +354,28 @@ class _ChatWindowState extends State<ChatWindow> {
         }
       });
     });
+
+    _typingStartSub?.cancel();
+    _typingStartSub = _socketService.onTypingStart.listen((data) {
+      if (!mounted) return;
+      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+      final expectedRoom =
+          AdminSocketService.chatRoomId(chatProvider.id?.toString() ?? '');
+      if (data['chatRoomId']?.toString() != expectedRoom) return;
+      if (data['userId']?.toString() == senderId.toString()) return;
+      setState(() => _userIsTyping = true);
+    });
+
+    _typingStopSub?.cancel();
+    _typingStopSub = _socketService.onTypingStop.listen((data) {
+      if (!mounted) return;
+      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+      final expectedRoom =
+          AdminSocketService.chatRoomId(chatProvider.id?.toString() ?? '');
+      if (data['chatRoomId']?.toString() != expectedRoom) return;
+      if (data['userId']?.toString() == senderId.toString()) return;
+      setState(() => _userIsTyping = false);
+    });
   }
 
   /// Load a page of messages from the server.
@@ -468,52 +485,33 @@ class _ChatWindowState extends State<ChatWindow> {
 
   // ── TYPING INDICATOR ────────────────────────────────────────────────────
 
-  /// Subscribe to the selected user's typing status in Firestore.
   void _setupTypingListener(int userId) {
-    _typingSubscription?.cancel();
-    _typingSubscription = _firestore
-        .collection('typing_status')
-        .doc(userId.toString())
-        .snapshots()
-        .listen((snap) {
-      if (!mounted) return;
-      if (!snap.exists) {
-        setState(() => _userIsTyping = false);
-        return;
-      }
-      final data = snap.data() as Map<String, dynamic>;
-      final bool isTyping = data['isTyping'] == true;
-      final String? typingTo = data['typingTo']?.toString();
-      // Only show if user is typing TO admin ('1').
-      setState(() => _userIsTyping = isTyping && typingTo == senderId.toString());
-    });
+    final roomId = AdminSocketService.chatRoomId(userId.toString());
+    _socketService.joinRoom(roomId);
+    setState(() => _userIsTyping = false);
   }
 
-  /// Update admin's typing status in Firestore.
   void _updateAdminTypingStatus(String text, String receiverId) {
     _typingTimer?.cancel();
+    final roomId = AdminSocketService.chatRoomId(receiverId);
     final isTyping = text.isNotEmpty;
-    _firestore.collection('typing_status').doc(senderId.toString()).set({
-      'isTyping': isTyping,
-      'typingTo': receiverId,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
     if (isTyping) {
-      // Auto-clear after 3 seconds of no new keystrokes.
+      _socketService.sendTypingStart(roomId);
       _typingTimer = Timer(const Duration(seconds: 3), () {
         _clearAdminTypingStatus();
       });
+    } else {
+      _socketService.sendTypingStop(roomId);
     }
   }
 
-  /// Clear admin's typing status (on send, user switch, or dispose).
   void _clearAdminTypingStatus() {
     _typingTimer?.cancel();
-    _firestore.collection('typing_status').doc(senderId.toString()).set({
-      'isTyping': false,
-      'typingTo': '',
-      'updatedAt': FieldValue.serverTimestamp(),
-    }).catchError((_) {});
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final receiverId = chatProvider.id?.toString();
+    if (receiverId == null || receiverId.isEmpty) return;
+    final roomId = AdminSocketService.chatRoomId(receiverId);
+    _socketService.sendTypingStop(roomId);
   }
 
   // ── SEEN STATUS ─────────────────────────────────────────────────────────
@@ -1021,33 +1019,19 @@ class _ChatWindowState extends State<ChatWindow> {
 
   Future<void> _sendMatchProfile(Map<String, dynamic> profileData) async {
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final receiverId = chatProvider.id?.toString();
+    if (receiverId == null || receiverId.isEmpty) return;
 
     try {
-      await _firestore.collection('adminchat').add({
-        'message': 'Match Profile',
-        'liked': false,
-        'replyto': '',
-        'senderid': senderId.toString(),
-        'receiverid': chatProvider.id.toString(),
-        'timestamp': FieldValue.serverTimestamp(),
-        'type': 'profile_card',
-        'profileData': profileData,
-      });
-
-      String conversationId = getConversationId(
-        senderId.toString(),
-        chatProvider.id.toString(),
+      _socketService.sendMessage(
+        chatRoomId: AdminSocketService.chatRoomId(receiverId),
+        receiverId: receiverId,
+        message: jsonEncode(profileData),
+        messageType: 'profile_card',
+        messageId: 'profile_${DateTime.now().millisecondsSinceEpoch}_$senderId',
+        receiverName: chatProvider.namee,
+        receiverImage: chatProvider.profilePicture,
       );
-
-      await FirebaseFirestore.instance
-          .collection('conversations')
-          .doc(conversationId)
-          .set({
-        'participants': [senderId.toString(), chatProvider.id.toString()],
-        'lastMessage': 'Sent a match profile',
-        'lastTimestamp': FieldValue.serverTimestamp(),
-        'lastSenderId': senderId.toString(),
-      }, SetOptions(merge: true));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Failed to send match profile")),
@@ -1872,6 +1856,7 @@ class _ChatWindowState extends State<ChatWindow> {
   }
 
   void _showMatchSelectionDialog(ChatProvider chatProvider) {
+    chatProvider.fetchUserMatches(chatProvider.id ?? 0);
     showDialog(
       context: context,
       builder: (context) {
@@ -1880,40 +1865,39 @@ class _ChatWindowState extends State<ChatWindow> {
           content: Container(
             width: double.maxFinite,
             height: 300,
-            child: StreamBuilder<QuerySnapshot>(
-              stream: _firestore
-                  .collection('matches')
-                  .where('userId', isEqualTo: chatProvider.id.toString())
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return Center(child: CircularProgressIndicator());
+            child: Consumer<ChatProvider>(
+              builder: (context, provider, _) {
+                if (provider.isLoadingMatches) {
+                  return const Center(child: CircularProgressIndicator());
                 }
 
-                final matches = snapshot.data!.docs;
+                if (provider.matchError != null) {
+                  return Center(child: Text(provider.matchError!));
+                }
 
+                final matches = provider.matchedProfiles;
                 if (matches.isEmpty) {
-                  return Center(child: Text('No matches found'));
+                  return const Center(child: Text('No matches found'));
                 }
 
                 return ListView.builder(
                   itemCount: matches.length,
                   itemBuilder: (context, index) {
-                    final match = matches[index].data() as Map<String, dynamic>;
+                    final match = matches[index];
                     return ListTile(
                       leading: CircleAvatar(
                         radius: 20,
                         backgroundColor: Colors.grey[300],
                         backgroundImage: match['profile_picture'] != null &&
-                            match['profile_picture'].toString().isNotEmpty
+                                match['profile_picture'].toString().isNotEmpty
                             ? NetworkImage(match['profile_picture'])
                             : null,
                         child: match['profile_picture'] == null ||
-                            match['profile_picture'].toString().isEmpty
+                                match['profile_picture'].toString().isEmpty
                             ? Icon(Icons.person, color: Colors.grey[700])
                             : null,
                       ),
-                      title: Text(match['name'] ?? 'Unknown'),
+                      title: Text(match['name']?.toString() ?? 'Unknown'),
                       subtitle: Text('Match: ${match['percentage'] ?? 'N/A'}%'),
                       onTap: () {
                         Navigator.pop(context);
@@ -1976,7 +1960,7 @@ class _ChatWindowState extends State<ChatWindow> {
     Map<String, dynamic> data, {
     DateTime? fallback,
   }) {
-    return (data['timestamp'] as Timestamp?)?.toDate() ??
+    return AdminSocketService.parseTimestamp(data['timestamp']) ??
         fallback ??
         DateTime.now();
   }
@@ -3297,36 +3281,79 @@ class _ChatWindowState extends State<ChatWindow> {
     String receiverId,
   ) async {
     try {
-      String fileName = DateTime.now().millisecondsSinceEpoch.toString();
-      Reference storageRef = _storage.ref().child('chat_images/$fileName');
-      UploadTask uploadTask;
+      final imageUrl = await _uploadChatImage(
+        image: image,
+        imageBytes: imageBytes,
+      );
 
-      if (kIsWeb) {
-        uploadTask = storageRef.putData(imageBytes!);
-      } else {
-        uploadTask = storageRef.putFile(image!);
-      }
+      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+      _socketService.sendMessage(
+        chatRoomId: AdminSocketService.chatRoomId(receiverId),
+        receiverId: receiverId,
+        message: imageUrl,
+        messageType: 'image',
+        messageId: 'image_${DateTime.now().millisecondsSinceEpoch}_$senderId',
+        receiverName: chatProvider.namee,
+        receiverImage: chatProvider.profilePicture,
+      );
 
-      TaskSnapshot snapshot = await uploadTask;
-      String imageUrl = await snapshot.ref.getDownloadURL();
-
-      await _firestore.collection('adminchat').add({
-        'message': 'Image',
-        'liked': false,
-        'replyto': '',
-        'senderid': senderId.toString(),
-        'receiverid': receiverId,
-        'timestamp': FieldValue.serverTimestamp(),
-        'type': 'image',
-        'imageUrl': imageUrl,
-        'seen': false,
-      });
+      await NotificationService.sendChatNotification(
+        recipientUserId: receiverId,
+        senderName: "Admin",
+        senderId: '1',
+        message: '📷 Photo',
+        extraData: {
+          'chatId': receiverId,
+          'screen': 'chat',
+        },
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text("Failed to send image: $e")));
       }
     }
+  }
+
+  Future<String> _uploadChatImage({
+    File? image,
+    Uint8List? imageBytes,
+  }) async {
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$kAdminSocketUrl/upload?type=image'),
+    );
+
+    if (kIsWeb) {
+      if (imageBytes == null) {
+        throw Exception('Missing image bytes');
+      }
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          imageBytes,
+          filename: 'chat_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        ),
+      );
+    } else {
+      if (image == null) {
+        throw Exception('Missing image file');
+      }
+      request.files.add(await http.MultipartFile.fromPath('file', image.path));
+    }
+
+    final response = await request.send();
+    final body = await response.stream.bytesToString();
+    if (response.statusCode != 200) {
+      throw Exception('Upload failed: ${response.statusCode} $body');
+    }
+
+    final json = jsonDecode(body) as Map<String, dynamic>;
+    final url = json['url']?.toString();
+    if (url == null || url.isEmpty) {
+      throw Exception(json['error']?.toString() ?? 'Upload returned no URL');
+    }
+    return url;
   }
 
   int _estimateLineCount(String text) {
@@ -3336,10 +3363,11 @@ class _ChatWindowState extends State<ChatWindow> {
 
   Future<void> _sendMessage() async {
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final receiverId = chatProvider.id?.toString();
 
-    if (_messageController.text.trim().isEmpty) return;
+    if (_messageController.text.trim().isEmpty || receiverId == null) return;
 
-    String messageText = _messageController.text.trim();
+    final String messageText = _messageController.text.trim();
 
     // --- Inline Edit Mode ---
     if (_editingDocId != null) {
@@ -3382,43 +3410,27 @@ class _ChatWindowState extends State<ChatWindow> {
     _clearAdminTypingStatus();
 
     try {
-      await _firestore.collection('adminchat').add({
-        'message': messageText,
-        'liked': false,
-        'replyto': replySnapshot,
-        'senderid': senderId.toString(),
-        'receiverid': chatProvider.id.toString(),
-        'timestamp': FieldValue.serverTimestamp(),
-        'type': 'text',
-        'seen': false,
-      });
+      _socketService.sendMessage(
+        chatRoomId: AdminSocketService.chatRoomId(receiverId),
+        receiverId: receiverId,
+        message: messageText,
+        messageType: 'text',
+        messageId: 'msg_${DateTime.now().millisecondsSinceEpoch}_$senderId',
+        repliedTo: replySnapshot,
+        receiverName: chatProvider.namee,
+        receiverImage: chatProvider.profilePicture,
+      );
 
       await NotificationService.sendChatNotification(
-        recipientUserId: chatProvider.id.toString(),
+        recipientUserId: receiverId,
         senderName: "Admin",
         senderId: '1',
         message: messageText,
         extraData: {
-          'chatId': chatProvider.id.toString(),
+          'chatId': receiverId,
           'screen': 'chat',
         },
       );
-
-      String conversationId = getConversationId(
-        senderId.toString(),
-        chatProvider.id.toString(),
-      );
-
-      await FirebaseFirestore.instance
-          .collection('conversations')
-          .doc(conversationId)
-          .set({
-        'participants': [senderId.toString(), chatProvider.id.toString()],
-        'lastMessage': messageText,
-        'lastTimestamp': FieldValue.serverTimestamp(),
-        'lastSenderId': senderId.toString(),
-      }, SetOptions(merge: true));
-
     } catch (e) {
       // Restore message text so user doesn't lose their content
       if (_messageController.text.isEmpty) {
@@ -3432,10 +3444,6 @@ class _ChatWindowState extends State<ChatWindow> {
         SnackBar(content: Text("Failed to send message")),
       );
     }
-  }
-
-  String getConversationId(String a, String b) {
-    return (a.compareTo(b) < 0) ? '${a}_$b' : '${b}_$a';
   }
 
   void _showMessageOptions(
@@ -3615,16 +3623,13 @@ class _ChatWindowState extends State<ChatWindow> {
   }
 
   void _searchMessages(String query) {
-    if (_lastSnapshot == null) return;
-
     setState(() {
       if (query.isEmpty) {
         _filteredMessages.clear();
       } else {
-        _filteredMessages = _lastSnapshot!.docs.where((doc) {
-          var data = doc.data() as Map<String, dynamic>;
-          String message = data['message']?.toString().toLowerCase() ?? '';
-          return message.contains(query.toLowerCase());
+        _filteredMessages = _messages.where((message) {
+          final text = message['message']?.toString().toLowerCase() ?? '';
+          return text.contains(query.toLowerCase());
         }).toList();
       }
     });
@@ -3637,7 +3642,8 @@ class _ChatWindowState extends State<ChatWindow> {
     _replyHighlightTimer?.cancel();
     _floatingDateTimer?.cancel();
     _floatingDateNotifier.dispose();
-    _typingSubscription?.cancel();
+    _typingStartSub?.cancel();
+    _typingStopSub?.cancel();
     _clearAdminTypingStatus();
     _scrollController.dispose();
     _messageFocusNode.dispose();

@@ -453,11 +453,13 @@ class _ChatWindowState extends State<ChatWindow> {
 
   /// Show an incoming call dialog when a user calls the admin.
   void _handleIncomingCallFromUser(Map<String, dynamic> data) {
+    const incomingCallTimeoutSeconds = 30;
     final callerId = data['callerId']?.toString() ?? '';
     final callerName = data['callerName']?.toString() ?? 'User';
     final channelName = data['channelName']?.toString() ?? '';
     final callType = data['callType']?.toString() ?? 'audio';
     final isVideo = callType == 'video';
+    final callManager = CallManager();
 
     if (channelName.isEmpty || callerId.isEmpty) return;
 
@@ -495,9 +497,10 @@ class _ChatWindowState extends State<ChatWindow> {
       barrierDismissible: false,
       builder: (ctx) {
         incomingCallDialogContext = ctx;
-        autoRejectTimer = Timer(const Duration(seconds: 30), () {
-          dismissDialog(false);
-        });
+        autoRejectTimer = Timer(
+          const Duration(seconds: incomingCallTimeoutSeconds),
+          () => dismissDialog(false),
+        );
         final icon = isVideo ? Icons.videocam_rounded : Icons.call_rounded;
         final title = isVideo ? 'Incoming video call' : 'Incoming call';
         return Dialog(
@@ -562,7 +565,7 @@ class _ChatWindowState extends State<ChatWindow> {
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    'Respond Within 30 Seconds',
+                    'Respond Within $incomingCallTimeoutSeconds Seconds',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.62),
                       fontSize: 12,
@@ -604,7 +607,7 @@ class _ChatWindowState extends State<ChatWindow> {
       autoRejectTimer?.cancel();
       cancelSub?.cancel();
       endedSub?.cancel();
-      CallManager().clearCallData();
+      callManager.clearCallData();
       if (accepted == true) {
         _socketService.emitCallAccept(
           callerId: callerId,

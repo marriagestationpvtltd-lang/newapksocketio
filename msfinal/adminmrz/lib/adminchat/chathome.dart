@@ -49,6 +49,7 @@ class _ChatWindowState extends State<ChatWindow> {
 
   // Socket.IO service for all chat messaging.
   final AdminSocketService _socketService = AdminSocketService();
+  final CallManager _callManager = CallManager();
   StreamSubscription<Map<String, dynamic>>? _newMsgSub;
   StreamSubscription<Map<String, dynamic>>? _editedMsgSub;
   StreamSubscription<Map<String, dynamic>>? _deletedMsgSub;
@@ -84,7 +85,7 @@ class _ChatWindowState extends State<ChatWindow> {
   // Pagination
   static const int _pageSize = 20;
   static const double _autoScrollThreshold = 120;
-  static const int _incomingCallTimeoutSeconds = 30;
+  static const int kIncomingCallTimeoutSeconds = 30;
   int _currentPage = 1;
   bool _isLoadingMore = false;
   bool _hasMoreMessages = true;
@@ -459,7 +460,6 @@ class _ChatWindowState extends State<ChatWindow> {
     final channelName = data['channelName']?.toString() ?? '';
     final callType = data['callType']?.toString() ?? 'audio';
     final isVideo = callType == 'video';
-    final callManager = CallManager();
 
     if (channelName.isEmpty || callerId.isEmpty) return;
 
@@ -497,7 +497,7 @@ class _ChatWindowState extends State<ChatWindow> {
       builder: (ctx) {
         incomingCallDialogContext = ctx;
         autoRejectTimer = Timer(
-          const Duration(seconds: _incomingCallTimeoutSeconds),
+          const Duration(seconds: kIncomingCallTimeoutSeconds),
           () => dismissDialog(false),
         );
         final icon = isVideo ? Icons.videocam_rounded : Icons.call_rounded;
@@ -564,7 +564,7 @@ class _ChatWindowState extends State<ChatWindow> {
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    'Respond within $_incomingCallTimeoutSeconds seconds',
+                    'Respond within $kIncomingCallTimeoutSeconds seconds',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.62),
                       fontSize: 12,
@@ -606,7 +606,7 @@ class _ChatWindowState extends State<ChatWindow> {
       autoRejectTimer?.cancel();
       cancelSub?.cancel();
       endedSub?.cancel();
-      callManager.clearCallData();
+      _callManager.clearCallData();
       if (accepted == true) {
         _socketService.emitCallAccept(
           callerId: callerId,

@@ -5,7 +5,7 @@ import 'package:socket_io_client/socket_io_client.dart' as IO;
 /// URL of the Node.js Socket.IO server.
 /// ⚠️  Replace this with your actual deployed server URL before building.
 /// Example: 'https://socket.yourserver.com:3001'
-const String kAdminSocketUrl = 'http://192.168.1.4:3001';
+const String kAdminSocketUrl = 'http://192.168.18.214:3001';
 
 /// Admin user ID — always '1'.
 const String kAdminUserId = '1';
@@ -27,43 +27,30 @@ class AdminSocketService {
 
   // ── Stream controllers ────────────────────────────────────────────────────
 
-  final _newMessageCtrl =
-      StreamController<Map<String, dynamic>>.broadcast();
-  final _messageEditedCtrl =
-      StreamController<Map<String, dynamic>>.broadcast();
+  final _newMessageCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _messageEditedCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _messageDeletedCtrl =
       StreamController<Map<String, dynamic>>.broadcast();
-  final _messageUnsentCtrl =
-      StreamController<Map<String, dynamic>>.broadcast();
-  final _messageLikedCtrl =
-      StreamController<Map<String, dynamic>>.broadcast();
-  final _messagesReadCtrl =
-      StreamController<Map<String, dynamic>>.broadcast();
-  final _typingStartCtrl =
-      StreamController<Map<String, dynamic>>.broadcast();
-  final _typingStopCtrl =
-      StreamController<Map<String, dynamic>>.broadcast();
-  final _userStatusCtrl =
-      StreamController<Map<String, dynamic>>.broadcast();
+  final _messageUnsentCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _messageLikedCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _messagesReadCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _typingStartCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _typingStopCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _userStatusCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _connectionCtrl = StreamController<bool>.broadcast();
 
   // ── Public streams ────────────────────────────────────────────────────────
 
   Stream<Map<String, dynamic>> get onNewMessage => _newMessageCtrl.stream;
-  Stream<Map<String, dynamic>> get onMessageEdited =>
-      _messageEditedCtrl.stream;
+  Stream<Map<String, dynamic>> get onMessageEdited => _messageEditedCtrl.stream;
   Stream<Map<String, dynamic>> get onMessageDeleted =>
       _messageDeletedCtrl.stream;
-  Stream<Map<String, dynamic>> get onMessageUnsent =>
-      _messageUnsentCtrl.stream;
-  Stream<Map<String, dynamic>> get onMessageLiked =>
-      _messageLikedCtrl.stream;
-  Stream<Map<String, dynamic>> get onMessagesRead =>
-      _messagesReadCtrl.stream;
+  Stream<Map<String, dynamic>> get onMessageUnsent => _messageUnsentCtrl.stream;
+  Stream<Map<String, dynamic>> get onMessageLiked => _messageLikedCtrl.stream;
+  Stream<Map<String, dynamic>> get onMessagesRead => _messagesReadCtrl.stream;
   Stream<Map<String, dynamic>> get onTypingStart => _typingStartCtrl.stream;
   Stream<Map<String, dynamic>> get onTypingStop => _typingStopCtrl.stream;
-  Stream<Map<String, dynamic>> get onUserStatusChange =>
-      _userStatusCtrl.stream;
+  Stream<Map<String, dynamic>> get onUserStatusChange => _userStatusCtrl.stream;
   Stream<bool> get onConnectionChange => _connectionCtrl.stream;
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -103,28 +90,23 @@ class AdminSocketService {
     });
 
     _socket!.on('message_edited', (data) {
-      if (data is Map)
-        _messageEditedCtrl.add(Map<String, dynamic>.from(data));
+      if (data is Map) _messageEditedCtrl.add(Map<String, dynamic>.from(data));
     });
 
     _socket!.on('message_deleted', (data) {
-      if (data is Map)
-        _messageDeletedCtrl.add(Map<String, dynamic>.from(data));
+      if (data is Map) _messageDeletedCtrl.add(Map<String, dynamic>.from(data));
     });
 
     _socket!.on('message_unsent', (data) {
-      if (data is Map)
-        _messageUnsentCtrl.add(Map<String, dynamic>.from(data));
+      if (data is Map) _messageUnsentCtrl.add(Map<String, dynamic>.from(data));
     });
 
     _socket!.on('message_liked', (data) {
-      if (data is Map)
-        _messageLikedCtrl.add(Map<String, dynamic>.from(data));
+      if (data is Map) _messageLikedCtrl.add(Map<String, dynamic>.from(data));
     });
 
     _socket!.on('messages_read', (data) {
-      if (data is Map)
-        _messagesReadCtrl.add(Map<String, dynamic>.from(data));
+      if (data is Map) _messagesReadCtrl.add(Map<String, dynamic>.from(data));
     });
 
     _socket!.on('typing_start', (data) {
@@ -204,10 +186,7 @@ class AdminSocketService {
     });
   }
 
-  void deleteMessage({
-    required String chatRoomId,
-    required String messageId,
-  }) {
+  void deleteMessage({required String chatRoomId, required String messageId}) {
     _socket?.emit('delete_message', {
       'chatRoomId': chatRoomId,
       'messageId': messageId,
@@ -216,10 +195,7 @@ class AdminSocketService {
     });
   }
 
-  void unsendMessage({
-    required String chatRoomId,
-    required String messageId,
-  }) {
+  void unsendMessage({required String chatRoomId, required String messageId}) {
     _socket?.emit('unsend_message', {
       'chatRoomId': chatRoomId,
       'messageId': messageId,
@@ -227,10 +203,7 @@ class AdminSocketService {
     });
   }
 
-  void toggleLike({
-    required String chatRoomId,
-    required String messageId,
-  }) {
+  void toggleLike({required String chatRoomId, required String messageId}) {
     _socket?.emit('toggle_like', {
       'chatRoomId': chatRoomId,
       'messageId': messageId,
@@ -270,7 +243,8 @@ class AdminSocketService {
     final timer = Timer(kAdminSocketTimeout, () {
       if (!completer.isCompleted) {
         completer.completeError(
-            TimeoutException('getMessages timed out', kAdminSocketTimeout));
+          TimeoutException('getMessages timed out', kAdminSocketTimeout),
+        );
       }
     });
 

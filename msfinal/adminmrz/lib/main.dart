@@ -17,20 +17,19 @@ import 'document/docprovider/docservice.dart';
 import 'firebase_options.dart';
 import 'package/packageProvider.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
-import 'dart:js' as js;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'dart:html' as html;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   setUrlStrategy(PathUrlStrategy());
-
-
-
-
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (error) {
+    debugPrint('Firebase init skipped: $error');
+  }
 
   WebNotificationService.ensurePermissionOnUserGesture();
 

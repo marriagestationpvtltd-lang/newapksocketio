@@ -1,14 +1,19 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 /// URL of the Node.js Socket.IO server.
 /// ⚠️  Replace this with your actual deployed server URL before building.
 /// Example: 'https://socket.yourserver.com:3001'
-const String kAdminSocketUrl = 'http://192.168.1.4:3001';
+const String kAdminSocketUrl = String.fromEnvironment(
+  'ADMIN_SOCKET_URL',
+  defaultValue: 'http://192.168.18.214:3001',
+);
 
 /// Admin user ID — always '1'.
 const String kAdminUserId = '1';
+const int kAdminSocketReconnectAttempts = 20;
 
 /// Default timeout for acknowledgement-based Socket.IO calls.
 const Duration kAdminSocketTimeout = Duration(seconds: 15);
@@ -45,6 +50,17 @@ class AdminSocketService {
       StreamController<Map<String, dynamic>>.broadcast();
   final _userStatusCtrl =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _chatRoomsUpdateCtrl = StreamController<List<dynamic>>.broadcast();
+  final _incomingCallCtrl =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _callAcceptedCtrl =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _callRejectedCtrl =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _callCancelledCtrl =
+      StreamController<Map<String, dynamic>>.broadcast();
+  final _callEndedCtrl =
+      StreamController<Map<String, dynamic>>.broadcast();
   final _connectionCtrl = StreamController<bool>.broadcast();
 
   // ── Public streams ────────────────────────────────────────────────────────
@@ -64,6 +80,13 @@ class AdminSocketService {
   Stream<Map<String, dynamic>> get onTypingStop => _typingStopCtrl.stream;
   Stream<Map<String, dynamic>> get onUserStatusChange =>
       _userStatusCtrl.stream;
+  Stream<List<dynamic>> get onChatRoomsUpdate => _chatRoomsUpdateCtrl.stream;
+  Stream<Map<String, dynamic>> get onIncomingCall => _incomingCallCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallAccepted => _callAcceptedCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallRejected => _callRejectedCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallCancelled =>
+      _callCancelledCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallEnded => _callEndedCtrl.stream;
   Stream<bool> get onConnectionChange => _connectionCtrl.stream;
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -82,7 +105,7 @@ class AdminSocketService {
           .setTransports(['websocket', 'polling'])
           .setReconnectionDelay(2000)
           .setReconnectionDelayMax(10000)
-          .setReconnectionAttempts(double.infinity as int)
+          .setReconnectionAttempts(kAdminSocketReconnectAttempts)
           .enableReconnection()
           .disableAutoConnect()
           .build(),
@@ -96,6 +119,11 @@ class AdminSocketService {
 
     _socket!.onDisconnect((_) {
       _connectionCtrl.add(false);
+    });
+
+    _socket!.onConnectError((err) {
+      _connectionCtrl.add(false);
+      print('❌ Admin socket connect error: $err');
     });
 
     _socket!.on('new_message', (data) {
@@ -139,11 +167,59 @@ class AdminSocketService {
       if (data is Map) _userStatusCtrl.add(Map<String, dynamic>.from(data));
     });
 
+    _socket!.on('chat_rooms_update', (data) {
+      final map = _toMap(data);
+      final rooms = map['chatRooms'];
+      if (rooms is List) _chatRoomsUpdateCtrl.add(rooms);
+    });
+
+    _socket!.on('incoming_call', (data) {
+      _incomingCallCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_accepted', (data) {
+      _callAcceptedCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_rejected', (data) {
+      _callRejectedCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_cancelled', (data) {
+      _callCancelledCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_ended', (data) {
+      _callEndedCtrl.add(_toMap(data));
+    });
+
     _socket!.connect();
   }
 
   void disconnect() {
     _socket?.disconnect();
+  }
+
+  Future<bool> ensureConnected() async {
+    if (isConnected) return true;
+    connect();
+
+    final completer = Completer<bool>();
+    late StreamSubscription<bool> sub;
+    final timer = Timer(kAdminSocketTimeout, () {
+      if (!completer.isCompleted) completer.complete(false);
+    });
+
+    sub = onConnectionChange.listen((connected) {
+      if (connected && !completer.isCompleted) {
+        completer.complete(true);
+      }
+    });
+
+    final result = await completer.future;
+    await sub.cancel();
+    timer.cancel();
+    return result;
   }
 
   // ── Room management ───────────────────────────────────────────────────────
@@ -288,6 +364,116 @@ class AdminSocketService {
     return completer.future;
   }
 
+  Future<List<dynamic>> getChatRooms() async {
+    final completer = Completer<List<dynamic>>();
+    final timer = Timer(kAdminSocketTimeout, () {
+      if (!completer.isCompleted) {
+        completer.completeError(
+          TimeoutException('getChatRooms timed out', kAdminSocketTimeout),
+        );
+      }
+    });
+
+    _socket?.emitWithAck(
+      'get_chat_rooms',
+      {'userId': kAdminUserId},
+      ack: (data) {
+        timer.cancel();
+        final map = _toMap(data);
+        final rooms = map['chatRooms'];
+        if (!completer.isCompleted) {
+          completer.complete(rooms is List ? rooms : const []);
+        }
+      },
+    );
+
+    return completer.future;
+  }
+
+  Future<Map<String, dynamic>> getUserStatus(String userId) async {
+    final completer = Completer<Map<String, dynamic>>();
+    final timer = Timer(kAdminSocketTimeout, () {
+      if (!completer.isCompleted) {
+        completer.complete({
+          'userId': userId,
+          'isOnline': false,
+          'lastSeen': null,
+        });
+      }
+    });
+
+    _socket?.emitWithAck(
+      'get_user_status',
+      {'userId': userId},
+      ack: (data) {
+        timer.cancel();
+        if (!completer.isCompleted) {
+          completer.complete(_toMap(data));
+        }
+      },
+    );
+
+    return completer.future;
+  }
+
+  void emitCallInvite({
+    required String recipientId,
+    required String callerId,
+    required String callerName,
+    required String callerImage,
+    required String channelName,
+    required String callerUid,
+    required String callType,
+    String? chatRoomId,
+  }) {
+    _socket?.emit('call_invite', {
+      'recipientId': recipientId,
+      'callerId': callerId,
+      'callerName': callerName,
+      'callerImage': callerImage,
+      'channelName': channelName,
+      'callerUid': callerUid,
+      'callType': callType,
+      if (chatRoomId != null) 'chatRoomId': chatRoomId,
+      'type': callType == 'video' ? 'video_call' : 'call',
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
+  void emitCallCancel({
+    required String recipientId,
+    required String callerId,
+    required String callerName,
+    required String channelName,
+    required String callType,
+  }) {
+    _socket?.emit('call_cancel', {
+      'recipientId': recipientId,
+      'callerId': callerId,
+      'callerName': callerName,
+      'channelName': channelName,
+      'callType': callType,
+      'type': callType == 'video' ? 'video_call_cancelled' : 'call_cancelled',
+    });
+  }
+
+  void emitCallEnd({
+    required String callerId,
+    required String recipientId,
+    required String channelName,
+    required String callType,
+    int duration = 0,
+  }) {
+    _socket?.emit('call_end', {
+      'callerId': callerId,
+      'recipientId': recipientId,
+      'channelName': channelName,
+      'callType': callType,
+      'duration': duration,
+      'type': callType == 'video' ? 'video_call_ended' : 'call_ended',
+    });
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   /// Compute the chat room ID shared between admin and [userId].
@@ -299,7 +485,19 @@ class AdminSocketService {
   /// Parse a nullable timestamp string to [DateTime].
   static DateTime? parseTimestamp(dynamic ts) {
     if (ts == null) return null;
+    if (ts is DateTime) return ts;
     if (ts is String) return DateTime.tryParse(ts);
     return null;
+  }
+
+  static Map<String, dynamic> _toMap(dynamic data) {
+    if (data is Map<String, dynamic>) return data;
+    if (data is Map) return Map<String, dynamic>.from(data);
+    if (data is String) {
+      try {
+        return jsonDecode(data) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+    return {};
   }
 }

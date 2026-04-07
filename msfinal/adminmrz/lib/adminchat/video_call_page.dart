@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui';
+import 'package:adminmrz/adminchat/services/admin_socket_service.dart';
 import 'package:adminmrz/adminchat/services/pushservice.dart';
 import 'package:adminmrz/settings/call_settings_provider.dart';
 import 'package:characters/characters.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -92,7 +92,9 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   late AudioPlayer _ringtonePlayer;
   Timer? _ringtoneRepeatTimer;
 
-  StreamSubscription<DocumentSnapshot>? _callSignalSubscription;
+  final AdminSocketService _socketService = AdminSocketService();
+  StreamSubscription<Map<String, dynamic>>? _callRejectedSubscription;
+  StreamSubscription<Map<String, dynamic>>? _callEndedSubscription;
 
   // Video renderers
   Widget? _localVideoView;
@@ -179,6 +181,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
 
       // Send call notification for outgoing calls
       if (widget.isOutgoingCall) {
+        final socketReady = await _socketService.ensureConnected();
         await NotificationService.sendVideoCallNotification(
           recipientUserId: widget.otherUserId,
           callerName: widget.currentUserName,
@@ -188,39 +191,41 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
           agoraAppId: AgoraTokenService.appId,
           agoraCertificate: 'SERVER_ONLY',
         );
-
-        // Write call signal to Firestore so the user app can signal rejection in real-time.
-        await FirebaseFirestore.instance
-            .collection('call_signals')
-            .doc(_channel)
-            .set({
-          'status': 'ringing',
-          'callerId': widget.currentUserId,
-          'receiverId': widget.otherUserId,
-          'type': 'video',
-          'timestamp': FieldValue.serverTimestamp(),
-        });
+        if (socketReady) {
+          _socketService.emitCallInvite(
+            recipientId: widget.otherUserId,
+            callerId: widget.currentUserId,
+            callerName: widget.currentUserName,
+            callerImage: '',
+            channelName: _channel,
+            callerUid: _localUid.toString(),
+            callType: 'video',
+            chatRoomId: AdminSocketService.chatRoomId(widget.otherUserId),
+          );
+        }
 
         // Transition to "Ringing" — remote phone is now ringing
         if (mounted) {
           setState(() => _callStatus = _VCallStatus.ringing);
         }
 
-        // Listen for rejection from the user's app.
-        _callSignalSubscription = FirebaseFirestore.instance
-            .collection('call_signals')
-            .doc(_channel)
-            .snapshots()
-            .listen(
-          (snap) async {
-            if (!mounted || _ending) return;
-            final data = snap.data();
-            if (data != null && data['status'] == 'rejected') {
-              await _endCall();
-            }
-          },
-          onError: (_) {/* Firestore errors are non-fatal; timeout will still fire */},
-        );
+        _callRejectedSubscription?.cancel();
+        _callRejectedSubscription =
+            _socketService.onCallRejected.listen((data) async {
+          if (!mounted || _ending) return;
+          if (data['channelName']?.toString() == _channel) {
+            await _endCall();
+          }
+        });
+
+        _callEndedSubscription?.cancel();
+        _callEndedSubscription =
+            _socketService.onCallEnded.listen((data) async {
+          if (!mounted || _ending) return;
+          if (data['channelName']?.toString() == _channel) {
+            await _endCall();
+          }
+        });
       }
 
       // Initialize Agora engine
@@ -292,9 +297,16 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
       _timeoutTimer = Timer(const Duration(seconds: 30), () {
         if (_remoteUid == null) {
           if (widget.isOutgoingCall) {
-            NotificationService.sendMissedCallNotification(
-              callerId: widget.currentUserId,
-              callerName: widget.otherUserName,
+            NotificationService.sendNotification(
+              userId: widget.otherUserId,
+              title: '⏰ Missed Video Call',
+              body: 'Missed video call from ${widget.currentUserName}',
+              data: {
+                'type': 'missed_video_call',
+                'callerId': widget.currentUserId,
+                'callerName': widget.currentUserName,
+                'timestamp': DateTime.now().toIso8601String(),
+              },
             );
           }
           _endCall();
@@ -347,22 +359,35 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     _callTimer?.cancel();
     _timeoutTimer?.cancel();
 
-    await _callSignalSubscription?.cancel();
-    _callSignalSubscription = null;
+    await _callRejectedSubscription?.cancel();
+    await _callEndedSubscription?.cancel();
+    _callRejectedSubscription = null;
+    _callEndedSubscription = null;
 
-    // Clean up the Firestore call signal document.
     if (widget.isOutgoingCall) {
-      FirebaseFirestore.instance
-          .collection('call_signals')
-          .doc(_channel)
-          .delete()
-          .catchError((_) {});
+      if (_callActive) {
+        _socketService.emitCallEnd(
+          callerId: widget.currentUserId,
+          recipientId: widget.otherUserId,
+          channelName: _channel,
+          callType: 'video',
+          duration: _duration.inSeconds,
+        );
+      } else {
+        _socketService.emitCallCancel(
+          recipientId: widget.otherUserId,
+          callerId: widget.currentUserId,
+          callerName: widget.currentUserName,
+          channelName: _channel,
+          callType: 'video',
+        );
+      }
     }
 
     await _stopRingtone();
 
     if (_callActive) {
-      await NotificationService.sendCallEndedNotification(
+      await NotificationService.sendVideoCallEndedNotification(
         recipientUserId: widget.otherUserId,
         callerName: widget.currentUserName,
         reason: 'ended',
@@ -818,7 +843,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
    // _callTimer?.cancel();
     _timeoutTimer?.cancel();
     _ringtoneRepeatTimer?.cancel();
-    _callSignalSubscription?.cancel();
+    _callRejectedSubscription?.cancel();
+    _callEndedSubscription?.cancel();
     _ringtonePlayer.dispose();
     super.dispose();
   }

@@ -3615,14 +3615,11 @@ class _ChatWindowState extends State<ChatWindow> {
   }
 
   void _searchMessages(String query) {
-    if (_lastSnapshot == null) return;
-
     setState(() {
       if (query.isEmpty) {
         _filteredMessages.clear();
       } else {
-        _filteredMessages = _lastSnapshot!.docs.where((doc) {
-          var data = doc.data() as Map<String, dynamic>;
+        _filteredMessages = _messages.where((data) {
           String message = data['message']?.toString().toLowerCase() ?? '';
           return message.contains(query.toLowerCase());
         }).toList();

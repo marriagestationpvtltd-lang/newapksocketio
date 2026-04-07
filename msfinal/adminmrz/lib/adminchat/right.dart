@@ -449,7 +449,8 @@ class _ProfileSidebarState extends State<ProfileSidebar> {
         receiverId: receiverId,
         message: jsonEncode(profileData),
         messageType: 'profile_card',
-        messageId: 'profile_${DateTime.now().millisecondsSinceEpoch}_1',
+        messageId:
+            'profile_${DateTime.now().millisecondsSinceEpoch}_$kAdminUserId',
         receiverName: chatProvider.namee,
         receiverImage: chatProvider.profilePicture,
       );

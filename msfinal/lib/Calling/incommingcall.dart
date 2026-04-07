@@ -251,6 +251,9 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
           onJoinChannelSuccess: (_, __) {
             if (mounted) setState(() => _joined = true);
             unawaited(_startForegroundService());
+            // setEnableSpeakerphone must be called after joining the channel (Agora SDK v4.x)
+            unawaited(_engine.setEnableSpeakerphone(_speakerOn)
+                .catchError((e) => debugPrint('setEnableSpeakerphone error: $e')));
 
             // Notify caller AFTER successfully joining Agora channel
             // This prevents race condition where caller receives accept before recipient joins
@@ -295,8 +298,6 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
 
       await _engine.enableAudio();
       await _engine.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
-      await _engine.setEnableSpeakerphone(_speakerOn);
-
       await _engine.joinChannel(
         token: token,
         channelId: _channel,

@@ -530,9 +530,17 @@ class _ChatSidebarState extends State<ChatSidebar> {
         _sortUsers();
       }
 
-      // Ensure selected chat is still in filtered list, if not, select first
-      if (_selectedChat != null && !_filteredUsers.contains(_selectedChat)) {
-        if (_filteredUsers.isNotEmpty) {
+      // Ensure selected chat is still in filtered list.
+      // Use ID-based lookup so stale object references (after _users is
+      // replaced) don't incorrectly fall back to the first user.
+      final selectedId = _selectedChat?['id']?.toString();
+      if (selectedId != null) {
+        final matchIdx = _filteredUsers
+            .indexWhere((u) => u['id']?.toString() == selectedId);
+        if (matchIdx >= 0) {
+          // Keep _selectedChat pointing at the current object in the list.
+          _selectedChat = _filteredUsers[matchIdx];
+        } else if (_filteredUsers.isNotEmpty) {
           _selectedChat = _filteredUsers[0];
           _updateSelectedChat();
         } else {

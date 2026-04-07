@@ -377,6 +377,10 @@ class _ChatSidebarState extends State<ChatSidebar> {
           AdminSocketService.parseTimestamp(room['lastMessageTime']);
       tempMap[otherUserId] = {
         'lastMessage': room['lastMessage'] ?? '',
+        'lastMessagePreview': _formatConversationPreview(
+          rawMessage: room['lastMessage']?.toString() ?? '',
+          messageType: room['lastMessageType']?.toString(),
+        ),
         'lastTimestamp': lastTime,
         'lastMessageType': room['lastMessageType']?.toString() ?? 'text',
       };
@@ -472,17 +476,81 @@ class _ChatSidebarState extends State<ChatSidebar> {
   }
 
   String _messagePreviewFromSocket(Map<String, dynamic> data) {
-    final type = data['messageType']?.toString() ?? 'text';
+    return _formatConversationPreview(
+      rawMessage: data['message']?.toString() ?? '',
+      messageType: data['messageType']?.toString(),
+    );
+  }
+
+  String _formatConversationPreview({
+    required String rawMessage,
+    String? messageType,
+  }) {
+    final type = messageType?.trim().toLowerCase();
     switch (type) {
       case 'image':
         return '📷 Photo';
+      case 'voice':
+        return '🎤 Voice message';
       case 'profile_card':
         return '👤 Match Profile';
       case 'call':
-        return '📞 Call';
+        return _formatCallPreview(rawMessage);
+      case 'text':
+      case null:
+        break;
       default:
-        return data['message']?.toString() ?? '';
+        return rawMessage;
     }
+
+    final decoded = _tryParseJsonMap(rawMessage);
+    if (decoded != null &&
+        (decoded.containsKey('callType') ||
+            decoded.containsKey('callStatus') ||
+            decoded.containsKey('callDuration') ||
+            decoded.containsKey('label'))) {
+      return _formatCallPreview(rawMessage, decoded: decoded);
+    }
+
+    return rawMessage;
+  }
+
+  String _formatCallPreview(String rawMessage, {Map<String, dynamic>? decoded}) {
+    final payload = decoded ?? _tryParseJsonMap(rawMessage);
+    if (payload == null) {
+      return rawMessage.isEmpty ? 'Call' : rawMessage;
+    }
+
+    final String callType = payload['callType']?.toString() ?? 'audio';
+    final String status = payload['callStatus']?.toString() ?? '';
+    final int durationSeconds = (payload['callDuration'] as num?)?.toInt() ?? 0;
+    final bool isVideo = callType == 'video';
+
+    if (status == 'missed') {
+      return isVideo ? 'Missed Video Call' : 'Missed Call';
+    }
+
+    final String label = isVideo ? 'Video Call' : 'Audio Call';
+    if (durationSeconds <= 0) return label;
+    return '$label • ${_formatCallDuration(durationSeconds)}';
+  }
+
+  Map<String, dynamic>? _tryParseJsonMap(String rawMessage) {
+    if (rawMessage.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(rawMessage);
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String _formatCallDuration(int seconds) {
+    final duration = Duration(seconds: seconds);
+    final minutes = duration.inMinutes;
+    final remainingSeconds = duration.inSeconds.remainder(60);
+    return '$minutes:${remainingSeconds.toString().padLeft(2, '0')}';
   }
 
   String _formatLastSeen(DateTime? lastSeen) {
@@ -959,9 +1027,11 @@ class _ChatSidebarState extends State<ChatSidebar> {
                             user["name"] ?? "",
                             user["id"].toString(),
                             conversationMap[user["id"].toString()]
-                                    ?['lastMessage'] ??
-                                user["chat_message"] ??
-                                "",
+                                    ?['lastMessagePreview'] ??
+                                _formatConversationPreview(
+                                  rawMessage: user["chat_message"]?.toString() ?? "",
+                                  messageType: user["chat_message_type"]?.toString(),
+                                ),
                             user["last_seen_text"] ?? "",
                             user["is_paid"] ?? false,
                             user["is_online"] ?? false,

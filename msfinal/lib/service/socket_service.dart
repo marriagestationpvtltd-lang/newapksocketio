@@ -49,6 +49,7 @@ class SocketService {
   final _callRejectedCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _callCancelledCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _callEndedCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _callRingingCtrl = StreamController<Map<String, dynamic>>.broadcast();
 
   // ── Public streams ────────────────────────────────────────────────────────
 
@@ -70,6 +71,8 @@ class SocketService {
   Stream<Map<String, dynamic>> get onCallRejected => _callRejectedCtrl.stream;
   Stream<Map<String, dynamic>> get onCallCancelled => _callCancelledCtrl.stream;
   Stream<Map<String, dynamic>> get onCallEnded => _callEndedCtrl.stream;
+  /// Emitted when the recipient's device starts ringing (Calling → Ringing).
+  Stream<Map<String, dynamic>> get onCallRinging => _callRingingCtrl.stream;
 
   bool get isConnected => _socket?.connected == true;
 
@@ -171,6 +174,10 @@ class SocketService {
 
     _socket!.on('call_ended', (data) {
       _callEndedCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_ringing', (data) {
+      _callRingingCtrl.add(_toMap(data));
     });
 
     _socket!.on('error', (data) {
@@ -360,6 +367,22 @@ class SocketService {
       'channelName': channelName,
       'callType': callType,
       'type': callType == 'video' ? 'video_call_cancelled' : 'call_cancelled',
+    });
+  }
+
+  /// Notify the caller that the recipient's device is actively ringing.
+  /// Called by the recipient when IncomingCallScreen becomes visible.
+  void emitCallRinging({
+    required String callerId,
+    required String recipientId,
+    required String channelName,
+    String callType = 'audio',
+  }) {
+    _socket?.emit('call_ringing', {
+      'callerId': callerId,
+      'recipientId': recipientId,
+      'channelName': channelName,
+      'callType': callType,
     });
   }
 

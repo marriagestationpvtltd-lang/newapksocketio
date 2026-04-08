@@ -71,6 +71,7 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
   String _currentUserName = '';
   String _currentUserImage = '';
   String _chatRoomId = '';  // chat room for inline call messages
+  bool _pendingEmitRinging = false;
 
   @override
   void initState() {
@@ -87,6 +88,17 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _cancelCallNotification();
       _playRingtone();
+      // Notify the caller that this device is actively ringing.
+      if (_callerId.isNotEmpty && _currentUserId.isNotEmpty) {
+        SocketService().emitCallRinging(
+          callerId: _callerId,
+          recipientId: _currentUserId,
+          channelName: _channel,
+          callType: _isVideoCall ? 'video' : 'audio',
+        );
+      } else {
+        _pendingEmitRinging = true;
+      }
     });
   }
 
@@ -162,6 +174,17 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
         _currentUserId = userData['id']?.toString() ?? '';
         _currentUserName = userData['name']?.toString() ?? '';
         _currentUserImage = userData['image']?.toString() ?? '';
+
+        // Deferred ringing notification: emit now that we have the user ID.
+        if (_pendingEmitRinging && _callerId.isNotEmpty && _currentUserId.isNotEmpty) {
+          _pendingEmitRinging = false;
+          SocketService().emitCallRinging(
+            callerId: _callerId,
+            recipientId: _currentUserId,
+            channelName: _channel,
+            callType: _isVideoCall ? 'video' : 'audio',
+          );
+        }
 
         // Log incoming video call
         _callHistoryId = await CallHistoryService.logCall(

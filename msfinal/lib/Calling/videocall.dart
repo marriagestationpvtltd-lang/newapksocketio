@@ -66,6 +66,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   bool _ending = false;
   bool _remoteAccepted = false;
   bool _isCallRinging = true; // Add ringing state
+  bool _isRecipientRinging = false; // true when recipient device is ringing
   bool _foregroundServiceStarted = false;
 
   Timer? _timeoutTimer;
@@ -76,6 +77,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   StreamSubscription<Map<String, dynamic>>? _socketAcceptedSub;
   StreamSubscription<Map<String, dynamic>>? _socketRejectedSub;
   StreamSubscription<Map<String, dynamic>>? _socketEndedSub;
+  StreamSubscription<Map<String, dynamic>>? _socketRingingSub;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   String? _connectionStatus;
 
@@ -126,7 +128,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
       await _stopRingtone();
 
       await _ringtonePlayer.setReleaseMode(ReleaseMode.loop);
-      await _ringtonePlayer.play(AssetSource('images/outcall.mp3'));
+      await _ringtonePlayer.play(AssetSource('audio/outcall.mp3'));
 
       if (mounted) {
         setState(() => _isPlayingRingtone = true);
@@ -173,6 +175,15 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
       final channelName = data['channelName']?.toString();
       if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
       if (!_ending) _endCall();
+    });
+    // Recipient device started ringing → advance from "Calling..." to "Ringing..."
+    _socketRingingSub = SocketService().onCallRinging.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
+      if (!_isRecipientRinging && mounted) {
+        setState(() => _isRecipientRinging = true);
+        _syncOverlayState();
+      }
     });
   }
 
@@ -295,11 +306,16 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   }
 
   void _syncOverlayState() {
-    final statusText = _callActive
-        ? 'Connected'
-        : (_isCallRinging
-            ? (_remoteAccepted ? 'Connecting video...' : 'Calling...')
-            : 'Connecting...');
+    final String statusText;
+    if (_callActive) {
+      statusText = 'Connected';
+    } else if (_remoteAccepted) {
+      statusText = 'Connecting video...';
+    } else if (_isRecipientRinging) {
+      statusText = 'Ringing...';
+    } else {
+      statusText = 'Calling...';
+    }
 
     CallOverlayManager().updateCallState(
       statusText: statusText,
@@ -528,6 +544,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     _socketAcceptedSub?.cancel();
     _socketRejectedSub?.cancel();
     _socketEndedSub?.cancel();
+    _socketRingingSub?.cancel();
 
     // Always stop ringtone when ending call
     await _stopRingtone();
@@ -785,7 +802,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          _remoteAccepted ? 'Connecting video...' : 'Calling...',
+                          _remoteAccepted ? 'Connecting video...' : (_isRecipientRinging ? 'Ringing...' : 'Calling...'),
                           style: const TextStyle(color: Colors.white70),
                         ),
                       ],
@@ -819,7 +836,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          _isCallRinging ? 'Calling...' : 'Connecting...',
+                          _remoteAccepted ? 'Connecting...' : (_isRecipientRinging ? 'Ringing...' : 'Calling...'),
                           style: const TextStyle(color: Colors.white70, fontSize: 18),
                         ),
                         const SizedBox(height: 10),
@@ -1113,6 +1130,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     _socketAcceptedSub?.cancel();
     _socketRejectedSub?.cancel();
     _socketEndedSub?.cancel();
+    _socketRingingSub?.cancel();
     _connectivitySubscription?.cancel();
     _controlsHideTimer?.cancel();
     // Release Agora engine if not already released by _endCall

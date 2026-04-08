@@ -383,15 +383,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       if (data['chatRoomId']?.toString() != widget.chatRoomId) return;
       final msgId = data['messageId']?.toString();
       if (data['deleteForEveryone'] == true) {
-        // Mark as deleted for everyone – show "This message was deleted" placeholder
+        // Mark with a single flag – show "This message was deleted" placeholder for both parties
         final idx = _cachedMessages.indexWhere((m) => m['messageId']?.toString() == msgId);
         if (idx >= 0) {
           setState(() {
             _cachedMessages[idx] = {
               ..._cachedMessages[idx],
               'deletedForEveryone': true,
-              'isDeletedForSender': true,
-              'isDeletedForReceiver': true,
             };
             _messagesCacheVersion++;
           });
@@ -2298,7 +2296,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   Widget _buildRecordingBar() {
     if (_recordingAnimController == null) return const SizedBox.shrink();
-    // Determine if there is audible audio: amplitude > -40 dBFS
+    // -40 dBFS is a practical silence threshold: typical speech is above ~-30 dBFS
+    // while background silence with no voice sits well below -40 dBFS.
     final bool hasAudio = _audioAmplitude > -40.0;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -2312,7 +2311,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 Icon(Icons.arrow_upward, size: 12, color: Colors.grey.shade500),
                 const SizedBox(width: 4),
                 Text(
-                  'Slide up to cancel  •  Release to send',
+                  'Slide up to cancel \u2022 Release to send',
                   style: TextStyle(
                     fontSize: 11,
                     color: Colors.grey.shade500,

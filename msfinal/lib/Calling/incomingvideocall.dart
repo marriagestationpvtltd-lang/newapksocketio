@@ -271,8 +271,8 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
       if (userId.isEmpty) return false; // unknown user — allow
 
       final response = await http.get(
-        Uri.parse('https://digitallami.com/Api2/masterdata.php?userid=$userId'),
-      );
+        Uri.https('digitallami.com', '/Api2/masterdata.php', {'userid': userId}),
+      ).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {

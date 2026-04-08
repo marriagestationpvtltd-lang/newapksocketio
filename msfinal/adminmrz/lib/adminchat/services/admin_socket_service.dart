@@ -405,6 +405,7 @@ class AdminSocketService {
       'callType': callType,
       if (chatRoomId != null) 'chatRoomId': chatRoomId,
       'type': callType == 'video' ? 'video_call' : 'call',
+      'callerRole': 'admin',
       'timestamp': DateTime.now().toIso8601String(),
     });
   }

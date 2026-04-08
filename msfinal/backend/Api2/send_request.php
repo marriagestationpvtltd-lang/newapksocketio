@@ -1,6 +1,8 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
 
+require_once __DIR__ . '/../shared/activity_logger.php';
+
 // Database configuration
 $dbHost = "127.0.0.1";
 $dbName = "ms";
@@ -124,10 +126,29 @@ try {
             ':created_at' => $created_at
         ]);
 
+        $newProposalId = $pdo->lastInsertId();
+
+        // Resolve names for activity log
+        $nStmt = $pdo->prepare("SELECT id, CONCAT(firstName,' ',lastName) AS name FROM users WHERE id IN (:s,:r)");
+        $nStmt->execute([':s' => $sender_id, ':r' => $receiver_id]);
+        $nMap = [];
+        foreach ($nStmt->fetchAll() as $nr) { $nMap[$nr['id']] = $nr['name']; }
+        $sName = $nMap[$sender_id]   ?? "User $sender_id";
+        $rName = $nMap[$receiver_id] ?? "User $receiver_id";
+
+        logActivity($pdo, [
+            'user_id'       => $sender_id,
+            'user_name'     => $sName,
+            'target_id'     => $receiver_id,
+            'target_name'   => $rName,
+            'activity_type' => 'request_sent',
+            'description'   => "$sName le $rName lai $request_type request pathayo",
+        ]);
+
         echo json_encode([
             "success" => true,
             "message" => "",
-            "proposal_id" => $pdo->lastInsertId()
+            "proposal_id" => $newProposalId
         ]);
     }
 

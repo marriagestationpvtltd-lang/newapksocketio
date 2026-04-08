@@ -1,6 +1,8 @@
 <?php
 header("Content-Type: application/json");
 
+require_once __DIR__ . '/../shared/activity_logger.php';
+
 // ---------------- DB CONNECTION ----------------
 $conn = new mysqli("localhost", "ms", "ms", "ms");
 if ($conn->connect_error) {
@@ -81,6 +83,28 @@ try {
         $notifStmt->execute();
     } catch (Exception $e) {
         // Ignore notification failure
+    }
+
+    // ---------------- LOG ACTIVITY ----------------
+    try {
+        $actPdo = new PDO("mysql:host=localhost;dbname=ms;charset=utf8mb4", "ms", "ms",
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $nStmt = $actPdo->prepare("SELECT id, CONCAT(firstName,' ',lastName) AS name FROM users WHERE id IN (:a,:b)");
+        $nStmt->execute([':a' => $userId, ':b' => $otherUserId]);
+        $nMap = [];
+        foreach ($nStmt->fetchAll(PDO::FETCH_ASSOC) as $nr) { $nMap[$nr['id']] = $nr['name']; }
+        $rejectorName = $nMap[$userId]       ?? "User $userId";
+        $otherName    = $nMap[$otherUserId]  ?? "User $otherUserId";
+        logActivity($actPdo, [
+            'user_id'       => $userId,
+            'user_name'     => $rejectorName,
+            'target_id'     => $otherUserId,
+            'target_name'   => $otherName,
+            'activity_type' => 'request_rejected',
+            'description'   => "$rejectorName le $otherName ko proposal reject garyo",
+        ]);
+    } catch (Exception $e) {
+        // Never let activity logging break the response
     }
 
     echo json_encode([

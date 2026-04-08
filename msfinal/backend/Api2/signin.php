@@ -2,6 +2,8 @@
 // signin.php - FIXED VERSION
 header('Content-Type: application/json; charset=utf-8');
 
+require_once __DIR__ . '/../shared/activity_logger.php';
+
 // ==== CONFIG ====
 $dbHost = 'localhost';
 $dbUser = 'ms';
@@ -168,6 +170,22 @@ try {
     
     if ($expiresAt) {
         $responseData['token_expires'] = $expiresAt;
+    }
+
+    // 6) Log login activity
+    try {
+        $actPdo = new PDO("mysql:host=$dbHost;dbname=$dbName;charset=utf8mb4", $dbUser, $dbPass,
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $fullName = trim(($user['firstName'] ?? '') . ' ' . ($user['lastName'] ?? ''));
+        if (!$fullName) $fullName = "User " . $user['id'];
+        logActivity($actPdo, [
+            'user_id'       => $user['id'],
+            'user_name'     => $fullName,
+            'activity_type' => 'login',
+            'description'   => "$fullName le login garyo",
+        ]);
+    } catch (Exception $e) {
+        // Never let activity logging break the login response
     }
     
     respond(200, $responseData);

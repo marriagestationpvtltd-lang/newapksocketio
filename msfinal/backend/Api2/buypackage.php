@@ -1,6 +1,8 @@
 <?php
 header('Content-Type: application/json; charset=utf-8');
 
+require_once __DIR__ . '/../shared/activity_logger.php';
+
 try {
     $dbHost = "127.0.0.1";
     $dbName = "ms";
@@ -52,6 +54,25 @@ try {
         'expiredate' => $expiredate,
         'paidby' => $paidby
     ]);
+
+    // Log package purchase activity
+    try {
+        $pkgStmt = $pdo->prepare("SELECT p.name AS pkg_name, CONCAT(u.firstName,' ',u.lastName) AS user_name
+                                  FROM users u, packagelist p
+                                  WHERE u.id = :uid AND p.id = :pid LIMIT 1");
+        $pkgStmt->execute([':uid' => $userid, ':pid' => $packageid]);
+        $pkgRow = $pkgStmt->fetch(PDO::FETCH_ASSOC);
+        $uName   = $pkgRow ? $pkgRow['user_name'] : "User $userid";
+        $pkgName = $pkgRow ? $pkgRow['pkg_name']  : "Package $packageid";
+        logActivity($pdo, [
+            'user_id'       => $userid,
+            'user_name'     => $uName,
+            'activity_type' => 'package_bought',
+            'description'   => "$uName le \"$pkgName\" package kina garyo ($paidby bata)",
+        ]);
+    } catch (Exception $e) {
+        // Never let activity logging break the response
+    }
 
     echo json_encode([
         "success" => true,

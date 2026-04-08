@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../adminchat/chatprovider.dart';
 import '../adminchat/loading.dart';
 import '../adminchat/services/web_notification_service.dart';
+import '../activity/activity_feed_screen.dart';
 import '../dashboard/dashboardhome.dart';
 import '../document/screens/docscreen.dart';
 import '../package/packageScreen.dart';
@@ -73,6 +74,7 @@ class _DashboardPageState extends State<DashboardPage> {
       const PaymentsPage(),
       Loading(),
       const CallSettingsScreen(),
+      const ActivityFeedScreen(),
     ];
     _startGlobalConversationListener();
     _onChatNotifEvent = _handleChatNotifJsEvent;
@@ -188,6 +190,7 @@ class _DashboardPageState extends State<DashboardPage> {
     _NavItem(icon: Icons.payments_rounded,    label: 'Payments'),
     _NavItem(icon: Icons.chat_bubble_rounded, label: 'Chat'),
     _NavItem(icon: Icons.tune_rounded,        label: 'Call Settings'),
+    _NavItem(icon: Icons.timeline_rounded,    label: 'Activities'),
   ];
 
   void _onItemTapped(int index) => setState(() => _selectedIndex = index);

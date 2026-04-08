@@ -1,6 +1,8 @@
 <?php
 header("Content-Type: application/json; charset=utf-8");
 
+require_once __DIR__ . '/../shared/activity_logger.php';
+
 try {
     /* ================= DB CONFIG ================= */
     $dbHost = "127.0.0.1";
@@ -71,6 +73,23 @@ try {
             ":receiver" => $receiver_id
         ]);
 
+        // Resolve names for activity log
+        $names = $pdo->prepare("SELECT id, CONCAT(firstName,' ',lastName) AS name FROM users WHERE id IN (:s,:r)");
+        $names->execute([':s' => $sender_id, ':r' => $receiver_id]);
+        $nameMap = [];
+        foreach ($names->fetchAll() as $row) { $nameMap[$row['id']] = $row['name']; }
+        $senderName   = $nameMap[$sender_id]   ?? "User $sender_id";
+        $receiverName = $nameMap[$receiver_id] ?? "User $receiver_id";
+
+        logActivity($pdo, [
+            'user_id'       => $sender_id,
+            'user_name'     => $senderName,
+            'target_id'     => $receiver_id,
+            'target_name'   => $receiverName,
+            'activity_type' => 'like_sent',
+            'description'   => "$senderName le $receiverName lai like garyo",
+        ]);
+
         echo json_encode([
             "success" => true,
             "message" => "Liked successfully",
@@ -89,6 +108,23 @@ try {
         $stmtDelete->execute([
             ":sender" => $sender_id,
             ":receiver" => $receiver_id
+        ]);
+
+        // Resolve names for activity log
+        $names2 = $pdo->prepare("SELECT id, CONCAT(firstName,' ',lastName) AS name FROM users WHERE id IN (:s,:r)");
+        $names2->execute([':s' => $sender_id, ':r' => $receiver_id]);
+        $nameMap2 = [];
+        foreach ($names2->fetchAll() as $row) { $nameMap2[$row['id']] = $row['name']; }
+        $senderName2   = $nameMap2[$sender_id]   ?? "User $sender_id";
+        $receiverName2 = $nameMap2[$receiver_id] ?? "User $receiver_id";
+
+        logActivity($pdo, [
+            'user_id'       => $sender_id,
+            'user_name'     => $senderName2,
+            'target_id'     => $receiver_id,
+            'target_name'   => $receiverName2,
+            'activity_type' => 'like_removed',
+            'description'   => "$senderName2 le $receiverName2 ko like hatayo",
         ]);
 
         echo json_encode([

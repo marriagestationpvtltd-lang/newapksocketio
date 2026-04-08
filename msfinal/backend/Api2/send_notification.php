@@ -63,8 +63,12 @@ $notification_data = array_merge($data, [
 ]);
 
 // Send FCM
+// For Android call notifications, omit the system notification key so that
+// the Flutter background handler shows a single full-screen local notification
+// with Accept / Decline action buttons instead of a duplicate system-tray alert.
+$data_only_android = $is_call;
 try {
-    $response = sendFCM($fcm_token, $title, $body, $notification_data, $channel_id, $is_call);
+    $response = sendFCM($fcm_token, $title, $body, $notification_data, $channel_id, $is_call, $data_only_android);
 
     echo json_encode([
         "status" => true,

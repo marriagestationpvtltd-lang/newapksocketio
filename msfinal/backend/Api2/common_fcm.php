@@ -15,14 +15,21 @@ function getAccessToken() {
 /**
  * Send an FCM v1 message.
  *
- * @param string $fcm_token   Recipient FCM token.
- * @param string $title       Notification title.
- * @param string $body        Notification body.
- * @param array  $data        Extra data payload (all values must be strings).
- * @param string $channel_id  Android notification channel ID (default: general_notifications).
- * @param bool   $is_call     When true, sets max priority and visibility for call notifications.
+ * @param string $fcm_token        Recipient FCM token.
+ * @param string $title            Notification title.
+ * @param string $body             Notification body.
+ * @param array  $data             Extra data payload (all values must be strings).
+ * @param string $channel_id       Android notification channel ID (default: general_notifications).
+ * @param bool   $is_call          When true, sets max priority and visibility for call notifications.
+ * @param bool   $data_only_android When true, omits the FCM notification key for Android so that
+ *                                  the Flutter background handler (firebaseBackgroundHandler) is
+ *                                  responsible for displaying the notification.  This prevents a
+ *                                  duplicate system-tray notification from appearing alongside the
+ *                                  full-screen local notification shown by flutter_local_notifications.
+ *                                  iOS always keeps the notification key so the system can display
+ *                                  an alert even if the app is fully suspended.
  */
-function sendFCM($fcm_token, $title, $body, $data = [], $channel_id = 'general_notifications', $is_call = false) {
+function sendFCM($fcm_token, $title, $body, $data = [], $channel_id = 'general_notifications', $is_call = false, $data_only_android = false) {
     $projectId = "digitallamicomnp";
     $url = "https://fcm.googleapis.com/v1/projects/$projectId/messages:send";
 
@@ -54,36 +61,47 @@ function sendFCM($fcm_token, $title, $body, $data = [], $channel_id = 'general_n
         $android_notification['default_vibrate_timings'] = true;
     }
 
-    $message = [
-        "message" => [
-            "token" => $fcm_token,
-            "notification" => [
-                "title" => $title,
-                "body" => $body
+    // Build the Android part: for data-only call messages we omit the
+    // 'notification' sub-key so the OS does not show a system-tray notification.
+    // The Flutter background handler will display the full-screen local
+    // notification with Accept / Decline action buttons instead.
+    $android_part = ["priority" => "HIGH"];
+    if (!$data_only_android) {
+        $android_part["notification"] = $android_notification;
+    }
+
+    $message_body = [
+        "token" => $fcm_token,
+        "data" => $string_data,
+        "android" => $android_part,
+        "apns" => [
+            "headers" => [
+                "apns-priority" => $is_call ? "10" : "5"
             ],
-            "data" => $string_data,
-            "android" => [
-                "priority" => "HIGH",
-                "notification" => $android_notification
-            ],
-            "apns" => [
-                "headers" => [
-                    "apns-priority" => $is_call ? "10" : "5"
-                ],
-                "payload" => [
-                    "aps" => [
-                        "alert" => [
-                            "title" => $title,
-                            "body" => $body
-                        ],
-                        "sound" => "default",
-                        "badge" => 1,
-                        "content-available" => 1
-                    ]
+            "payload" => [
+                "aps" => [
+                    "alert" => [
+                        "title" => $title,
+                        "body" => $body
+                    ],
+                    "sound" => "default",
+                    "badge" => 1,
+                    "content-available" => 1
                 ]
             ]
         ]
     ];
+
+    // Include the top-level notification key for non-data-only messages (iOS
+    // needs it; Android non-call messages keep the standard system notification).
+    if (!$data_only_android) {
+        $message_body["notification"] = [
+            "title" => $title,
+            "body" => $body
+        ];
+    }
+
+    $message = ["message" => $message_body];
 
     $accessToken = getAccessToken();
     $ch = curl_init();

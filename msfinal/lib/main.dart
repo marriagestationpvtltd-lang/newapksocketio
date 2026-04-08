@@ -503,6 +503,36 @@ Future<void> _handleNotificationAction(NotificationResponse response) async {
     debugPrint('📱 Notification action: $actionId');
     debugPrint('📱 Payload data: $data');
 
+    // For any call-related action or tap, immediately take ownership of the
+    // call-screen gate so that _checkPendingIncomingCall (which fires on
+    // AppLifecycleState.resumed) cannot push a second IncomingCallScreen on
+    // top of the one we are about to show.  This prevents the "call was lost"
+    // experience where the duplicate bottom screen re-surfaces after the user
+    // finishes the call on the top screen.
+    if (actionId == 'accept_call' ||
+        type == 'call' ||
+        type == 'video_call') {
+      CallManager().isCallScreenShowing = true;
+
+      // Also remove the persisted call from SharedPreferences so that
+      // _checkPendingIncomingCall returns early without pushing its own screen.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('pending_incoming_call');
+      } catch (e) {
+        debugPrint('⚠️ Failed to clear pending_incoming_call: $e');
+      }
+    } else if (actionId == 'decline_call') {
+      // For decline: remove the persisted call so no call screen is shown when
+      // the app comes to the foreground.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('pending_incoming_call');
+      } catch (e) {
+        debugPrint('⚠️ Failed to clear pending_incoming_call on decline: $e');
+      }
+    }
+
     if (actionId == 'accept_call') {
       debugPrint('✅ Call accepted from notification');
 
@@ -732,52 +762,41 @@ void _navigateToCallPage(Map<String, dynamic> data) {
 
   debugPrint('🚀 Navigating to ${isVideoCall ? 'Video' : 'Voice'} Call Page');
 
+  // Guard: if a call screen is already showing (set either by CallOverlayWrapper
+  // or by _handleNotificationAction), skip this navigation.
+  if (CallManager().isCallScreenShowing) {
+    debugPrint('⚠️ Call screen already showing, skipping _navigateToCallPage');
+    // Also ensure stale pending call data is removed so future calls are
+    // not affected.
+    SharedPreferences.getInstance()
+        .then((p) => p.remove('pending_incoming_call'))
+        .catchError((_) {});
+    return;
+  }
+  // Mark synchronously so that any concurrent path (e.g. _checkPendingIncomingCall
+  // triggered by AppLifecycleState.resumed) sees the flag before we await.
+  CallManager().isCallScreenShowing = true;
+
   // Ensure we're on the main thread
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    final currentContext = navigatorKey.currentContext;
     final currentState = navigatorKey.currentState;
 
     if (currentState != null) {
-      // Check if we're already on a call page to avoid duplicates
-      bool isAlreadyOnCallPage = false;
-      if (currentContext != null) {
-        // Check if the current route is a call page
-        final route = ModalRoute.of(currentContext);
-        if (route != null) {
-          final settings = route.settings;
-          if (settings.name?.contains('call') ?? false) {
-            isAlreadyOnCallPage = true;
-          }
-        }
-      }
-
-      if (!isAlreadyOnCallPage) {
-        if (isVideoCall) {
-          currentState.push(
-            MaterialPageRoute(
-              settings: const RouteSettings(name: activeCallRouteName),
-              fullscreenDialog: true,
-              builder: (context) => IncomingVideoCallScreen(
-                callData: data,
-              ),
-            ),
-          );
-        } else {
-          currentState.push(
-            MaterialPageRoute(
-              settings: const RouteSettings(name: activeCallRouteName),
-              fullscreenDialog: true,
-              builder: (context) => IncomingCallScreen(
-                callData: data,
-              ),
-            ),
-          );
-        }
-      } else {
-        debugPrint('⚠️ Already on a call page, skipping navigation');
-      }
+      final route = MaterialPageRoute(
+        settings: const RouteSettings(name: activeCallRouteName),
+        fullscreenDialog: true,
+        builder: (context) => isVideoCall
+            ? IncomingVideoCallScreen(callData: data)
+            : IncomingCallScreen(callData: data),
+      );
+      currentState.push(route).whenComplete(() {
+        CallManager().isCallScreenShowing = false;
+        CallManager().clearCallData();
+      });
     } else {
-      debugPrint('❌ Navigator state is null, cannot navigate');
+      // Navigator not ready yet – release the gate so future attempts succeed.
+      CallManager().isCallScreenShowing = false;
+      debugPrint('❌ Navigator state is null, cannot navigate to call page');
     }
   });
 }

@@ -858,11 +858,34 @@ io.on('connection', (socket) => {
   // Caller emits this to invite a recipient. Delivered to recipient's personal
   // room if they are online; caller should also send a FCM push as fallback.
   socket.on('call_invite', (data) => {
-    const { recipientId, ...rest } = data || {};
+    const { recipientId, callerId, ...rest } = data || {};
     if (!recipientId) return;
     io.to(`user:${recipientId.toString()}`).emit('incoming_call', {
       ...rest,
+      callerId: callerId ? callerId.toString() : undefined,
       recipientId: recipientId.toString(),
+    });
+    // If the recipient is currently connected via socket, notify the caller
+    // immediately that the device is ringing (Calling → Ringing transition).
+    if (callerId && userSockets.has(recipientId.toString())) {
+      io.to(`user:${callerId.toString()}`).emit('call_ringing', {
+        channelName: rest.channelName,
+        recipientId: recipientId.toString(),
+        callerId: callerId.toString(),
+      });
+    }
+  });
+
+  // ── call_ringing ──────────────────────────────────────────────────────────
+  // Recipient emits this to confirm their device is actively ringing.
+  // Used as fallback for FCM-delivered calls where the server cannot confirm
+  // socket presence at invite time.
+  socket.on('call_ringing', (data) => {
+    const { callerId, ...rest } = data || {};
+    if (!callerId) return;
+    io.to(`user:${callerId.toString()}`).emit('call_ringing', {
+      ...rest,
+      callerId: callerId.toString(),
     });
   });
 

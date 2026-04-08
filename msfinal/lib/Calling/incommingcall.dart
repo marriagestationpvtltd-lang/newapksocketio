@@ -62,6 +62,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   String _currentUserName = '';
   String _currentUserImage = '';
   String _chatRoomId = '';  // chat room for inline call messages
+  bool _pendingEmitRinging = false;
 
   @override
   void initState() {
@@ -78,6 +79,20 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _cancelCallNotification();
       _playRingtone();
+      // Notify the caller that this device is actively ringing.
+      // This is a fallback for FCM-delivered calls where the server could not
+      // confirm socket presence at call_invite time.
+      if (_callerId.isNotEmpty && _currentUserId.isNotEmpty) {
+        SocketService().emitCallRinging(
+          callerId: _callerId,
+          recipientId: _currentUserId,
+          channelName: _channel,
+          callType: 'audio',
+        );
+      } else {
+        // _currentUserId may not be loaded yet; emit after user data is ready
+        _pendingEmitRinging = true;
+      }
     });
   }
 
@@ -98,7 +113,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
         android: AndroidSounds.ringtone,
         ios: IosSounds.electronic,
         looping: true,
-        asAlarm: true,
+        asAlarm: false,
       );
       debugPrint('✅ Incoming call ringtone started');
     } catch (e) {
@@ -153,6 +168,18 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
         _currentUserId = userData['id']?.toString() ?? '';
         _currentUserName = userData['name']?.toString() ?? '';
         _currentUserImage = userData['image']?.toString() ?? '';
+
+        // If emitCallRinging was deferred (user data wasn't ready at initState),
+        // send it now.
+        if (_pendingEmitRinging && _callerId.isNotEmpty && _currentUserId.isNotEmpty) {
+          _pendingEmitRinging = false;
+          SocketService().emitCallRinging(
+            callerId: _callerId,
+            recipientId: _currentUserId,
+            channelName: _channel,
+            callType: 'audio',
+          );
+        }
 
         // Log incoming call
         _callHistoryId = await CallHistoryService.logCall(

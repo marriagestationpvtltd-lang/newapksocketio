@@ -3740,8 +3740,12 @@ class _SwipeToReplyWrapperState extends State<_SwipeToReplyWrapper>
 
   void _onDragUpdate(DragUpdateDetails details) {
     if (!_isDragging) return;
+    final newOffset = _dragOffset + details.delta.dx;
+    // Own messages swipe left; others' messages swipe right
+    if (widget.isMine && newOffset > 0) return;
+    if (!widget.isMine && newOffset < 0) return;
     setState(() {
-      _dragOffset = (_dragOffset + details.delta.dx).clamp(-100.0, 100.0);
+      _dragOffset = newOffset.clamp(-100.0, 100.0);
     });
   }
 

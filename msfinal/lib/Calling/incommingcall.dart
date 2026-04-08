@@ -383,11 +383,19 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
 
   Future<void> _acceptCall() async {
     if (_processing) return;
-    _processing = true;
+
+    // Show connecting UI immediately for instant feedback
+    setState(() {
+      _processing = true;
+      _connecting = true;
+    });
 
     // Block free users from accepting user-to-user calls
     if (await _blockIfFreeUser()) {
-      _processing = false;
+      setState(() {
+        _processing = false;
+        _connecting = false;
+      });
       return;
     }
 
@@ -396,6 +404,10 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       await _stopRingtone();
 
       if (!(await Permission.microphone.request()).isGranted) {
+        setState(() {
+          _processing = false;
+          _connecting = false;
+        });
         await _end();
         return;
       }
@@ -476,13 +488,15 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
         ),
       );
 
-      if (mounted) setState(() => _connecting = true);
+      // Keep connecting state (already set at the beginning) until remote joins
       _initializeOverlay();
     } catch (e) {
       debugPrint('Accept error $e');
+      setState(() {
+        _processing = false;
+        _connecting = false;
+      });
       await _end();
-    } finally {
-      _processing = false;
     }
   }
 

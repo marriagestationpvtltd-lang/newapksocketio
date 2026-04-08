@@ -386,11 +386,19 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
 // ================= ACCEPT CALL =================
   Future<void> _acceptCall() async {
     if (_processing) return;
-    _processing = true;
+
+    // Show connecting UI immediately for instant feedback
+    setState(() {
+      _processing = true;
+      _connecting = true;
+    });
 
     // Block free users from accepting user-to-user calls
     if (await _blockIfFreeUser()) {
-      _processing = false;
+      setState(() {
+        _processing = false;
+        _connecting = false;
+      });
       return;
     }
 
@@ -406,11 +414,19 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
       // Permissions
         if (!(await Permission.microphone.request()).isGranted) {
           print('❌ Microphone permission denied');
+          setState(() {
+            _processing = false;
+            _connecting = false;
+          });
           await _end();
           return;
         }
         if (_isVideoCall && !(await Permission.camera.request()).isGranted) {
           print('❌ Camera permission denied');
+          setState(() {
+            _processing = false;
+            _connecting = false;
+          });
           await _end();
           return;
         }
@@ -562,14 +578,16 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
       );
 
       print('✅ Joined channel, waiting for remote user...');
-      if (mounted) setState(() => _connecting = true);
+      // Keep connecting state (already set at the beginning) until remote joins
       _initializeOverlay();
     } catch (e) {
       print('❌ Accept error: $e');
       debugPrint('Accept error $e');
+      setState(() {
+        _processing = false;
+        _connecting = false;
+      });
       await _end();
-    } finally {
-      _processing = false;
     }
   }
   // ================= TIMERS =================

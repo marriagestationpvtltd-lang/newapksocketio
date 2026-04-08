@@ -30,7 +30,9 @@ class CallToneSettings {
   }
 
   static String normalizeToneId(String? toneId) {
-    return _toneAssets.containsKey(toneId) ? toneId! : defaultToneId;
+    return toneId != null && _toneAssets.containsKey(toneId)
+        ? toneId
+        : defaultToneId;
   }
 }
 

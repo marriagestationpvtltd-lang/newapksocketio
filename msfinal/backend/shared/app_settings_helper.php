@@ -85,7 +85,8 @@ function upsert_app_settings(PDO $pdo, array $settings): void
         try {
             $insertStmt->execute($params);
         } catch (PDOException $e) {
-            $sqlState = $e->errorInfo[0] ?? $e->getCode();
+            $errorInfo = $e->errorInfo;
+            $sqlState = is_array($errorInfo) ? ($errorInfo[0] ?? null) : $e->getCode();
             $isDuplicateKey = $sqlState === '23000';
             if (!$isDuplicateKey) {
                 throw $e;

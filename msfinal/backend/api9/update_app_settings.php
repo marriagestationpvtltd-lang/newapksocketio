@@ -22,7 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 require_once __DIR__ . '/../shared/app_settings_helper.php';
 
 $payload = json_decode(file_get_contents("php://input"), true);
-$toneId = trim((string)($payload['call_tone_id'] ?? ''));
+$rawToneId = $payload['call_tone_id'] ?? '';
+$toneId = is_string($rawToneId) ? trim($rawToneId) : '';
 $allowedToneIds = ['classic', 'soft', 'modern', 'default'];
 
 if ($toneId === '' || !in_array($toneId, $allowedToneIds, true)) {

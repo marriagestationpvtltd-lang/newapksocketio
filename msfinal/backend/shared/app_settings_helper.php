@@ -38,6 +38,8 @@ function get_app_settings_defaults(): array
         'vat_enabled' => '0',
         'vat_rate' => '0',
         'call_tone_id' => 'default',
+        'custom_call_tone_url' => '',
+        'custom_call_tone_name' => '',
     ];
 }
 
@@ -93,5 +95,45 @@ function upsert_app_settings(PDO $pdo, array $settings): void
             }
             $updateStmt->execute($params);
         }
+    }
+}
+
+function app_settings_build_public_url(string $path): string
+{
+    $normalizedPath = '/' . ltrim($path, '/');
+    $host = $_SERVER['HTTP_HOST'] ?? 'digitallami.com';
+    $isHttps = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
+    $protocol = $isHttps ? 'https' : 'http';
+
+    return $protocol . '://' . $host . $normalizedPath;
+}
+
+function delete_uploaded_call_tone(?string $publicUrl): void
+{
+    if (!is_string($publicUrl) || trim($publicUrl) === '') {
+        return;
+    }
+
+    $urlPath = parse_url($publicUrl, PHP_URL_PATH);
+    if (!is_string($urlPath) || strpos($urlPath, '/uploads/app_settings/call_tones/') !== 0) {
+        return;
+    }
+
+    $projectRoot = realpath(__DIR__ . '/../../');
+    $baseDir = realpath($projectRoot . '/uploads/app_settings/call_tones');
+    if ($projectRoot === false || $baseDir === false) {
+        return;
+    }
+
+    $relativePath = ltrim($urlPath, '/');
+    $absolutePath = $projectRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+    $parentDir = realpath(dirname($absolutePath));
+
+    if ($parentDir === false || strpos($parentDir, $baseDir) !== 0) {
+        return;
+    }
+
+    if (is_file($absolutePath)) {
+        @unlink($absolutePath);
     }
 }

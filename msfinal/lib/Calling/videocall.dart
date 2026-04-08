@@ -151,9 +151,11 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
 
   Future<void> _playConfiguredTone() async {
     Object? lastError;
-    for (final assetPath in _callToneSettings.fallbackAssetPaths) {
+    for (final source in _callToneSettings.playbackSources) {
       try {
-        await _ringtonePlayer.play(AssetSource(assetPath));
+        await _ringtonePlayer.play(
+          source.isRemote ? UrlSource(source.value) : AssetSource(source.value),
+        );
         return;
       } catch (e) {
         lastError = e;

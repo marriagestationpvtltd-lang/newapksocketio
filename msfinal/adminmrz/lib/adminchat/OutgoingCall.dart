@@ -136,10 +136,7 @@ class _CallScreenState extends State<CallScreen>
     try {
       final settings = context.read<CallSettingsProvider>();
       await _ringtonePlayer.stop();
-      await _ringtonePlayer.play(
-        AssetSource(settings.selectedTone.asset),
-        volume: 1.0,
-      );
+      await _playPreferredTone(settings);
     } catch (_) {}
   }
 
@@ -148,11 +145,25 @@ class _CallScreenState extends State<CallScreen>
     try {
       await _ringtonePlayer.stop();
       final settings = context.read<CallSettingsProvider>();
-      await _ringtonePlayer.play(
-        AssetSource(settings.selectedTone.asset),
-        volume: 1.0,
-      );
+      await _playPreferredTone(settings);
     } catch (_) {}
+  }
+
+  Future<void> _playPreferredTone(CallSettingsProvider settings) async {
+    if (settings.hasCustomTone) {
+      try {
+        await _ringtonePlayer.play(
+          UrlSource(settings.customToneUrl),
+          volume: 1.0,
+        );
+        return;
+      } catch (_) {}
+    }
+
+    await _ringtonePlayer.play(
+      AssetSource(settings.selectedTone.asset),
+      volume: 1.0,
+    );
   }
 
   Future<void> _stopRingtone() async {

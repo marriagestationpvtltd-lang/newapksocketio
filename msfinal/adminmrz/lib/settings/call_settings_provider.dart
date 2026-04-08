@@ -125,16 +125,24 @@ class CallSettingsProvider extends ChangeNotifier {
 
       final response = await request.send().timeout(const Duration(seconds: 30));
       final body = await response.stream.bytesToString();
-      final decoded = jsonDecode(body);
+
+      Map<String, dynamic>? decoded;
+      try {
+        final raw = jsonDecode(body);
+        if (raw is Map<String, dynamic>) decoded = raw;
+      } catch (_) {
+        throw Exception(
+          'Upload failed: server returned an unexpected response. '
+          'Please try again or contact support.',
+        );
+      }
 
       if (response.statusCode != 200) {
-        final message = decoded is Map<String, dynamic>
-            ? decoded['message']?.toString()
-            : null;
+        final message = decoded?['message']?.toString();
         throw Exception(message ?? 'Upload failed.');
       }
 
-      if (decoded is! Map<String, dynamic>) {
+      if (decoded == null) {
         throw Exception('Unexpected upload response.');
       }
 

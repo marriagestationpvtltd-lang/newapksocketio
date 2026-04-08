@@ -6,6 +6,9 @@ import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:http_parser/http_parser.dart';
 
+const _maxRedirects = 5;
+const _connectionTimeout = Duration(seconds: 30);
+
 /// Sends a multipart POST request on native platforms (Android / iOS / desktop).
 ///
 /// Unlike the default [http.MultipartRequest.send], this helper disables
@@ -27,14 +30,14 @@ Future<http.StreamedResponse> uploadMultipartPost({
   // Build a dart:io HttpClient that will NOT auto-follow redirects.
   final innerClient = HttpClient()
     ..followRedirects = false
-    ..connectionTimeout = const Duration(seconds: 30);
+    ..connectionTimeout = _connectionTimeout;
   final client = IOClient(innerClient);
 
   try {
     var uploadUrl = url;
 
-    // Follow up to 5 redirects manually, preserving the POST method each time.
-    for (int hop = 0; hop <= 5; hop++) {
+    // Follow up to _maxRedirects redirects manually, preserving the POST method.
+    for (int hop = 0; hop <= _maxRedirects; hop++) {
       final request = http.MultipartRequest('POST', Uri.parse(uploadUrl));
       request.files.add(
         http.MultipartFile.fromBytes(
@@ -89,7 +92,7 @@ Future<http.Response> sendJsonPost(
 ) async {
   final innerClient = HttpClient()
     ..followRedirects = false
-    ..connectionTimeout = const Duration(seconds: 30);
+    ..connectionTimeout = _connectionTimeout;
   final client = IOClient(innerClient);
 
   try {
@@ -101,7 +104,7 @@ Future<http.Response> sendJsonPost(
 
     var postUrl = url;
 
-    for (int hop = 0; hop <= 5; hop++) {
+    for (int hop = 0; hop <= _maxRedirects; hop++) {
       final response = await client.post(
         Uri.parse(postUrl),
         headers: headers,

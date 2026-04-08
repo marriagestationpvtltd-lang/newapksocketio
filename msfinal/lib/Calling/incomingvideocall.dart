@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
+import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -11,6 +12,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../Chat/ChatlistScreen.dart';
 import '../Chat/call_overlay_manager.dart';
 import '../navigation/app_navigation.dart';
+import '../Package/PackageScreen.dart';
 import '../pushnotification/pushservice.dart';
 import '../service/socket_service.dart';
 import 'tokengenerator.dart';
@@ -248,10 +250,149 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
   }
 
   // ================= ACCEPT CALL =================
+
+  /// Returns true if the current user (recipient) is a free/unpaid member
+  /// and the call is a user-to-user call (not from admin).
+  /// On free plan, the call accept is blocked with an upgrade prompt.
+  Future<bool> _blockIfFreeUser() async {
+    final callerRole = widget.callData['callerRole']?.toString() ?? '';
+    if (callerRole == 'admin') return false; // admin calls are always allowed
+
+    try {
+      String userId = _currentUserId;
+      if (userId.isEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString('user_data');
+        if (raw != null) {
+          final data = jsonDecode(raw);
+          userId = data['id']?.toString() ?? '';
+        }
+      }
+      if (userId.isEmpty) return false; // unknown user — allow
+
+      final response = await http.get(
+        Uri.https('digitallami.com', '/Api2/masterdata.php', {'userid': userId}),
+      ).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          final usertype = data['data']['usertype']?.toString() ?? 'free';
+          if (usertype == 'free') {
+            _ringTimer?.cancel();
+            await _stopRingtone();
+            // Notify caller that the call was not accepted
+            SocketService().emitCallReject(
+              callerId: _callerId,
+              recipientId: userId,
+              recipientName: _recipientName,
+              channelName: _channel,
+              callType: _isVideoCall ? 'video' : 'audio',
+            );
+            _showUpgradeCallDialog();
+            return true;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('Membership check error: $e');
+    }
+    return false;
+  }
+
+  void _showUpgradeCallDialog() {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            gradient: const LinearGradient(
+              colors: [Color(0xFFff0000), Color(0xFF2575FC)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.phone_locked_rounded, color: Colors.white, size: 36),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Upgrade Your Package',
+                style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Please upgrade your package to receive calls.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _end();
+                      },
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: Colors.white),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: const Text('Close', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context); // close dialog
+                        _end().then((_) {
+                          navigatorKey.currentState?.push(
+                            MaterialPageRoute(builder: (_) => SubscriptionPage()),
+                          );
+                        });
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: const Text('Upgrade', style: TextStyle(color: Color(0xFFff0000), fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
 // ================= ACCEPT CALL =================
   Future<void> _acceptCall() async {
     if (_processing) return;
     _processing = true;
+
+    // Block free users from accepting user-to-user calls
+    if (await _blockIfFreeUser()) {
+      _processing = false;
+      return;
+    }
 
     try {
       print('📞 ACCEPTING VIDEO CALL');

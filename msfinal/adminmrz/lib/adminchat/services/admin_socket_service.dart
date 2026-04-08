@@ -7,7 +7,7 @@ import 'callmanager.dart';
 /// URL of the Node.js Socket.IO server.
 /// ⚠️  Replace this with your actual deployed server URL before building.
 /// Example: 'https://socket.yourserver.com:3001'
-const String kAdminSocketUrl = 'http://192.168.18.214:3001';
+const String kAdminSocketUrl = 'https://adminnew.marriagestation.com.np/';
 
 /// Admin user ID — always '1'.
 const String kAdminUserId = '1';

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
 import '../ReUsable/Navbar.dart'; // AppNavbar with onItemSelected callback
 import '../Home/Screen/HomeScreenPage.dart';
 import '../liked/liked.dart';
@@ -76,7 +75,8 @@ class _MainControllerScreenState extends State<MainControllerScreen> {
       for (final room in rooms) {
         if (room is Map) {
           final unreadCount = room['unreadCount'];
-          if (unreadCount is int && unreadCount > 0) unread++;
+          if (unreadCount is int && unreadCount > 0)
+            unread++;
           else if (unreadCount is num && unreadCount.toInt() > 0) unread++;
         }
       }
@@ -89,7 +89,10 @@ class _MainControllerScreenState extends State<MainControllerScreen> {
     _newMsgSubscription = SocketService().onNewMessage.listen((msg) {
       final senderId = msg['senderId']?.toString() ?? '';
       final chatRoomId = msg['chatRoomId']?.toString() ?? '';
-      if (senderId != userId && chatRoomId.isNotEmpty && _selectedIndex != _chatTabIndex && mounted) {
+      if (senderId != userId &&
+          chatRoomId.isNotEmpty &&
+          _selectedIndex != _chatTabIndex &&
+          mounted) {
         if (_unreadChatRoomIds.add(chatRoomId)) {
           setState(() => _chatUnreadCount = _unreadChatRoomIds.length);
         }
@@ -100,8 +103,8 @@ class _MainControllerScreenState extends State<MainControllerScreen> {
   // Build the pages. Index 0=Home, 1=Liked, 2=Chat, 3=Account
   List<Widget> _buildScreens() {
     return [
-      MatrimonyHomeScreen(),  // index 0
-      FavoritePeoplePage(),   // index 1
+      MatrimonyHomeScreen(), // index 0
+      FavoritePeoplePage(), // index 1
       _senderId != null
           ? const ChatListScreen()
           : const Center(child: Text('Loading chat...')), // index 2

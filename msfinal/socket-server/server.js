@@ -542,6 +542,7 @@ async function deleteMessage({ chatRoomId, messageId, userId, deleteForEveryone 
 }
 
 async function upsertOnlineStatus(userId, isOnline, activeChatRoomId = null) {
+  // Update user_online_status table
   await pool.query(
     `INSERT INTO user_online_status (user_id, is_online, last_seen, active_chat_room_id)
        VALUES (?, ?, NOW(), ?)
@@ -550,6 +551,12 @@ async function upsertOnlineStatus(userId, isOnline, activeChatRoomId = null) {
        last_seen           = IF(VALUES(is_online) = 0, NOW(), last_seen),
        active_chat_room_id = VALUES(active_chat_room_id)`,
     [userId, isOnline ? 1 : 0, activeChatRoomId],
+  );
+
+  // Also update users.isOnline for dashboard queries
+  await pool.query(
+    `UPDATE users SET isOnline = ? WHERE id = ?`,
+    [isOnline ? 1 : 0, userId],
   );
 }
 

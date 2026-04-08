@@ -64,18 +64,27 @@ function upsert_app_settings(PDO $pdo, array $settings): void
 {
     ensure_app_settings_table($pdo);
 
-    $stmt = $pdo->prepare("
+    $updateStmt = $pdo->prepare("
+        UPDATE app_settings
+        SET setting_value = :setting_value,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE setting_key = :setting_key
+    ");
+
+    $insertStmt = $pdo->prepare("
         INSERT INTO app_settings (setting_key, setting_value)
         VALUES (:setting_key, :setting_value)
-        ON DUPLICATE KEY UPDATE
-            setting_value = VALUES(setting_value),
-            updated_at = CURRENT_TIMESTAMP
     ");
 
     foreach ($settings as $key => $value) {
-        $stmt->execute([
+        $params = [
             ':setting_key' => $key,
             ':setting_value' => $value,
-        ]);
+        ];
+
+        $updateStmt->execute($params);
+        if ($updateStmt->rowCount() === 0) {
+            $insertStmt->execute($params);
+        }
     }
 }

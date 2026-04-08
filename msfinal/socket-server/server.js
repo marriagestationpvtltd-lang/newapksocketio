@@ -542,22 +542,26 @@ async function deleteMessage({ chatRoomId, messageId, userId, deleteForEveryone 
 }
 
 async function upsertOnlineStatus(userId, isOnline, activeChatRoomId = null) {
-  // Update user_online_status table
-  await pool.query(
-    `INSERT INTO user_online_status (user_id, is_online, last_seen, active_chat_room_id)
-       VALUES (?, ?, NOW(), ?)
-     ON DUPLICATE KEY UPDATE
-       is_online           = VALUES(is_online),
-       last_seen           = IF(VALUES(is_online) = 0, NOW(), last_seen),
-       active_chat_room_id = VALUES(active_chat_room_id)`,
-    [userId, isOnline ? 1 : 0, activeChatRoomId],
-  );
+  try {
+    // Update user_online_status table
+    await pool.query(
+      `INSERT INTO user_online_status (user_id, is_online, last_seen, active_chat_room_id)
+         VALUES (?, ?, NOW(), ?)
+       ON DUPLICATE KEY UPDATE
+         is_online           = VALUES(is_online),
+         last_seen           = IF(VALUES(is_online) = 0, NOW(), last_seen),
+         active_chat_room_id = VALUES(active_chat_room_id)`,
+      [userId, isOnline ? 1 : 0, activeChatRoomId],
+    );
 
-  // Also update users.isOnline for dashboard queries
-  await pool.query(
-    `UPDATE users SET isOnline = ? WHERE id = ?`,
-    [isOnline ? 1 : 0, userId],
-  );
+    // Also update users.isOnline for dashboard queries
+    await pool.query(
+      `UPDATE users SET isOnline = ? WHERE id = ?`,
+      [isOnline ? 1 : 0, userId],
+    );
+  } catch (err) {
+    console.error(`Failed to update online status for user ${userId}:`, err.message);
+  }
 }
 
 // Convert a DB row to the format Flutter expects (mirrors Firestore document shape)

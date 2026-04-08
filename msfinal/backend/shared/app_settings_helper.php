@@ -19,6 +19,9 @@ function app_settings_pdo(): PDO
 {
     $database = new Database();
     $pdo = $database->getConnection();
+    if (!($pdo instanceof PDO)) {
+        throw new RuntimeException('Database connection failed.');
+    }
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
     return $pdo;
 }
@@ -68,35 +71,17 @@ function upsert_app_settings(PDO $pdo, array $settings): void
 {
     ensure_app_settings_table($pdo);
 
-    $insertStmt = $pdo->prepare("
+    $stmt = $pdo->prepare("
         INSERT INTO app_settings (setting_key, setting_value)
         VALUES (:setting_key, :setting_value)
-    ");
-
-    $updateStmt = $pdo->prepare("
-        UPDATE app_settings
-        SET setting_value = :setting_value,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE setting_key = :setting_key
+        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
     ");
 
     foreach ($settings as $key => $value) {
-        $params = [
+        $stmt->execute([
             ':setting_key' => $key,
             ':setting_value' => $value,
-        ];
-
-        try {
-            $insertStmt->execute($params);
-        } catch (PDOException $e) {
-            $errorInfo = $e->errorInfo;
-            $sqlState = is_array($errorInfo) ? ($errorInfo[0] ?? null) : $e->getCode();
-            $isDuplicateKey = $sqlState === '23000';
-            if (!$isDuplicateKey) {
-                throw $e;
-            }
-            $updateStmt->execute($params);
-        }
+        ]);
     }
 }
 

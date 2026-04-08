@@ -113,6 +113,20 @@ pool.getConnection()
       console.log('✅ Added idx_created_at index to chat_messages');
     }
 
+    // Ensure index on users.isOnline for fast dashboard online count queries (idempotent).
+    const [[idxIsOnline]] = await conn.query(
+      `SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_isOnline'
+        LIMIT 1`,
+      [dbName],
+    );
+    if (!idxIsOnline) {
+      await conn.query(
+        `ALTER TABLE users ADD INDEX idx_isOnline (isOnline, isDelete)`
+      ).catch(e => console.warn('idx_isOnline already exists:', e.message));
+      console.log('✅ Added idx_isOnline index to users table for dashboard queries');
+    }
+
     conn.release();
   })
   .catch(err => { console.error('❌ MySQL connection failed:', err.message); });
@@ -542,15 +556,27 @@ async function deleteMessage({ chatRoomId, messageId, userId, deleteForEveryone 
 }
 
 async function upsertOnlineStatus(userId, isOnline, activeChatRoomId = null) {
-  await pool.query(
-    `INSERT INTO user_online_status (user_id, is_online, last_seen, active_chat_room_id)
-       VALUES (?, ?, NOW(), ?)
-     ON DUPLICATE KEY UPDATE
-       is_online           = VALUES(is_online),
-       last_seen           = IF(VALUES(is_online) = 0, NOW(), last_seen),
-       active_chat_room_id = VALUES(active_chat_room_id)`,
-    [userId, isOnline ? 1 : 0, activeChatRoomId],
-  );
+  try {
+    // Update user_online_status table
+    await pool.query(
+      `INSERT INTO user_online_status (user_id, is_online, last_seen, active_chat_room_id)
+         VALUES (?, ?, NOW(), ?)
+       ON DUPLICATE KEY UPDATE
+         is_online           = VALUES(is_online),
+         last_seen           = IF(VALUES(is_online) = 0, NOW(), last_seen),
+         active_chat_room_id = VALUES(active_chat_room_id)`,
+      [userId, isOnline ? 1 : 0, activeChatRoomId],
+    );
+
+    // Update users.isOnline for dashboard queries
+    // Only update if the value actually changes to minimize lock contention
+    await pool.query(
+      `UPDATE users SET isOnline = ? WHERE id = ? AND isOnline != ?`,
+      [isOnline ? 1 : 0, userId, isOnline ? 1 : 0],
+    );
+  } catch (err) {
+    console.error(`Failed to update online status for user ${userId}:`, err.message);
+  }
 }
 
 // Convert a DB row to the format Flutter expects (mirrors Firestore document shape)

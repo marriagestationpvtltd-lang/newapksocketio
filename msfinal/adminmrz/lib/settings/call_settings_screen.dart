@@ -12,6 +12,7 @@ const _kSlate700 = Color(0xFF334155);
 const _kSlate500 = Color(0xFF64748B);
 const _kSlate200 = Color(0xFFE2E8F0);
 const _kSurface = Colors.white;
+const _kAllowedCustomToneExtensions = ['mp3', 'mp4', 'ogg', 'webm', 'aac', 'wav', 'm4a'];
 
 class CallSettingsScreen extends StatefulWidget {
   const CallSettingsScreen({super.key});
@@ -90,7 +91,7 @@ class _CallSettingsScreenState extends State<CallSettingsScreen> {
   Future<void> _pickAndUploadCustomTone() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: const ['mp3', 'wav', 'm4a', 'aac', 'ogg'],
+      allowedExtensions: _kAllowedCustomToneExtensions,
       withData: true,
     );
 

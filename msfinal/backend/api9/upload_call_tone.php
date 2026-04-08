@@ -60,7 +60,7 @@ if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)
     app_settings_response(false, 'Unable to prepare upload folder.', [], 500);
 }
 
-$filename = sprintf('call_tone_%s.%s', bin2hex(random_bytes(8)), $extension);
+$filename = sprintf('call_tone_%s.%s', bin2hex(random_bytes(16)), $extension);
 $destination = $uploadDir . $filename;
 
 if (!move_uploaded_file($_FILES['file']['tmp_name'], $destination)) {

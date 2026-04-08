@@ -107,7 +107,7 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
         android: AndroidSounds.ringtone,
         ios: IosSounds.electronic,
         looping: true,
-        asAlarm: true,
+        asAlarm: false,
       );
       debugPrint('✅ Incoming video call ringtone started');
     } catch (e) {

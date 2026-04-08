@@ -98,7 +98,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
         android: AndroidSounds.ringtone,
         ios: IosSounds.electronic,
         looping: true,
-        asAlarm: true,
+        asAlarm: false,
       );
       debugPrint('✅ Incoming call ringtone started');
     } catch (e) {

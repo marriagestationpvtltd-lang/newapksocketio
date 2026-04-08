@@ -58,6 +58,30 @@ CREATE TABLE IF NOT EXISTS `user_online_status` (
   `active_chat_room_id` VARCHAR(150) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- User activity log (all user actions: likes, messages, calls, logins, etc.)
+CREATE TABLE IF NOT EXISTS `user_activities` (
+  `id`            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `user_id`       INT          NOT NULL,
+  `user_name`     VARCHAR(200) DEFAULT '',
+  `target_id`     INT          DEFAULT NULL,
+  `target_name`   VARCHAR(200) DEFAULT NULL,
+  `activity_type` ENUM(
+    'like_sent','like_removed',
+    'message_sent',
+    'request_sent','request_accepted','request_rejected',
+    'call_made','call_received',
+    'profile_viewed',
+    'login','logout',
+    'photo_uploaded',
+    'package_bought'
+  ) NOT NULL,
+  `description`   TEXT,
+  `created_at`    DATETIME     DEFAULT CURRENT_TIMESTAMP,
+  INDEX `idx_ua_user_id`       (`user_id`),
+  INDEX `idx_ua_created_at`    (`created_at`),
+  INDEX `idx_ua_activity_type` (`activity_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Call history log
 CREATE TABLE IF NOT EXISTS `call_history` (
   `id`              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

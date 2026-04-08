@@ -99,6 +99,29 @@ pool.getConnection()
     `);
     console.log('✅ call_history table ready');
 
+    // Create user_activities table if not present (idempotent).
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS \`user_activities\` (
+        \`id\`            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        \`user_id\`       INT          NOT NULL,
+        \`user_name\`     VARCHAR(200) DEFAULT '',
+        \`target_id\`     INT          DEFAULT NULL,
+        \`target_name\`   VARCHAR(200) DEFAULT NULL,
+        \`activity_type\` ENUM(
+          'like_sent','like_removed','message_sent',
+          'request_sent','request_accepted','request_rejected',
+          'call_made','call_received','profile_viewed',
+          'login','logout','photo_uploaded','package_bought'
+        ) NOT NULL,
+        \`description\`   TEXT,
+        \`created_at\`    DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX \`idx_ua_user_id\`       (\`user_id\`),
+        INDEX \`idx_ua_created_at\`    (\`created_at\`),
+        INDEX \`idx_ua_activity_type\` (\`activity_type\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log('✅ user_activities table ready');
+
     // Ensure standalone index on created_at for range queries (idempotent).
     const [[idxCreatedAt]] = await conn.query(
       `SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS
@@ -198,6 +221,29 @@ app.post('/upload', upload.single('file'), (req, res) => {
 app.get('/health', (_req, res) => res.json({ status: 'ok', time: new Date() }));
 
 // ──────────────────────────────────────────────────────────────────────────────
+// Activity logging helper
+// ──────────────────────────────────────────────────────────────────────────────
+const VALID_ACTIVITY_TYPES = new Set([
+  'like_sent','like_removed','message_sent',
+  'request_sent','request_accepted','request_rejected',
+  'call_made','call_received','profile_viewed',
+  'login','logout','photo_uploaded','package_bought',
+]);
+
+async function logActivity({ userId, userName = '', targetId = null, targetName = null, activityType, description = '' }) {
+  if (!userId || !VALID_ACTIVITY_TYPES.has(activityType)) return;
+  try {
+    await pool.query(
+      `INSERT INTO user_activities (user_id, user_name, target_id, target_name, activity_type, description)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [userId, userName, targetId || null, targetName || null, activityType, description],
+    );
+  } catch (err) {
+    console.error('logActivity error:', err.message);
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
 // Call History REST API
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -224,6 +270,21 @@ app.post('/api/calls', async (req, res) => {
        recipientId, recipientName, recipientImage,
        callType === 'video' ? 'video' : 'audio', initiatedBy],
     );
+
+    // Log call_made for caller, call_received for recipient
+    await logActivity({
+      userId: callerId, userName: callerName,
+      targetId: recipientId, targetName: recipientName,
+      activityType: 'call_made',
+      description: `${callerName || 'User '+callerId} le ${recipientName || 'User '+recipientId} lai ${callType} call garyo`,
+    });
+    await logActivity({
+      userId: recipientId, userName: recipientName,
+      targetId: callerId, targetName: callerName,
+      activityType: 'call_received',
+      description: `${recipientName || 'User '+recipientId} le ${callerName || 'User '+callerId} bata ${callType} call payo`,
+    });
+
     res.json({ success: true, callId });
   } catch (err) {
     console.error('POST /api/calls error:', err.message);
@@ -1009,6 +1070,24 @@ setInterval(async () => {
     const dropped = batch.length - toRetry.length;
     if (dropped > 0) console.error(`Worker dropped ${dropped} messages after ${MAX_RETRIES} retries`);
     return; // skip chat_rooms update for this failed batch
+  }
+
+  // 2b. Log message_sent activity for each unique sender in the batch.
+  const senderLogged = new Set();
+  for (const msg of batch) {
+    const sKey = `${msg.senderId}:${msg.receiverId}`;
+    if (senderLogged.has(sKey)) continue;
+    senderLogged.add(sKey);
+    // Skip admin-originated messages (senderId === 1)
+    if (msg.senderId.toString() === '1') continue;
+    logActivity({
+      userId:       msg.senderId,
+      userName:     msg.user1Name || '',
+      targetId:     msg.receiverId,
+      targetName:   msg.user2Name || '',
+      activityType: 'message_sent',
+      description:  `${msg.user1Name || 'User '+msg.senderId} le ${msg.user2Name || 'User '+msg.receiverId} lai message pathayo`,
+    }).catch(() => {});
   }
 
   // 3. Update chat_rooms with the latest message per room.

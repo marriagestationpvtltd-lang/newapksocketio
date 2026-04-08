@@ -1,6 +1,8 @@
 <?php
 header("Content-Type: application/json");
 
+require_once __DIR__ . '/../shared/activity_logger.php';
+
 // DB CONNECTION
 $conn = new mysqli("localhost", "ms", "ms", "ms");
 if ($conn->connect_error) {
@@ -62,6 +64,28 @@ try {
                 $notifStmt->execute();
             } catch (Exception $e) {
                 // Silently continue if notifications table doesn't exist
+            }
+
+            // 5. LOG ACTIVITY
+            try {
+                $actPdo = new PDO("mysql:host=localhost;dbname=ms;charset=utf8mb4", "ms", "ms",
+                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                $nStmt = $actPdo->prepare("SELECT id, CONCAT(firstName,' ',lastName) AS name FROM users WHERE id IN (:a,:b)");
+                $nStmt->execute([':a' => $userId, ':b' => $senderId]);
+                $nMap = [];
+                foreach ($nStmt->fetchAll(PDO::FETCH_ASSOC) as $nr) { $nMap[$nr['id']] = $nr['name']; }
+                $acceptorName = $nMap[$userId]   ?? "User $userId";
+                $senderName   = $nMap[$senderId] ?? "User $senderId";
+                logActivity($actPdo, [
+                    'user_id'       => $userId,
+                    'user_name'     => $acceptorName,
+                    'target_id'     => $senderId,
+                    'target_name'   => $senderName,
+                    'activity_type' => 'request_accepted',
+                    'description'   => "$acceptorName le $senderName ko proposal accept garyo",
+                ]);
+            } catch (Exception $e) {
+                // Never let activity logging break the response
             }
         }
         

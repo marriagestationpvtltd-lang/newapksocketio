@@ -88,7 +88,7 @@ class ConnectivityService extends ChangeNotifier {
       final response = await http
           .head(uri)
           .timeout(const Duration(seconds: 5));
-      return response.statusCode < 500;
+      return response.statusCode >= 200 && response.statusCode < 400;
     } catch (_) {
       return false;
     }

@@ -1728,6 +1728,14 @@ class _MaritalDocumentUploadScreenState
         }
       } else {
         setState(() => _isScanning = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('OCR scanning is not available on web. Please enter the document number manually.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
       }
     } catch (e) {
       setState(() => _isScanning = false);

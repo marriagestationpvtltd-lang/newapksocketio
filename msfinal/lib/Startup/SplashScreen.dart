@@ -32,7 +32,6 @@ import 'MainControllere.dart';
 import 'onboarding.dart';
 
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show kIsWeb;
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});

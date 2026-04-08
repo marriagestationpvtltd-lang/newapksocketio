@@ -1782,6 +1782,7 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
         }
       } else {
         setState(() => _isScanning = false);
+        _showError('OCR scanning is not available on web. Please enter the document number manually.');
       }
     } catch (e) {
       setState(() => _isScanning = false);

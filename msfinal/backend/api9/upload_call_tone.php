@@ -70,6 +70,7 @@ if (!move_uploaded_file($_FILES['file']['tmp_name'], $destination)) {
 $publicUrl = app_settings_build_public_url('/uploads/app_settings/call_tones/' . $filename);
 $displayName = trim((string) $originalName);
 $displayName = preg_replace('/[^\w\-. ]+/u', '_', $displayName) ?: 'custom-tone.' . $extension;
+$displayName = preg_replace('/\.{2,}/', '.', $displayName) ?: 'custom-tone.' . $extension;
 
 try {
     $pdo = app_settings_pdo();

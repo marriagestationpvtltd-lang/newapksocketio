@@ -115,10 +115,13 @@ function delete_uploaded_call_tone(?string $publicUrl): void
     }
 
     $urlPath = parse_url($publicUrl, PHP_URL_PATH);
-    if (!is_string($urlPath) || strpos($urlPath, '/uploads/app_settings/call_tones/') !== 0) {
+    if (!is_string($urlPath)) {
         return;
     }
     if (strpos($urlPath, '..') !== false) {
+        return;
+    }
+    if (strpos($urlPath, '/uploads/app_settings/call_tones/') !== 0) {
         return;
     }
 

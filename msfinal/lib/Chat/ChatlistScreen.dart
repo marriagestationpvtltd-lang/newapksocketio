@@ -243,20 +243,11 @@ class _ChatListScreenState extends State<ChatListScreen>
     final adminRoom = adminRoomList.first;
 
     final String msgType = adminRoom['lastMessageType']?.toString() ?? 'text';
-    String preview;
-    if (msgType == 'image') {
-      preview = '📷 Image';
-    } else if (msgType == 'voice') {
-      preview = '🎤 Voice note';
-    } else if (msgType == 'doc') {
-      preview = '📄 Document';
-    } else if (msgType == 'profile_card') {
-      preview = '👤 Profile Card';
-    } else if (msgType == 'report') {
-      preview = '🚩 Profile Report';
-    } else {
-      preview = adminRoom['lastMessage']?.toString() ?? '';
-    }
+    final String preview = _formatConversationPreview(
+      rawMessage: adminRoom['lastMessage']?.toString() ?? '',
+      messageType: msgType,
+      compactMediaLabels: true,
+    );
 
     final dynamic lastMsgTime = adminRoom['lastMessageTime'];
     DateTime? latestTime;
@@ -383,6 +374,108 @@ class _ChatListScreenState extends State<ChatListScreen>
   String _formatTime(DateTime? time) {
     if (time == null) return '';
     return DateFormat('hh:mm a').format(time);
+  }
+
+  String _formatConversationPreview({
+    required String rawMessage,
+    String? messageType,
+    bool compactMediaLabels = false,
+  }) {
+    final type = messageType?.trim().toLowerCase();
+    switch (type) {
+      case 'image':
+        return compactMediaLabels ? '📷 Image' : '📷 Photo';
+      case 'voice':
+        return compactMediaLabels ? '🎤 Voice note' : '🎤 Voice message';
+      case 'doc':
+        return '📄 Document';
+      case 'profile_card':
+        return '👤 Profile Card';
+      case 'report':
+        return '🚩 Profile Report';
+      case 'call':
+        return _formatCallPreview(rawMessage);
+      case 'text':
+      case null:
+        break;
+      default:
+        return rawMessage;
+    }
+
+    final decoded = _tryParseJsonMap(rawMessage);
+    if (decoded != null &&
+        (decoded.containsKey('callType') ||
+            decoded.containsKey('callStatus') ||
+            decoded.containsKey('callDuration') ||
+            decoded.containsKey('duration') ||
+            decoded.containsKey('label'))) {
+      return _formatCallPreview(rawMessage, decoded: decoded);
+    }
+
+    return rawMessage;
+  }
+
+  String _formatCallPreview(
+    String rawMessage, {
+    Map<String, dynamic>? decoded,
+  }) {
+    final payload = decoded ?? _tryParseJsonMap(rawMessage);
+    if (payload == null) {
+      return rawMessage.isEmpty ? 'Call' : rawMessage;
+    }
+
+    final String callType = payload['callType']?.toString() ?? '';
+    final String status = payload['callStatus']?.toString() ?? '';
+    final String label = (payload['label']?.toString() ?? '').trim();
+    final int durationSeconds =
+        (payload['duration'] as num?)?.toInt() ??
+        (payload['callDuration'] as num?)?.toInt() ??
+        0;
+    final bool isVideo = callType == 'video';
+
+    if (label.isNotEmpty) {
+      return label;
+    }
+
+    if (status == 'missed') {
+      return isVideo ? 'Missed Video Call' : 'Missed Call';
+    }
+    if (status == 'declined') {
+      return isVideo ? 'Declined Video Call' : 'Declined Call';
+    }
+    if (status == 'cancelled') {
+      return isVideo ? 'Cancelled Video Call' : 'Cancelled Call';
+    }
+
+    final String baseLabel = isVideo
+        ? 'Video Call'
+        : (callType == 'audio' ? 'Audio Call' : 'Call');
+    if (durationSeconds <= 0) return baseLabel;
+    return '$baseLabel • ${_formatCallDuration(durationSeconds)}';
+  }
+
+  Map<String, dynamic>? _tryParseJsonMap(String rawMessage) {
+    if (rawMessage.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(rawMessage);
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  String _formatCallDuration(int seconds) {
+    final duration = Duration(seconds: seconds);
+    final hours = duration.inHours;
+    if (hours > 0) {
+      final remainingMinutes = duration.inMinutes.remainder(60);
+      final secondsComponent = duration.inSeconds.remainder(60);
+      return '$hours:${remainingMinutes.toString().padLeft(2, '0')}:${secondsComponent.toString().padLeft(2, '0')}';
+    }
+    final minutes = duration.inMinutes;
+    final secondsComponent = duration.inSeconds.remainder(60);
+    return '$minutes:${secondsComponent.toString().padLeft(2, '0')}';
   }
 
   /// Format a lastSeen timestamp into a human-readable "last active" string.
@@ -1236,10 +1329,11 @@ class _ChatListScreenState extends State<ChatListScreen>
               Map<String, String>.from(data['participantPhotoRequests'] ?? {});
           final int unreadForMe =
               (data['unreadCount'] as num?)?.toInt() ?? 0;
-          final lastMessage = data['lastMessage'] ?? '';
+          final String lastMessage = data['lastMessage']?.toString() ?? '';
           final DateTime? lastMessageTime =
               SocketService.parseTimestamp(data['lastMessageTime']);
-          final lastMessageType = data['lastMessageType'] ?? 'text';
+          final String lastMessageType =
+              data['lastMessageType']?.toString() ?? 'text';
           final lastMessageSenderId =
               data['lastMessageSenderId'] ?? '';
 
@@ -1271,18 +1365,14 @@ class _ChatListScreenState extends State<ChatListScreen>
               lastMessageSenderId == userId;
 
           // Prepare message preview
-          String messagePreview = '';
-          if (lastMessageType == 'image') {
-            messagePreview =
-                isLastMessageFromMe ? 'You: 📷 Photo' : '📷 Photo';
-          } else if (lastMessageType == 'voice') {
-            messagePreview = isLastMessageFromMe
-                ? 'You: 🎤 Voice message'
-                : '🎤 Voice message';
-          } else {
-            messagePreview =
-                isLastMessageFromMe ? 'You: $lastMessage' : lastMessage;
-          }
+          final String formattedPreview = _formatConversationPreview(
+            rawMessage: lastMessage,
+            messageType: lastMessageType,
+          );
+          final String messagePreview =
+              isLastMessageFromMe && formattedPreview.isNotEmpty
+                  ? 'You: $formattedPreview'
+                  : formattedPreview;
 
           final String formattedTime = _formatTime(lastMessageTime);
 
@@ -1633,4 +1723,3 @@ class _ChatListScreenState extends State<ChatListScreen>
   }
 
 }
-

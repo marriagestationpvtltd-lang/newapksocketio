@@ -10,7 +10,7 @@ import '../Calling/callmanager.dart';
 /// URL of the Node.js Socket.IO server.
 /// ⚠️  IMPORTANT: Replace this with your actual deployed server URL before
 /// building for production. Example: 'https://socket.yourserver.com:3001'
-const String kSocketServerUrl = 'http://192.168.18.214:3001';
+const String kSocketServerUrl = 'https://www.adminnew.marriagestation.com.np:3001';
 
 /// ---------------------------------------------------------------------------
 /// SocketService — singleton that manages the Socket.IO connection and

@@ -61,7 +61,7 @@ try {
     ")->fetchColumn();
 
     $users['online'] = (int)$pdo->query("
-        SELECT COUNT(*) FROM users WHERE isOnline = 1 AND isDelete = 0
+        SELECT COUNT(*) FROM users WHERE lastLogin >= NOW() - INTERVAL 10 MINUTE AND isDelete = 0
     ")->fetchColumn();
 
     $users['by_type'] = $pdo->query("

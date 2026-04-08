@@ -10,7 +10,7 @@ $host = DB_HOST;
 $user = DB_USER;
 $pass = DB_PASS;
 $db = DB_NAME;
-$conn = new mysqli($host, $user, $pass, $dbname);
+$conn = new mysqli($host, $user, $pass, $db);
 if ($conn->connect_error) {
     // Clean any output before sending JSON
     ob_clean();

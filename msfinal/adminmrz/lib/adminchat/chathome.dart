@@ -1,5 +1,6 @@
 import 'package:adminmrz/adminchat/services/pushservice.dart';
 import 'package:adminmrz/adminchat/services/admin_socket_service.dart';
+import 'package:adminmrz/adminchat/services/callmanager.dart';
 import 'package:adminmrz/adminchat/video_call_page.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -48,6 +49,7 @@ class _ChatWindowState extends State<ChatWindow> {
 
   // Socket.IO service for all chat messaging.
   final AdminSocketService _socketService = AdminSocketService();
+  final CallManager _callManager = CallManager();
   StreamSubscription<Map<String, dynamic>>? _newMsgSub;
   StreamSubscription<Map<String, dynamic>>? _editedMsgSub;
   StreamSubscription<Map<String, dynamic>>? _deletedMsgSub;
@@ -83,6 +85,7 @@ class _ChatWindowState extends State<ChatWindow> {
   // Pagination
   static const int _pageSize = 20;
   static const double _autoScrollThreshold = 120;
+  static const int kIncomingCallTimeoutSeconds = 30;
   int _currentPage = 1;
   bool _isLoadingMore = false;
   bool _hasMoreMessages = true;
@@ -460,57 +463,151 @@ class _ChatWindowState extends State<ChatWindow> {
 
     if (channelName.isEmpty || callerId.isEmpty) return;
 
-    // Auto-dismiss timer — reject automatically after 30 seconds
     Timer? autoRejectTimer;
-    var _dismissed = false;
+    StreamSubscription<Map<String, dynamic>>? cancelSub;
+    StreamSubscription<Map<String, dynamic>>? endedSub;
+    BuildContext? incomingCallDialogContext;
+    var dismissed = false;
+    var remoteCallClosed = false;
+
+    void dismissDialog(bool accepted) {
+      if (dismissed) return;
+      dismissed = true;
+      final ctx = incomingCallDialogContext;
+      if (ctx != null && Navigator.of(ctx, rootNavigator: true).canPop()) {
+        Navigator.of(ctx, rootNavigator: true).pop(accepted);
+      }
+    }
+
+    cancelSub = _socketService.onCallCancelled.listen((event) {
+      if (event['channelName']?.toString() != channelName) return;
+      remoteCallClosed = true;
+      dismissDialog(false);
+    });
+
+    endedSub = _socketService.onCallEnded.listen((event) {
+      if (event['channelName']?.toString() != channelName) return;
+      remoteCallClosed = true;
+      dismissDialog(false);
+    });
 
     showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
-        autoRejectTimer = Timer(const Duration(seconds: 30), () {
-          if (!_dismissed) {
-            _dismissed = true;
-            Navigator.of(ctx).pop(false);
-          }
-        });
-        return AlertDialog(
-          title: Row(
-            children: [
-              Icon(isVideo ? Icons.videocam : Icons.call, color: Colors.green),
-              const SizedBox(width: 8),
-              Text(isVideo ? 'Incoming Video Call' : 'Incoming Call'),
-            ],
+        incomingCallDialogContext = ctx;
+        autoRejectTimer = Timer(
+          const Duration(seconds: kIncomingCallTimeoutSeconds),
+          () => dismissDialog(false),
+        );
+        final icon = isVideo ? Icons.videocam_rounded : Icons.call_rounded;
+        final title = isVideo ? 'Incoming video call' : 'Incoming call';
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 360),
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+            decoration: BoxDecoration(
+              color: const Color(0xFF111827),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.28),
+                  blurRadius: 24,
+                  offset: const Offset(0, 14),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 76,
+                  height: 76,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      colors: isVideo
+                          ? const [Color(0xFF8B5CF6), Color(0xFF6366F1)]
+                          : const [Color(0xFF10B981), Color(0xFF059669)],
+                    ),
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 34),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  callerName,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.72),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    'Respond within $kIncomingCallTimeoutSeconds seconds',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.62),
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildIncomingCallActionButton(
+                        label: 'Reject',
+                        icon: Icons.call_end_rounded,
+                        backgroundColor: const Color(0xFF3F1D24),
+                        foregroundColor: const Color(0xFFF87171),
+                        onTap: () => dismissDialog(false),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildIncomingCallActionButton(
+                        label: 'Accept',
+                        icon: isVideo
+                            ? Icons.videocam_rounded
+                            : Icons.call_rounded,
+                        backgroundColor: const Color(0xFF123F34),
+                        foregroundColor: const Color(0xFF34D399),
+                        onTap: () => dismissDialog(true),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          content: Text('$callerName is calling you'),
-          actions: [
-            TextButton(
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              onPressed: () {
-                if (!_dismissed) {
-                  _dismissed = true;
-                  Navigator.of(ctx).pop(false);
-                }
-              },
-              child: const Text('Reject'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              onPressed: () {
-                if (!_dismissed) {
-                  _dismissed = true;
-                  Navigator.of(ctx).pop(true);
-                }
-              },
-              child: const Text('Accept'),
-            ),
-          ],
         );
       },
     ).then((accepted) {
       autoRejectTimer?.cancel();
+      cancelSub?.cancel();
+      endedSub?.cancel();
+      _callManager.clearCallData();
       if (accepted == true) {
-        // Notify caller that admin accepted
         _socketService.emitCallAccept(
           callerId: callerId,
           recipientId: kAdminUserId,
@@ -526,8 +623,7 @@ class _ChatWindowState extends State<ChatWindow> {
           channelName: channelName,
           isVideo: isVideo,
         );
-      } else {
-        // Notify caller that admin rejected
+      } else if (!remoteCallClosed) {
         _socketService.emitCallReject(
           callerId: callerId,
           recipientId: kAdminUserId,
@@ -537,6 +633,41 @@ class _ChatWindowState extends State<ChatWindow> {
         );
       }
     });
+  }
+
+  Widget _buildIncomingCallActionButton({
+    required String label,
+    required IconData icon,
+    required Color backgroundColor,
+    required Color foregroundColor,
+    required VoidCallback onTap,
+  }) {
+    return SizedBox(
+      height: 54,
+      child: Material(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: foregroundColor, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: foregroundColor,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   /// Launch the call overlay for an INCOMING call from a user.

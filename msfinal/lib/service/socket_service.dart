@@ -12,7 +12,6 @@ import '../Calling/callmanager.dart';
 /// building for production. Example: 'https://socket.yourserver.com:3001'
 const String kSocketServerUrl = 'http://192.168.18.214:3001';
 
-
 /// ---------------------------------------------------------------------------
 /// SocketService — singleton that manages the Socket.IO connection and
 /// exposes streams for all real-time chat events.
@@ -71,6 +70,7 @@ class SocketService {
   Stream<Map<String, dynamic>> get onCallRejected => _callRejectedCtrl.stream;
   Stream<Map<String, dynamic>> get onCallCancelled => _callCancelledCtrl.stream;
   Stream<Map<String, dynamic>> get onCallEnded => _callEndedCtrl.stream;
+
   /// Emitted when the recipient's device starts ringing (Calling → Ringing).
   Stream<Map<String, dynamic>> get onCallRinging => _callRingingCtrl.stream;
 

@@ -89,6 +89,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   final AudioPlayer _ringtonePlayer = AudioPlayer();
   bool _isPlayingRingtone = false;
   CallToneSettings _callToneSettings = const CallToneSettings();
+  bool _callToneSettingsLoaded = false;
 
   // PiP (local video preview) draggable offset (from top-right)
   Offset _pipOffset = const Offset(20, 40);
@@ -125,6 +126,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     if (!widget.isOutgoingCall) return;
 
     try {
+      await _ensureCallToneSettingsLoaded();
       await _stopRingtone();
 
       await _ringtonePlayer.setReleaseMode(ReleaseMode.loop);
@@ -137,6 +139,12 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     } catch (e) {
       debugPrint('Error playing calling tone: $e');
     }
+  }
+
+  Future<void> _ensureCallToneSettingsLoaded() async {
+    if (_callToneSettingsLoaded) return;
+    _callToneSettings = await CallToneSettingsService.instance.load();
+    _callToneSettingsLoaded = true;
   }
 
   Future<void> _stopRingtone() async {
@@ -319,7 +327,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   Future<void> _startCall() async {
     try {
       if (widget.isOutgoingCall) {
-        _callToneSettings = await CallToneSettingsService.instance.load();
+        await _ensureCallToneSettingsLoaded();
         await _playRingtone();
       }
 

@@ -74,6 +74,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
   final AudioPlayer _ringtonePlayer = AudioPlayer();
   bool _isPlayingRingtone = false;
   CallToneSettings _callToneSettings = const CallToneSettings();
+  bool _callToneSettingsLoaded = false;
   StreamSubscription<Map<String, dynamic>>? _responseSubscription;
   StreamSubscription<Map<String, dynamic>>? _socketAcceptedSub;
   StreamSubscription<Map<String, dynamic>>? _socketRejectedSub;
@@ -266,6 +267,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
     if (!widget.isOutgoingCall) return;
 
     try {
+      await _ensureCallToneSettingsLoaded();
       await _stopRingtone();
 
       await _ringtonePlayer.setReleaseMode(ReleaseMode.loop);
@@ -278,6 +280,12 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
     } catch (e) {
       debugPrint('Error playing calling tone: $e');
     }
+  }
+
+  Future<void> _ensureCallToneSettingsLoaded() async {
+    if (_callToneSettingsLoaded) return;
+    _callToneSettings = await CallToneSettingsService.instance.load();
+    _callToneSettingsLoaded = true;
   }
 
 
@@ -305,7 +313,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
     try {
       // Start ringing immediately for outgoing calls
       if (widget.isOutgoingCall) {
-        _callToneSettings = await CallToneSettingsService.instance.load();
+        await _ensureCallToneSettingsLoaded();
         await _playRingtone();
 
       }

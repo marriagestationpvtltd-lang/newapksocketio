@@ -1,4 +1,6 @@
 <?php
+// Suppress HTML error output so PHP notices/warnings cannot contaminate
+// the JSON response body. Errors are still written to the server error log.
 ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 

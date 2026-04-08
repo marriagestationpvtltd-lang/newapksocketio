@@ -130,7 +130,8 @@ class CallSettingsProvider extends ChangeNotifier {
       try {
         final raw = jsonDecode(body);
         if (raw is Map<String, dynamic>) decoded = raw;
-      } catch (_) {
+      } catch (e) {
+        debugPrint('uploadCustomTone: non-JSON server response: $e');
         throw Exception(
           'Upload failed: server returned an unexpected response. '
           'Please try again or contact support.',

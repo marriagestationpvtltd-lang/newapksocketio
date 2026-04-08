@@ -11,6 +11,7 @@ import '../Chat/call_overlay_manager.dart';
 import '../navigation/app_navigation.dart';
 import '../pushnotification/pushservice.dart';
 import '../service/socket_service.dart';
+import 'call_tone_settings.dart';
 import 'tokengenerator.dart';
 import 'call_history_model.dart';
 import 'call_history_service.dart';
@@ -87,6 +88,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   // Ringtone state
   final AudioPlayer _ringtonePlayer = AudioPlayer();
   bool _isPlayingRingtone = false;
+  CallToneSettings _callToneSettings = const CallToneSettings();
 
   // PiP (local video preview) draggable offset (from top-right)
   Offset _pipOffset = const Offset(20, 40);
@@ -126,7 +128,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
       await _stopRingtone();
 
       await _ringtonePlayer.setReleaseMode(ReleaseMode.loop);
-      await _ringtonePlayer.play(AssetSource('images/outcall.mp3'));
+      await _ringtonePlayer.play(AssetSource(_callToneSettings.assetPath));
 
       if (mounted) {
         setState(() => _isPlayingRingtone = true);
@@ -317,6 +319,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   Future<void> _startCall() async {
     try {
       if (widget.isOutgoingCall) {
+        _callToneSettings = await CallToneSettingsService.instance.load();
         await _playRingtone();
       }
 

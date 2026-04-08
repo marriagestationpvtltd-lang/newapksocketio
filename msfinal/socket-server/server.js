@@ -113,6 +113,20 @@ pool.getConnection()
       console.log('✅ Added idx_created_at index to chat_messages');
     }
 
+    // Ensure index on users.isOnline for fast dashboard online count queries (idempotent).
+    const [[idxIsOnline]] = await conn.query(
+      `SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_isOnline'
+        LIMIT 1`,
+      [dbName],
+    );
+    if (!idxIsOnline) {
+      await conn.query(
+        `ALTER TABLE users ADD INDEX idx_isOnline (isOnline, isDelete)`
+      ).catch(e => console.warn('idx_isOnline already exists:', e.message));
+      console.log('✅ Added idx_isOnline index to users table for dashboard queries');
+    }
+
     conn.release();
   })
   .catch(err => { console.error('❌ MySQL connection failed:', err.message); });
@@ -554,10 +568,11 @@ async function upsertOnlineStatus(userId, isOnline, activeChatRoomId = null) {
       [userId, isOnline ? 1 : 0, activeChatRoomId],
     );
 
-    // Also update users.isOnline for dashboard queries
+    // Update users.isOnline for dashboard queries
+    // Only update if the value actually changes to minimize lock contention
     await pool.query(
-      `UPDATE users SET isOnline = ? WHERE id = ?`,
-      [isOnline ? 1 : 0, userId],
+      `UPDATE users SET isOnline = ? WHERE id = ? AND isOnline != ?`,
+      [isOnline ? 1 : 0, userId, isOnline ? 1 : 0],
     );
   } catch (err) {
     console.error(`Failed to update online status for user ${userId}:`, err.message);

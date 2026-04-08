@@ -385,6 +385,8 @@ class _ChatListScreenState extends State<ChatListScreen>
     switch (type) {
       case 'image':
         return compactMediaLabels ? '📷 Image' : '📷 Photo';
+      case 'image_gallery':
+        return compactMediaLabels ? '🖼️ Gallery' : '🖼️ Photos';
       case 'voice':
         return compactMediaLabels ? '🎤 Voice note' : '🎤 Voice message';
       case 'doc':

@@ -490,6 +490,8 @@ class _ChatSidebarState extends State<ChatSidebar> {
     switch (type) {
       case 'image':
         return '📷 Photo';
+      case 'image_gallery':
+        return '🖼️ Photos';
       case 'voice':
         return '🎤 Voice message';
       case 'profile_card':

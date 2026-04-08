@@ -2654,6 +2654,53 @@ class _ChatWindowState extends State<ChatWindow> {
       );
     }
 
+    if (type == 'image_gallery') {
+      List<String> galleryUrls;
+      try {
+        final decoded = jsonDecode(rawMessage);
+        if (decoded is List) {
+          galleryUrls = decoded.whereType<String>().toList();
+        } else {
+          galleryUrls = [rawMessage];
+        }
+      } catch (_) {
+        galleryUrls = [rawMessage];
+      }
+
+      Widget galleryWidget = _buildAdminGalleryGrid(galleryUrls);
+
+      final bubble = Align(
+        alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: Column(
+          crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            if (replyPreview != null) replyPreview,
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4, offset: const Offset(0, 1))],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: galleryWidget,
+              ),
+            ),
+            footer(),
+          ],
+        ),
+      );
+
+      return _buildMessageWithActions(
+        bubble: bubble,
+        isSentByMe: isSentByMe,
+        canEdit: false,
+        canMutate: canMutate,
+        messageId: messageId,
+        replyPayload: replyPayload,
+      );
+    }
+
     if (type == 'voice' && imageUrl != null) {
       // imageUrl field holds the voice URL for voice messages in this schema
       final voiceUrl = imageUrl;
@@ -3215,10 +3262,21 @@ class _ChatWindowState extends State<ChatWindow> {
   }) {
     if (replyTo == null || replyTo['message'] == null) return null;
 
-    final String quotedMsg = replyTo['message'] as String;
+    final String replyMsgType = replyTo['messageType']?.toString() ?? 'text';
+    final String rawQuotedMsg = replyTo['message'] as String;
+    final String quotedMsg = replyMsgType == 'image_gallery' ? '🖼️ Photos' : rawQuotedMsg;
     final String quotedSender = replyTo['senderName'] as String? ?? 'User';
     final bool canNavigate = _replyTargetMessageId(replyTo).isNotEmpty;
-    final String? imageUrl = replyTo['imageUrl']?.toString();
+    // For image_gallery, show first image as thumbnail
+    String? imageUrl = replyTo['imageUrl']?.toString();
+    if ((imageUrl == null || imageUrl.isEmpty) && replyMsgType == 'image_gallery') {
+      try {
+        final decoded = jsonDecode(rawQuotedMsg);
+        if (decoded is List && decoded.isNotEmpty) {
+          imageUrl = decoded.first?.toString();
+        }
+      } catch (_) {}
+    }
     final bool hasImage = imageUrl != null && imageUrl.isNotEmpty;
 
     return Padding(
@@ -3333,6 +3391,132 @@ class _ChatWindowState extends State<ChatWindow> {
           ),
         ),
       ),
+    );
+  }
+
+  /// WhatsApp-style gallery grid for image_gallery message type.
+  Widget _buildAdminGalleryGrid(List<String> urls) {
+    if (urls.isEmpty) return const SizedBox.shrink();
+    const Color adminPrimary = Color(0xFFD81B60);
+    final double gridWidth = MediaQuery.of(context).size.width * 0.24;
+    const double gap = 2;
+
+    Widget thumb(String url, {bool showOverlay = false, int extra = 0}) {
+      Widget img = Image.network(
+        url,
+        fit: BoxFit.cover,
+        loadingBuilder: (ctx, child, progress) {
+          if (progress == null) return child;
+          return Container(
+            color: Colors.grey.shade200,
+            child: const Center(child: CircularProgressIndicator(color: adminPrimary, strokeWidth: 2)),
+          );
+        },
+        errorBuilder: (_, __, ___) => Container(
+          color: Colors.grey.shade300,
+          child: Icon(Icons.broken_image, color: Colors.grey.shade500),
+        ),
+      );
+      return GestureDetector(
+        onTap: () => _openAdminGalleryViewer(urls, urls.indexOf(url)),
+        child: showOverlay
+            ? Stack(
+                fit: StackFit.expand,
+                children: [
+                  img,
+                  Container(color: Colors.black54),
+                  Center(
+                    child: Text('+$extra',
+                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              )
+            : img,
+      );
+    }
+
+    if (urls.length == 1) {
+      return SizedBox(
+        width: gridWidth,
+        height: gridWidth,
+        child: thumb(urls[0]),
+      );
+    }
+    if (urls.length == 2) {
+      final h = gridWidth / 2 - gap / 2;
+      return SizedBox(
+        width: gridWidth,
+        child: Row(children: [
+          Expanded(child: SizedBox(height: h, child: thumb(urls[0]))),
+          SizedBox(width: gap),
+          Expanded(child: SizedBox(height: h, child: thumb(urls[1]))),
+        ]),
+      );
+    }
+    if (urls.length == 3) {
+      final h = gridWidth * 0.6;
+      return SizedBox(
+        width: gridWidth,
+        height: h,
+        child: Row(children: [
+          Expanded(flex: 2, child: SizedBox(height: h, child: thumb(urls[0]))),
+          SizedBox(width: gap),
+          Expanded(
+            flex: 1,
+            child: Column(children: [
+              Expanded(child: thumb(urls[1])),
+              SizedBox(height: gap),
+              Expanded(child: thumb(urls[2])),
+            ]),
+          ),
+        ]),
+      );
+    }
+    if (urls.length == 4) {
+      final cellW = (gridWidth - gap) / 2;
+      return SizedBox(
+        width: gridWidth,
+        child: Column(children: [
+          Row(children: [
+            SizedBox(width: cellW, height: cellW, child: thumb(urls[0])),
+            SizedBox(width: gap),
+            SizedBox(width: cellW, height: cellW, child: thumb(urls[1])),
+          ]),
+          SizedBox(height: gap),
+          Row(children: [
+            SizedBox(width: cellW, height: cellW, child: thumb(urls[2])),
+            SizedBox(width: gap),
+            SizedBox(width: cellW, height: cellW, child: thumb(urls[3])),
+          ]),
+        ]),
+      );
+    }
+
+    // 5+ images: 2-column grid, last cell may show "+N"
+    const int maxVisible = 6;
+    final int displayCount = urls.length > maxVisible ? maxVisible : urls.length;
+    final int extraCount = urls.length > maxVisible ? urls.length - maxVisible + 1 : 0;
+    final double cellW = (gridWidth - gap) / 2;
+    final List<Widget> cells = List.generate(displayCount, (i) {
+      final isLast = i == displayCount - 1 && extraCount > 0;
+      return SizedBox(width: cellW, height: cellW, child: thumb(urls[i], showOverlay: isLast, extra: extraCount));
+    });
+    final List<Widget> rows = [];
+    for (int i = 0; i < cells.length; i += 2) {
+      if (i > 0) rows.add(SizedBox(height: gap));
+      rows.add(Row(children: [
+        cells[i],
+        SizedBox(width: gap),
+        if (i + 1 < cells.length) cells[i + 1] else SizedBox(width: cellW),
+      ]));
+    }
+    return SizedBox(width: gridWidth, child: Column(children: rows));
+  }
+
+  void _openAdminGalleryViewer(List<String> urls, int initialIndex) {
+    showDialog(
+      context: context,
+      builder: (ctx) => _AdminGalleryViewerDialog(urls: urls, initialIndex: initialIndex),
     );
   }
 
@@ -5005,6 +5189,91 @@ class _AdminSwipeToReplyWrapperState extends State<_AdminSwipeToReplyWrapper>
                     ],
                   );
                 },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Full-screen gallery viewer dialog for admin chat.
+class _AdminGalleryViewerDialog extends StatefulWidget {
+  final List<String> urls;
+  final int initialIndex;
+
+  const _AdminGalleryViewerDialog({required this.urls, required this.initialIndex});
+
+  @override
+  State<_AdminGalleryViewerDialog> createState() => _AdminGalleryViewerDialogState();
+}
+
+class _AdminGalleryViewerDialogState extends State<_AdminGalleryViewerDialog> {
+  late final PageController _pageController;
+  late int _current;
+
+  @override
+  void initState() {
+    super.initState();
+    _current = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.black,
+      insetPadding: EdgeInsets.zero,
+      child: Stack(
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            itemCount: widget.urls.length,
+            onPageChanged: (i) => setState(() => _current = i),
+            itemBuilder: (ctx, i) => InteractiveViewer(
+              child: Center(
+                child: Image.network(
+                  widget.urls[i],
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Icon(
+                    Icons.broken_image,
+                    color: Colors.white54,
+                    size: 64,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 40,
+            right: 16,
+            child: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white, size: 28),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+          if (widget.urls.length > 1)
+            Positioned(
+              bottom: 24,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(widget.urls.length, (i) => Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: _current == i ? 10 : 6,
+                  height: _current == i ? 10 : 6,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _current == i ? Colors.white : Colors.white38,
+                  ),
+                )),
               ),
             ),
         ],

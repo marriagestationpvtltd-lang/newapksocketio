@@ -867,17 +867,33 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       _forceScrollToBottom = true;
       _scrollToBottom();
 
-      // Send messages in order and notify for any successful upload
-      for (final imageUrl in urls) {
-        if (imageUrl == null) continue;
-        final messageId = _uuid.v4();
+      final validUrls = urls.whereType<String>().toList();
+      if (validUrls.isEmpty) return;
+
+      if (validUrls.length == 1) {
+        // Single image — send as normal 'image' message
         _socketService.sendMessage(
           chatRoomId:        widget.chatRoomId,
           senderId:          widget.currentUserId,
           receiverId:        widget.receiverId,
-          message:           imageUrl,
+          message:           validUrls.first,
           messageType:       'image',
-          messageId:         messageId,
+          messageId:         _uuid.v4(),
+          isReceiverViewing: receiverViewingThisChat,
+          user1Name:         widget.currentUserName,
+          user2Name:         widget.receiverName,
+          user1Image:        widget.currentUserImage,
+          user2Image:        widget.receiverImage,
+        );
+      } else {
+        // Multiple images — send as a single 'image_gallery' message
+        _socketService.sendMessage(
+          chatRoomId:        widget.chatRoomId,
+          senderId:          widget.currentUserId,
+          receiverId:        widget.receiverId,
+          message:           jsonEncode(validUrls),
+          messageType:       'image_gallery',
+          messageId:         _uuid.v4(),
           isReceiverViewing: receiverViewingThisChat,
           user1Name:         widget.currentUserName,
           user2Name:         widget.receiverName,
@@ -886,12 +902,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         );
       }
 
-      if (!receiverViewingThisChat && urls.any((u) => u != null)) {
+      if (!receiverViewingThisChat) {
         await NotificationService.sendChatNotification(
           recipientUserId: widget.receiverId.toString(),
           senderName: widget.currentUserName,
           senderId: widget.currentUserId.toString(),
-          message: urls.length == 1 ? '📷 Photo' : '📷 ${urls.where((u) => u != null).length} Photos',
+          message: validUrls.length == 1 ? '📷 Photo' : '📷 ${validUrls.length} Photos',
         );
       }
     } catch (e) {
@@ -1217,6 +1233,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     switch (repliedTo['messageType'] as String? ?? 'text') {
       case 'image':
         return '📷 Photo';
+      case 'image_gallery':
+        return '🖼️ Photos';
       case 'voice':
         return '🎤 Voice message';
       case 'call':
@@ -1309,6 +1327,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                       Icon(Icons.image, size: 15, color: _accentColor),
                       const SizedBox(width: 4),
                       Text('Photo',
+                          style: TextStyle(fontSize: 13, color: _lightTextColor)),
+                    ],
+                  )
+                else if (messageType == 'image_gallery')
+                  Row(
+                    children: [
+                      Icon(Icons.photo_library, size: 15, color: _accentColor),
+                      const SizedBox(width: 4),
+                      Text('Photos',
                           style: TextStyle(fontSize: 13, color: _lightTextColor)),
                     ],
                   )
@@ -1589,13 +1616,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 if (replyWidget != null) replyWidget,
 
                 Container(
-                  padding: messageType == 'image'
+                  padding: (messageType == 'image' || messageType == 'image_gallery')
                       ? EdgeInsets.zero
                       : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   constraints: BoxConstraints(
                     maxWidth: screenWidth * 0.75,
                   ),
-                  clipBehavior: messageType == 'image' ? Clip.antiAlias : Clip.none,
+                  clipBehavior: (messageType == 'image' || messageType == 'image_gallery') ? Clip.antiAlias : Clip.none,
                   decoration: BoxDecoration(
                     gradient: isMine ? _primaryGradient : _secondaryGradient,
                     borderRadius: isMine
@@ -1868,6 +1895,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             ),
           ),
         );
+      case 'image_gallery':
+        return _buildImageGallery(text: text);
       case 'voice':
         final isCurrentlyPlaying = _playingMessageId == messageId && _isPlaying;
         final isCurrentMessage = _playingMessageId == messageId;
@@ -1941,6 +1970,199 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           ),
         );
     }
+  }
+
+  // WhatsApp-style image gallery widget
+  Widget _buildImageGallery({required String text}) {
+    List<String> urls;
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is List) {
+        urls = decoded.whereType<String>().toList();
+      } else {
+        urls = [text];
+      }
+    } catch (_) {
+      urls = [text];
+    }
+    if (urls.isEmpty) return const SizedBox.shrink();
+    if (urls.length == 1) {
+      // Fallback: single image display
+      return _buildSingleGalleryImage(urls.first);
+    }
+
+    const int maxVisible = 6;
+    final int displayCount = urls.length > maxVisible ? maxVisible : urls.length;
+    final int extraCount = urls.length > maxVisible ? urls.length - maxVisible + 1 : 0;
+    final double screenWidth = MediaQuery.of(context).size.width;
+    final double gridWidth = screenWidth * 0.65;
+    const double gap = 2;
+
+    Widget buildThumb(String url, {bool showOverlay = false, int extra = 0}) {
+      Widget img = Image.network(
+        url,
+        fit: BoxFit.cover,
+        loadingBuilder: (ctx, child, progress) {
+          if (progress == null) return child;
+          return Container(
+            color: Colors.grey.shade200,
+            child: Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                value: progress.expectedTotalBytes != null
+                    ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
+                    : null,
+              ),
+            ),
+          );
+        },
+        errorBuilder: (_, __, ___) => Container(
+          color: Colors.grey.shade300,
+          child: Icon(Icons.broken_image, color: Colors.grey.shade500),
+        ),
+      );
+
+      Widget tile = GestureDetector(
+        onTap: () => _openGalleryViewer(urls, urls.indexOf(url)),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: showOverlay
+              ? Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    img,
+                    Container(color: Colors.black54),
+                    Center(
+                      child: Text(
+                        '+$extra',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : img,
+        ),
+      );
+      return tile;
+    }
+
+    // Build WhatsApp-like layouts
+    if (urls.length == 2) {
+      // 2 images side by side
+      final double h = gridWidth / 2 - gap / 2;
+      return SizedBox(
+        width: gridWidth,
+        child: Row(
+          children: [
+            Expanded(child: SizedBox(height: h, child: buildThumb(urls[0]))),
+            SizedBox(width: gap),
+            Expanded(child: SizedBox(height: h, child: buildThumb(urls[1]))),
+          ],
+        ),
+      );
+    }
+
+    if (urls.length == 3) {
+      // Large on left, 2 stacked on right
+      final double h = gridWidth * 0.6;
+      return SizedBox(
+        width: gridWidth,
+        height: h,
+        child: Row(
+          children: [
+            Expanded(flex: 2, child: SizedBox(height: h, child: buildThumb(urls[0]))),
+            SizedBox(width: gap),
+            Expanded(
+              flex: 1,
+              child: Column(
+                children: [
+                  Expanded(child: buildThumb(urls[1])),
+                  SizedBox(height: gap),
+                  Expanded(child: buildThumb(urls[2])),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (urls.length == 4) {
+      // 2x2 grid
+      final double cellW = (gridWidth - gap) / 2;
+      final double h = cellW;
+      return SizedBox(
+        width: gridWidth,
+        child: Column(
+          children: [
+            Row(children: [
+              SizedBox(width: cellW, height: h, child: buildThumb(urls[0])),
+              SizedBox(width: gap),
+              SizedBox(width: cellW, height: h, child: buildThumb(urls[1])),
+            ]),
+            SizedBox(height: gap),
+            Row(children: [
+              SizedBox(width: cellW, height: h, child: buildThumb(urls[2])),
+              SizedBox(width: gap),
+              SizedBox(width: cellW, height: h, child: buildThumb(urls[3])),
+            ]),
+          ],
+        ),
+      );
+    }
+
+    // 5+ images: 2-column grid, last visible cell may show "+N"
+    final double cellW = (gridWidth - gap) / 2;
+    final double cellH = cellW;
+    final List<Widget> cells = [];
+    for (int i = 0; i < displayCount; i++) {
+      final bool isLast = i == displayCount - 1 && extraCount > 0;
+      cells.add(SizedBox(
+        width: cellW,
+        height: cellH,
+        child: buildThumb(urls[i], showOverlay: isLast, extra: extraCount),
+      ));
+    }
+
+    final List<Widget> rows = [];
+    for (int i = 0; i < cells.length; i += 2) {
+      if (i > 0) rows.add(SizedBox(height: gap));
+      rows.add(Row(
+        children: [
+          cells[i],
+          SizedBox(width: gap),
+          if (i + 1 < cells.length) cells[i + 1] else SizedBox(width: cellW),
+        ],
+      ));
+    }
+
+    return SizedBox(width: gridWidth, child: Column(children: rows));
+  }
+
+  Widget _buildSingleGalleryImage(String url) {
+    final double imgWidth = MediaQuery.of(context).size.width * _kImageWidthFraction;
+    return GestureDetector(
+      onTap: () => _openGalleryViewer([url], 0),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: imgWidth,
+          minWidth: _kImageMinWidth,
+          maxHeight: _kImageMaxHeight,
+        ),
+        child: Image.network(url, fit: BoxFit.cover),
+      ),
+    );
+  }
+
+  void _openGalleryViewer(List<String> urls, int initialIndex) {
+    showDialog(
+      context: context,
+      builder: (ctx) => _GalleryViewerDialog(urls: urls, initialIndex: initialIndex),
+    );
   }
 
   // FULLSCREEN OVERLAY MENU
@@ -3805,6 +4027,93 @@ class _SwipeToReplyWrapperState extends State<_SwipeToReplyWrapper>
                     ],
                   );
                 },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Full-screen gallery viewer dialog (swipe through multiple images).
+class _GalleryViewerDialog extends StatefulWidget {
+  final List<String> urls;
+  final int initialIndex;
+
+  const _GalleryViewerDialog({required this.urls, required this.initialIndex});
+
+  @override
+  State<_GalleryViewerDialog> createState() => _GalleryViewerDialogState();
+}
+
+class _GalleryViewerDialogState extends State<_GalleryViewerDialog> {
+  late final PageController _pageController;
+  late int _current;
+
+  @override
+  void initState() {
+    super.initState();
+    _current = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.black,
+      insetPadding: EdgeInsets.zero,
+      child: Stack(
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            itemCount: widget.urls.length,
+            onPageChanged: (i) => setState(() => _current = i),
+            itemBuilder: (ctx, i) => InteractiveViewer(
+              child: Center(
+                child: Image.network(
+                  widget.urls[i],
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Icon(
+                    Icons.broken_image,
+                    color: Colors.white54,
+                    size: 64,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Close button
+          Positioned(
+            top: 40,
+            right: 16,
+            child: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white, size: 28),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+          // Page indicator
+          if (widget.urls.length > 1)
+            Positioned(
+              bottom: 24,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(widget.urls.length, (i) => Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: _current == i ? 10 : 6,
+                  height: _current == i ? 10 : 6,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _current == i ? Colors.white : Colors.white38,
+                  ),
+                )),
               ),
             ),
         ],

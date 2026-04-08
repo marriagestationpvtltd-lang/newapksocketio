@@ -43,7 +43,7 @@ try {
 
     $stmt = $pdo->prepare("
         UPDATE users 
-        SET lastLogin = :time 
+        SET lastLogin = :time, isOnline = 1
         WHERE id = :user_id
     ");
 

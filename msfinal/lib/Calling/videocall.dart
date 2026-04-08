@@ -11,6 +11,7 @@ import '../Chat/call_overlay_manager.dart';
 import '../navigation/app_navigation.dart';
 import '../pushnotification/pushservice.dart';
 import '../service/socket_service.dart';
+import 'call_tone_settings.dart';
 import 'tokengenerator.dart';
 import 'call_history_model.dart';
 import 'call_history_service.dart';
@@ -89,6 +90,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   // Ringtone state
   final AudioPlayer _ringtonePlayer = AudioPlayer();
   bool _isPlayingRingtone = false;
+  CallToneSettings _callToneSettings = const CallToneSettings();
+  bool _callToneSettingsLoaded = false;
 
   // PiP (local video preview) draggable offset (from top-right)
   Offset _pipOffset = const Offset(20, 40);
@@ -125,10 +128,11 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     if (!widget.isOutgoingCall) return;
 
     try {
+      await _ensureCallToneSettingsLoaded();
       await _stopRingtone();
 
       await _ringtonePlayer.setReleaseMode(ReleaseMode.loop);
-      await _ringtonePlayer.play(AssetSource('audio/outcall.mp3'));
+      await _playConfiguredTone();
 
       if (mounted) {
         setState(() => _isPlayingRingtone = true);
@@ -137,6 +141,25 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     } catch (e) {
       debugPrint('Error playing calling tone: $e');
     }
+  }
+
+  Future<void> _ensureCallToneSettingsLoaded() async {
+    if (_callToneSettingsLoaded) return;
+    _callToneSettings = await CallToneSettingsService.instance.load();
+    _callToneSettingsLoaded = true;
+  }
+
+  Future<void> _playConfiguredTone() async {
+    Object? lastError;
+    for (final assetPath in _callToneSettings.fallbackAssetPaths) {
+      try {
+        await _ringtonePlayer.play(AssetSource(assetPath));
+        return;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    if (lastError != null) throw lastError;
   }
 
   Future<void> _stopRingtone() async {
@@ -333,6 +356,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   Future<void> _startCall() async {
     try {
       if (widget.isOutgoingCall) {
+        await _ensureCallToneSettingsLoaded();
         await _playRingtone();
       }
 

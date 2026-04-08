@@ -204,8 +204,8 @@ class _CallSettingsScreenState extends State<CallSettingsScreen> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      'Settings are saved automatically and applied to both audio and video calls.',
+                     child: Text(
+                      'The selected tone is saved automatically for user-to-user audio and video calls. If no admin tone is saved, the default tone is used.',
                       style: TextStyle(fontSize: 12, color: mutedColor),
                     ),
                   ),

@@ -60,10 +60,15 @@ if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)
     app_settings_response(false, 'Unable to prepare upload folder.', [], 500);
 }
 
-do {
-    $filename = sprintf('call_tone_%s.%s', bin2hex(random_bytes(16)), $extension);
-    $destination = $uploadDir . $filename;
-} while (file_exists($destination));
+try {
+    do {
+        $filename = sprintf('call_tone_%s.%s', bin2hex(random_bytes(16)), $extension);
+        $destination = $uploadDir . $filename;
+    } while (file_exists($destination));
+} catch (Throwable $e) {
+    error_log('api9/upload_call_tone.php filename generation error: ' . $e->getMessage());
+    app_settings_response(false, 'Unable to generate ringtone filename.', [], 500);
+}
 
 if (!move_uploaded_file($_FILES['file']['tmp_name'], $destination)) {
     app_settings_response(false, 'Failed to save ringtone file.', [], 500);

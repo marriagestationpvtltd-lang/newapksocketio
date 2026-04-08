@@ -103,6 +103,9 @@ function upsert_app_settings(PDO $pdo, array $settings): void
 function app_settings_build_public_url(string $path): string
 {
     $normalizedPath = '/' . ltrim($path, '/');
+    if (strpos($normalizedPath, '..') !== false || !preg_match('#^/uploads/app_settings/call_tones/[A-Za-z0-9_.-]+$#', $normalizedPath)) {
+        throw new InvalidArgumentException('Invalid public asset path.');
+    }
     return rtrim(APP_SETTINGS_PUBLIC_BASE_URL, '/') . $normalizedPath;
 }
 

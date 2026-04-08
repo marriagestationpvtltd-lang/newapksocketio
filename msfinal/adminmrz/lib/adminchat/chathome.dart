@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
@@ -128,6 +129,7 @@ class _ChatWindowState extends State<ChatWindow> {
 
   // Voice message recording state (web uses FlutterSoundRecorder)
   bool _isRecordingVoice = false;
+  bool _isHoldRecordingVoice = false; // true when mic is held down (hold-to-record)
   bool _isSendingVoice = false;
   int _voiceRecordDuration = 0;
   Timer? _voiceRecordTimer;
@@ -3481,6 +3483,7 @@ class _ChatWindowState extends State<ChatWindow> {
     if (!_isRecordingVoice) return;
     _voiceRecordTimer?.cancel();
     _voiceRecordTimer = null;
+    if (mounted) setState(() => _isHoldRecordingVoice = false);
 
     try {
       final path = await _recorder.stopRecorder();
@@ -3533,6 +3536,7 @@ class _ChatWindowState extends State<ChatWindow> {
     _recorder.stopRecorder();
     setState(() {
       _isRecordingVoice = false;
+      _isHoldRecordingVoice = false;
       _voiceRecordDuration = 0;
     });
   }
@@ -3713,7 +3717,24 @@ class _ChatWindowState extends State<ChatWindow> {
             ),
             child: Row(
               children: [
-                Icon(Icons.mic, color: kPrimary, size: 16),
+                // Pulsing red dot
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0.4, end: 1.0),
+                  duration: const Duration(milliseconds: 600),
+                  curve: Curves.easeInOut,
+                  onEnd: () => setState(() {}),
+                  builder: (_, opacity, __) => Opacity(
+                    opacity: opacity,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 6),
                 Text(
                   _formatVoiceRecordDuration(_voiceRecordDuration),
@@ -3723,10 +3744,9 @@ class _ChatWindowState extends State<ChatWindow> {
                     fontSize: 13,
                   ),
                 ),
-                const Spacer(),
-                Text(
-                  'Recording...',
-                  style: TextStyle(color: colors.muted, fontSize: 12),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _AdminVoiceWaveform(color: kPrimary),
                 ),
               ],
             ),
@@ -3973,16 +3993,35 @@ class _ChatWindowState extends State<ChatWindow> {
                 builder: (context, value, child) {
                   final hasText = value.text.trim().isNotEmpty;
                   if (!hasText) {
-                    return GestureDetector(
-                      onTap: _startVoiceRecording,
-                      child: Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: kPrimary,
-                          borderRadius: BorderRadius.circular(19),
+                    return Listener(
+                      // Release-to-send for hold-to-record on the admin mic button
+                      onPointerUp: (_) {
+                        if (_isHoldRecordingVoice && _isRecordingVoice) {
+                          _isHoldRecordingVoice = false;
+                          _stopAndSendVoiceRecording();
+                        }
+                      },
+                      onPointerCancel: (_) {
+                        if (_isHoldRecordingVoice && _isRecordingVoice) {
+                          _isHoldRecordingVoice = false;
+                          _cancelVoiceRecording();
+                        }
+                      },
+                      child: GestureDetector(
+                        onTap: _startVoiceRecording,
+                        onLongPressStart: (details) async {
+                          if (mounted) setState(() => _isHoldRecordingVoice = true);
+                          await _startVoiceRecording();
+                        },
+                        child: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: kPrimary,
+                            borderRadius: BorderRadius.circular(19),
+                          ),
+                          child: const Icon(Icons.mic, color: Colors.white, size: 18),
                         ),
-                        child: const Icon(Icons.mic, color: Colors.white, size: 18),
                       ),
                     );
                   }
@@ -4752,5 +4791,66 @@ class _ChatDateHeaderDelegate extends SliverPersistentHeaderDelegate {
         oldDelegate.chipColor != chipColor ||
         oldDelegate.textColor != textColor ||
         oldDelegate.borderColor != borderColor;
+  }
+}
+
+/// Animated voice waveform widget used in the admin recording bar.
+/// Uses its own [AnimationController] so [_ChatWindowState] does not need
+/// to mix in [TickerProviderStateMixin].
+class _AdminVoiceWaveform extends StatefulWidget {
+  final Color color;
+  const _AdminVoiceWaveform({required this.color});
+
+  @override
+  State<_AdminVoiceWaveform> createState() => _AdminVoiceWaveformState();
+}
+
+class _AdminVoiceWaveformState extends State<_AdminVoiceWaveform>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        const barCount = 16;
+        const maxH = 16.0;
+        const minH = 3.0;
+        final t = _controller.value;
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: List.generate(barCount, (i) {
+            final phase = (i / barCount) * 2 * math.pi;
+            final h =
+                minH + (maxH - minH) * (0.5 + 0.5 * math.sin(2 * math.pi * t + phase));
+            return Container(
+              width: 2.5,
+              height: h,
+              decoration: BoxDecoration(
+                color: widget.color.withOpacity(0.75),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            );
+          }),
+        );
+      },
+    );
   }
 }

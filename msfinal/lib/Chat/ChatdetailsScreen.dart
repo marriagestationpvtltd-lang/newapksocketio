@@ -105,11 +105,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   // Voice recording
   final AudioRecorder _audioRecorder = AudioRecorder();
   bool _isRecording = false;
+  bool _isHoldRecording = false; // true when mic is being held (press-and-hold mode)
   bool _isSendingVoice = false;
   int _recordDuration = 0;
   Timer? _recordTimer;
   String? _recordingPath;
   AnimationController? _recordingAnimController;
+  double _audioAmplitude = -160.0; // dBFS — updated while recording
+  StreamSubscription? _amplitudeSubscription;
 
   // Swipe reply variables
   Map<String, dynamic>? _swipedMessage;
@@ -387,10 +390,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       if (data['chatRoomId']?.toString() != widget.chatRoomId) return;
       final msgId = data['messageId']?.toString();
       if (data['deleteForEveryone'] == true) {
-        setState(() {
-          _cachedMessages.removeWhere((m) => m['messageId']?.toString() == msgId);
-          _messagesCacheVersion++;
-        });
+        // Mark with a single flag – show "This message was deleted" placeholder for both parties
+        final idx = _cachedMessages.indexWhere((m) => m['messageId']?.toString() == msgId);
+        if (idx >= 0) {
+          setState(() {
+            _cachedMessages[idx] = {
+              ..._cachedMessages[idx],
+              'deletedForEveryone': true,
+            };
+            _messagesCacheVersion++;
+          });
+        }
       } else {
         final idx = _cachedMessages.indexWhere((m) => m['messageId']?.toString() == msgId);
         if (idx >= 0) {
@@ -674,6 +684,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     _audioPlayerDurationSubscription?.cancel();
     _audioPlayer.dispose();
     _recordTimer?.cancel();
+    _amplitudeSubscription?.cancel();
     _audioRecorder.dispose();
     _recordingAnimController?.dispose();
     _swipeAnimationController?.dispose();
@@ -943,6 +954,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         path: path,
       );
 
+      // Monitor amplitude so the waveform shows flat bars when there is silence
+      _amplitudeSubscription?.cancel();
+      _amplitudeSubscription = _audioRecorder
+          .onAmplitudeChanged(const Duration(milliseconds: 100))
+          .listen((amp) {
+        if (mounted) setState(() => _audioAmplitude = amp.current);
+      });
+
       setState(() {
         _isRecording = true;
         _recordDuration = 0;
@@ -967,8 +986,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
     _recordTimer?.cancel();
     _recordTimer = null;
+    _amplitudeSubscription?.cancel();
+    _amplitudeSubscription = null;
+    _audioAmplitude = -160.0;
     _recordingAnimController?.stop();
     _recordingAnimController?.reset();
+    if (mounted) setState(() => _isHoldRecording = false);
 
     try {
       final path = await _audioRecorder.stop();
@@ -1029,11 +1052,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     if (!_isRecording) return;
     _recordTimer?.cancel();
     _recordTimer = null;
+    _amplitudeSubscription?.cancel();
+    _amplitudeSubscription = null;
+    _audioAmplitude = -160.0;
     _recordingAnimController?.stop();
     _recordingAnimController?.reset();
     _audioRecorder.stop();
     setState(() {
       _isRecording = false;
+      _isHoldRecording = false;
       _recordDuration = 0;
     });
   }
@@ -1210,6 +1237,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         : _dragOffset > threshold;
 
     if (shouldReply && _swipedMessage != null) {
+      HapticFeedback.lightImpact();
       _setReplyMessage(_swipedMessage!);
     }
 
@@ -1549,7 +1577,40 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     required Map<String, dynamic> messageData,
     required Map<String, dynamic>? repliedTo,
     required bool isEdited,
+    bool isDeleted = false,
   }) {
+    // Show a WhatsApp-style "This message was deleted" placeholder
+    if (isDeleted) {
+      return Row(
+        mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade300, width: 1),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.block, size: 14, color: Colors.grey.shade500),
+                const SizedBox(width: 6),
+                Text(
+                  'This message was deleted',
+                  style: TextStyle(
+                    color: Colors.grey.shade500,
+                    fontSize: 14,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
     final msgId = messageData['messageId'] as String? ?? '';
     // Assign a stable GlobalKey so we can scroll to this message
     final key = _messageKeys.putIfAbsent(msgId, () => GlobalKey());
@@ -2143,7 +2204,21 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         ? _editController.text.trim().isNotEmpty
         : _hasText;
 
-    return Container(
+    return Listener(
+      // Handles release-to-send for the hold-to-record gesture
+      onPointerUp: (_) {
+        if (_isHoldRecording && _isRecording) {
+          _isHoldRecording = false;
+          _stopAndSendRecording();
+        }
+      },
+      onPointerCancel: (_) {
+        if (_isHoldRecording && _isRecording) {
+          _isHoldRecording = false;
+          _cancelRecording();
+        }
+      },
+      child: Container(
       padding: EdgeInsets.only(
         left: 12,
         right: 12,
@@ -2259,7 +2334,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               const SizedBox(width: 8),
               if (!isEditing && !hasText)
                 GestureDetector(
+                  // Single tap: existing tap-to-record flow (shows recording bar)
                   onTap: _startRecording,
+                  // Long press: WhatsApp-style hold-to-record (release to send)
+                  onLongPressStart: (details) async {
+                    HapticFeedback.lightImpact();
+                    if (mounted) setState(() => _isHoldRecording = true);
+                    await _startRecording();
+                  },
                   child: Container(
                     width: 46,
                     height: 46,
@@ -2308,128 +2390,157 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           ),
         ],
       ),
-    );
+    ), // end Container
+    ); // end Listener
   }
 
   Widget _bottomSection() => _bottomInputBar();
 
   Widget _buildRecordingBar() {
     if (_recordingAnimController == null) return const SizedBox.shrink();
-    return Row(
+    // -40 dBFS is a practical silence threshold: typical speech is above ~-30 dBFS
+    // while background silence with no voice sits well below -40 dBFS.
+    final bool hasAudio = _audioAmplitude > -40.0;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
-          onPressed: _cancelRecording,
-          icon: const Icon(Icons.delete_outline, color: Colors.red, size: 24),
-          tooltip: 'Cancel',
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Container(
-            height: 46,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: _accentColor.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: _accentColor.withOpacity(0.3), width: 1),
-            ),
+        if (_isHoldRecording)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Pulsing red dot – opacity oscillates between 0.4 and 1.0
-                AnimatedBuilder(
-                  animation: _recordingAnimController!,
-                  builder: (context, _) {
-                    final pulse = 0.4 + 0.6 * (0.5 + 0.5 * sin(2 * pi * _recordingAnimController!.value));
-                    return Opacity(
-                      opacity: pulse,
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: const BoxDecoration(
-                          color: Colors.red,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(width: 6),
+                Icon(Icons.arrow_upward, size: 12, color: Colors.grey.shade500),
+                const SizedBox(width: 4),
                 Text(
-                  _formatRecordDuration(_recordDuration),
-                  style: const TextStyle(
-                    color: _accentColor,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Animated waveform bars – each bar's height is a staggered sin wave
-                Expanded(
-                  child: AnimatedBuilder(
-                    animation: _recordingAnimController!,
-                    builder: (context, _) {
-                      const barCount = 22;
-                      const maxH = 20.0;
-                      const minH = 4.0;
-                      final t = _recordingAnimController!.value;
-                      return Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: List.generate(barCount, (i) {
-                          // phase offset per bar creates a travelling-wave effect
-                          final phase = (i / barCount) * 2 * pi;
-                          // maps sin output [-1,1] → [minH, maxH]
-                          final h = minH + (maxH - minH) * (0.5 + 0.5 * sin(2 * pi * t + phase));
-                          return Container(
-                            width: 3,
-                            height: h,
-                            decoration: BoxDecoration(
-                              color: _accentColor.withOpacity(0.75),
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          );
-                        }),
-                      );
-                    },
+                  'Slide up to cancel \u2022 Release to send',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade500,
+                    fontStyle: FontStyle.italic,
                   ),
                 ),
               ],
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        _isSendingVoice
-            ? const SizedBox(
-                width: 46,
+        Row(
+          children: [
+            IconButton(
+              onPressed: _cancelRecording,
+              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 24),
+              tooltip: 'Cancel',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
                 height: 46,
-                child: Padding(
-                  padding: EdgeInsets.all(11),
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
-                  ),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: _accentColor.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: _accentColor.withOpacity(0.3), width: 1),
                 ),
-              )
-            : GestureDetector(
-                onTap: _stopAndSendRecording,
-                child: Container(
-                  width: 46,
-                  height: 46,
-                  decoration: BoxDecoration(
-                    gradient: _primaryGradient,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: _accentColor.withOpacity(0.35),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
+                child: Row(
+                  children: [
+                    // Pulsing red dot – opacity oscillates between 0.4 and 1.0
+                    AnimatedBuilder(
+                      animation: _recordingAnimController!,
+                      builder: (context, _) {
+                        final pulse = 0.4 + 0.6 * (0.5 + 0.5 * sin(2 * pi * _recordingAnimController!.value));
+                        return Opacity(
+                          opacity: pulse,
+                          child: Container(
+                            width: 10,
+                            height: 10,
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _formatRecordDuration(_recordDuration),
+                      style: const TextStyle(
+                        color: _accentColor,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
                       ),
-                    ],
-                  ),
-                  child: const Icon(Icons.send_rounded, color: Colors.white, size: 22),
+                    ),
+                    const SizedBox(width: 8),
+                    // Animated waveform bars – flat when no voice is detected
+                    Expanded(
+                      child: AnimatedBuilder(
+                        animation: _recordingAnimController!,
+                        builder: (context, _) {
+                          const barCount = 22;
+                          const maxH = 20.0;
+                          const minH = 4.0;
+                          final t = _recordingAnimController!.value;
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: List.generate(barCount, (i) {
+                              final phase = (i / barCount) * 2 * pi;
+                              // Flat bars when no voice is detected, animated wave otherwise
+                              final h = hasAudio
+                                  ? minH + (maxH - minH) * (0.5 + 0.5 * sin(2 * pi * t + phase))
+                                  : minH;
+                              return Container(
+                                width: 3,
+                                height: h,
+                                decoration: BoxDecoration(
+                                  color: _accentColor.withOpacity(hasAudio ? 0.75 : 0.35),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              );
+                            }),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
+            ),
+            const SizedBox(width: 8),
+            _isSendingVoice
+                ? const SizedBox(
+                    width: 46,
+                    height: 46,
+                    child: Padding(
+                      padding: EdgeInsets.all(11),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
+                      ),
+                    ),
+                  )
+                : GestureDetector(
+                    onTap: _stopAndSendRecording,
+                    child: Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        gradient: _primaryGradient,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: _accentColor.withOpacity(0.35),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(Icons.send_rounded, color: Colors.white, size: 22),
+                    ),
+                  ),
+          ],
+        ),
       ],
     );
   }
@@ -2596,10 +2707,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     for (final data in _cachedMessages) {
       final isDeletedForSender = data['isDeletedForSender'] ?? false;
       final isDeletedForReceiver = data['isDeletedForReceiver'] ?? false;
+      final isDeletedForEveryone = data['deletedForEveryone'] == true;
       final isMine = data['senderId'] == widget.currentUserId;
-      final isDeleted = isMine ? isDeletedForSender : isDeletedForReceiver;
-
-      if (isDeleted) continue;
+      // "Delete for me only" — hide from the relevant user
+      final isDeletedForMeOnly = !isDeletedForEveryone &&
+          (isMine ? isDeletedForSender : isDeletedForReceiver);
+      if (isDeletedForMeOnly) continue;
 
       final rawTs = data['timestamp'];
       if (rawTs == null) continue;
@@ -2661,8 +2774,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             timestamp: timestamp,
           ));
         } else {
+          final isMine = data['senderId'] == widget.currentUserId;
+          final isDeletedForEveryone = data['deletedForEveryone'] == true;
           messageWidgets.add(_messageBubble(
-            isMine: data['senderId'] == widget.currentUserId,
+            isMine: isMine,
             text: data['message'],
             timestamp: timestamp,
             messageType: data['messageType'] ?? 'text',
@@ -2672,6 +2787,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             messageData: data,
             repliedTo: data['repliedTo'],
             isEdited: data['isEdited'] ?? false,
+            isDeleted: isDeletedForEveryone,
           ));
         }
       }

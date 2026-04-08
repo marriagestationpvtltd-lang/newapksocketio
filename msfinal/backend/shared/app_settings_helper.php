@@ -116,10 +116,11 @@ function delete_uploaded_call_tone(?string $publicUrl): void
     if (!is_string($urlPath)) {
         return;
     }
-    if (strpos($urlPath, '..') !== false) {
+    $decodedPath = urldecode($urlPath);
+    if (strpos($decodedPath, '..') !== false) {
         return;
     }
-    if (strpos($urlPath, '/uploads/app_settings/call_tones/') !== 0) {
+    if (strpos($decodedPath, '/uploads/app_settings/call_tones/') !== 0) {
         return;
     }
 
@@ -129,7 +130,7 @@ function delete_uploaded_call_tone(?string $publicUrl): void
         return;
     }
 
-    $relativePath = ltrim($urlPath, '/');
+    $relativePath = ltrim($decodedPath, '/');
     $absolutePath = $projectRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
     $parentDir = realpath(dirname($absolutePath));
 

@@ -1,3 +1,16 @@
 *.webm
 msfinal/socket-server/uploads/voice_messages/e9423f23-b580-4cda-81e0-377f1b5032b2.m4a
 msfinal/socket-server/uploads/voice_messages/f452d46a-82e9-4531-9bbb-dae4e05ca020.m4a
+
+# ── Secret / credential files ─────────────────────────────────────────────────
+# Node.js Socket.IO server environment file (contains DB credentials)
+msfinal/socket-server/.env
+
+# PHP backend environment file (contains DB + Agora credentials)
+www/wwwroot/digitallami.com/.env
+
+# Firebase / FCM service-account key files (anywhere in the repo)
+**/service-account-key.json
+**/*-service-account*.json
+**/firebase-credentials.json
+**/google-services-private*.json

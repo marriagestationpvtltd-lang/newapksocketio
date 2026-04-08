@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/config/db.php';
 // Enable error reporting (for development)
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
@@ -8,9 +9,9 @@ header('Content-Type: application/json; charset=utf-8');
 
 // Database configuration
 $host = 'localhost';
-$dbName = 'ms';
-$dbUser = 'ms';
-$dbPass = 'ms';
+$dbName = DB_NAME;
+$dbUser = DB_USER;
+$dbPass = DB_PASS;
 
 try {
     // Create PDO connection

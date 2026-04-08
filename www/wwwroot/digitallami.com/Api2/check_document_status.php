@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
@@ -6,11 +7,9 @@ header('Access-Control-Allow-Headers: Content-Type');
 
 // Database configuration - Update these with your actual credentials
 $host = 'localhost';
-$dbname = 'ms';
-$username = 'ms';
-$password = 'ms';
-
-// Connect to database
+$dbname = DB_NAME;
+$username = DB_USER;
+$password = DB_PASS;
 try {
     $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $username, $password);
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);

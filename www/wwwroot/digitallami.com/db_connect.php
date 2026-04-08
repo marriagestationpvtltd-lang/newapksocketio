@@ -1,10 +1,6 @@
 <?php
-$host = "localhost";
-$user = "ms";
-$pass = "ms";
-$dbname = "ms";
-
-$conn = new mysqli($host, $user, $pass, $dbname);
+require_once __DIR__ . '/config/db.php';
+$conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }

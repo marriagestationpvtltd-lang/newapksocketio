@@ -1,13 +1,12 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 header('Content-Type: application/json; charset=utf-8');
 
 // DB CONFIG
-$dbHost = 'localhost';
-$dbUser = 'ms';
-$dbPass = 'ms';
-$dbName = 'ms';
-
-// BREVO API KEY
+$dbHost = DB_HOST;
+$dbUser = DB_USER;
+$dbPass = DB_PASS;
+$dbName = DB_NAME;
 $brevoApiKey = "api key ";
 
 function respond($code, $msg) {

@@ -7,9 +7,11 @@ header("Access-Control-Allow-Headers: Content-Type");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit(0);
 
-// ✅ Set your Agora App ID and Certificate
-$appId = "7750d283e6794eebba06e7d021e8a01c";
-$appCertificate = "71dff01f0cb348469672d4eb27197fb8";
+require_once __DIR__ . '/../config/db.php';
+
+// Agora App ID and Certificate — read from environment via config/db.php
+$appId          = AGORA_APP_ID;
+$appCertificate = AGORA_APP_CERT;
 
 // Include official Agora PHP RTC token builder
 require_once __DIR__ . "/RtcTokenBuilder.php"; // Must be the RTC version

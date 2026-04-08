@@ -1,0 +1,5 @@
+# Deny direct HTTP access to environment and configuration files.
+<FilesMatch "^(\.env|\.env\.example)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>

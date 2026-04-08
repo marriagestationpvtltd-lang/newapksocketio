@@ -1,15 +1,15 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 header("Content-Type: application/json");
 
 // ✅ Nepal timezone for PHP
 date_default_timezone_set('Asia/Kathmandu');
 
 // DB config
-$host = "localhost";
-$db_name = "ms";
-$username = "ms";
-$password = "ms";
-
+$host = DB_HOST;
+$db_name = DB_NAME;
+$username = DB_USER;
+$password = DB_PASS;
 try {
     $pdo = new PDO(
         "mysql:host=$host;dbname=$db_name;charset=utf8",

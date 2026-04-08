@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 declare(strict_types=1);
 header("Content-Type: application/json; charset=UTF-8");
 
@@ -6,11 +7,10 @@ header("Content-Type: application/json; charset=UTF-8");
 error_reporting(E_ERROR | E_PARSE);
 
 // DATABASE CONNECTION --------------------
-$host = "localhost";
-$user = "ms";
-$pass = "ms";
-$dbname = "ms";
-
+$host = DB_HOST;
+$user = DB_USER;
+$pass = DB_PASS;
+$db = DB_NAME;
 $conn = new mysqli($host, $user, $pass, $dbname);
 
 if ($conn->connect_error) {

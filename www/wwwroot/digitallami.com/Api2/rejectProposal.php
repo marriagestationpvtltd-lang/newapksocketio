@@ -1,10 +1,11 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 header("Content-Type: application/json");
 
 require_once __DIR__ . '/../shared/activity_logger.php';
 
 // ---------------- DB CONNECTION ----------------
-$conn = new mysqli("localhost", "ms", "ms", "ms");
+$conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
 if ($conn->connect_error) {
     echo json_encode(["success" => false, "message" => "DB connection failed"]);
     exit;
@@ -87,7 +88,7 @@ try {
 
     // ---------------- LOG ACTIVITY ----------------
     try {
-        $actPdo = new PDO("mysql:host=localhost;dbname=ms;charset=utf8mb4", "ms", "ms",
+        $actPdo = new PDO("mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4", DB_USER, DB_PASS,
             [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
         $nStmt = $actPdo->prepare("SELECT id, CONCAT(firstName,' ',lastName) AS name FROM users WHERE id IN (:a,:b)");
         $nStmt->execute([':a' => $userId, ':b' => $otherUserId]);

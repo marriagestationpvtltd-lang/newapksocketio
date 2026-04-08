@@ -1,16 +1,15 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 // signin.php - FIXED VERSION
 header('Content-Type: application/json; charset=utf-8');
 
 require_once __DIR__ . '/../shared/activity_logger.php';
 
 // ==== CONFIG ====
-$dbHost = 'localhost';
-$dbUser = 'ms';
-$dbPass = 'ms';
-$dbName = 'ms';
-// ================
-
+$dbHost = DB_HOST;
+$dbUser = DB_USER;
+$dbPass = DB_PASS;
+$dbName = DB_NAME;
 function respond($code, $payload) {
     http_response_code($code);
     echo json_encode($payload, JSON_UNESCAPED_UNICODE);

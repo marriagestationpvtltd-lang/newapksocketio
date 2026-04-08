@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 // Memorial Chat API - Complete Database Version
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
@@ -20,10 +21,7 @@ header('Content-Type: application/json');
 session_start();
 
 // Database configuration
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'adminchat');
-define('DB_USER', 'adminchat');
-define('DB_PASS', 'adminchat'); // Add your MySQL password here if needed
+// Add your MySQL password here if needed
 
 // Database connection
 function getDB() {

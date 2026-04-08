@@ -1,12 +1,13 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 header("Content-Type: application/json");
 header("Access-Control-Allow-Origin: *");
 
 // Database configuration
-$dbHost = "127.0.0.1";
-$dbName = "ms";
-$dbUser = "ms";
-$dbPass = "ms";
+$dbHost = DB_HOST;
+$dbName = DB_NAME;
+$dbUser = DB_USER;
+$dbPass = DB_PASS;
 
 try {
     $pdo = new PDO("mysql:host=$dbHost;dbname=$dbName", $dbUser, $dbPass);

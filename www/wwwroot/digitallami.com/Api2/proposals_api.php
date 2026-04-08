@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 // Turn off error reporting to avoid HTML output
 error_reporting(0);
 ini_set('display_errors', 0);
@@ -6,7 +7,7 @@ ini_set('display_errors', 0);
 header("Content-Type: application/json");
 
 // ---------------- DB CONNECTION ----------------
-$conn = new mysqli("localhost", "ms", "ms", "ms");
+$conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
 
 if ($conn->connect_error) {
     echo json_encode([

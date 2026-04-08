@@ -1,15 +1,15 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 // Add this at the very top to prevent any output before JSON
 ob_start(); // Start output buffering
 
 header("Content-Type: application/json");
 
 // ----------------- DATABASE CONNECTION -----------------
-$host = "localhost";
-$user = "ms";
-$pass = "ms";
-$dbname = "ms";
-
+$host = DB_HOST;
+$user = DB_USER;
+$pass = DB_PASS;
+$db = DB_NAME;
 $conn = new mysqli($host, $user, $pass, $dbname);
 if ($conn->connect_error) {
     // Clean any output before sending JSON

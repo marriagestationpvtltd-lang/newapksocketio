@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../../config/db.php';
     error_reporting(0);
     ini_set('display_errors', 0);
 
@@ -8,11 +9,10 @@ header("Access-Control-Allow-Methods: POST");
 header("Access-Control-Allow-Headers: Content-Type");
 
 // Database connection
-$host = "localhost";
-$user = "ms";
-$pass = "ms";
-$dbname = "ms";
-
+$host = DB_HOST;
+$user = DB_USER;
+$pass = DB_PASS;
+$db = DB_NAME;
 $conn = new mysqli($host, $user, $pass, $dbname);
 if ($conn->connect_error) {
     echo json_encode(["success" => false, "message" => "Database connection failed"]);

@@ -1,6 +1,8 @@
 <?php
 namespace App\Controllers;
 
+require_once __DIR__ . '/../../config/db.php';
+
 use App\Utils\Response;
 use App\Utils\JWT;
 
@@ -11,9 +13,9 @@ class AuthController {
         // Create database connection
         try {
             $this->conn = new \PDO(
-                "mysql:host=localhost;dbname=adminchat;charset=utf8mb4",
-                "adminchat",
-                "adminchat" // Add your password here if needed
+                "mysql:host=" . ADMINCHAT_DB_HOST . ";dbname=" . ADMINCHAT_DB_NAME . ";charset=utf8mb4",
+                ADMINCHAT_DB_USER,
+                ADMINCHAT_DB_PASS
             );
             $this->conn->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
             $this->conn->setAttribute(\PDO::ATTR_DEFAULT_FETCH_MODE, \PDO::FETCH_ASSOC);

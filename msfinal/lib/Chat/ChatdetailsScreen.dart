@@ -593,8 +593,30 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   /// Scroll to the message with [messageId] and briefly highlight it.
   void _scrollToMessage(String messageId) {
     final key = _messageKeys[messageId];
-    if (key?.currentContext == null) {
-      // Original message is not visible – inform the user
+
+    void _highlight() {
+      setState(() => _highlightedMessageId = messageId);
+      Future.delayed(_kHighlightDuration, () {
+        if (mounted) setState(() => _highlightedMessageId = null);
+      });
+    }
+
+    if (key?.currentContext != null) {
+      Scrollable.ensureVisible(
+        key!.currentContext!,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOut,
+        alignment: 0.3,
+      );
+      _highlight();
+      return;
+    }
+
+    // Widget not rendered – scroll to approximate position by message index
+    final idx = _cachedMessages.indexWhere(
+      (m) => m['messageId']?.toString() == messageId,
+    );
+    if (idx < 0 || !_scrollController.hasClients) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Original message is not in view. Scroll up to find it.'),
@@ -604,16 +626,29 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       return;
     }
 
-    Scrollable.ensureVisible(
-      key!.currentContext!,
-      duration: const Duration(milliseconds: 350),
+    final total = _cachedMessages.length;
+    final fraction = idx / total;
+    final targetPixels =
+        _scrollController.position.maxScrollExtent * fraction;
+
+    _scrollController.animateTo(
+      targetPixels,
+      duration: const Duration(milliseconds: 300),
       curve: Curves.easeInOut,
-      alignment: 0.3,
     );
 
-    setState(() => _highlightedMessageId = messageId);
-    Future.delayed(_kHighlightDuration, () {
-      if (mounted) setState(() => _highlightedMessageId = null);
+    // After scrolling completes, try ensureVisible then highlight
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (!mounted) return;
+      final k = _messageKeys[messageId];
+      if (k?.currentContext != null) {
+        Scrollable.ensureVisible(
+          k!.currentContext!,
+          duration: const Duration(milliseconds: 200),
+          alignment: 0.3,
+        );
+      }
+      _highlight();
     });
   }
   @override
@@ -791,15 +826,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   bool _isSendingImage = false;
 
-  Future<void> _pickAndSendImage() async {
+  Future<void> _pickAndSendImages() async {
     if (_isBlocked || _isSendingImage) return;
     final picker = ImagePicker();
-    XFile? picked;
+    List<XFile> picked = [];
     try {
-      picked = await picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 80,
-      );
+      picked = await picker.pickMultiImage(imageQuality: 80);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -811,44 +843,47 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       }
       return;
     }
-    if (picked == null || !mounted) return;
+    if (picked.isEmpty || !mounted) return;
 
     setState(() => _isSendingImage = true);
     try {
-      final messageId = _uuid.v4();
-      final file = File(picked.path);
-      final bool receiverViewingThisChat = _isReceiverViewingThisChat;
+      for (final xfile in picked) {
+        if (!mounted) break;
+        final messageId = _uuid.v4();
+        final file = File(xfile.path);
+        final bool receiverViewingThisChat = _isReceiverViewingThisChat;
 
-      final imageUrl = await _socketService.uploadChatImage(
-        imageFile: file,
-        userId:    widget.currentUserId,
-        chatRoomId: widget.chatRoomId,
-      );
-
-      _forceScrollToBottom = true;
-      _scrollToBottom();
-
-      _socketService.sendMessage(
-        chatRoomId:        widget.chatRoomId,
-        senderId:          widget.currentUserId,
-        receiverId:        widget.receiverId,
-        message:           imageUrl,
-        messageType:       'image',
-        messageId:         messageId,
-        isReceiverViewing: receiverViewingThisChat,
-        user1Name:         widget.currentUserName,
-        user2Name:         widget.receiverName,
-        user1Image:        widget.currentUserImage,
-        user2Image:        widget.receiverImage,
-      );
-
-      if (!receiverViewingThisChat) {
-        await NotificationService.sendChatNotification(
-          recipientUserId: widget.receiverId.toString(),
-          senderName: widget.currentUserName,
-          senderId: widget.currentUserId.toString(),
-          message: '📷 Photo',
+        final imageUrl = await _socketService.uploadChatImage(
+          imageFile: file,
+          userId:    widget.currentUserId,
+          chatRoomId: widget.chatRoomId,
         );
+
+        _forceScrollToBottom = true;
+        _scrollToBottom();
+
+        _socketService.sendMessage(
+          chatRoomId:        widget.chatRoomId,
+          senderId:          widget.currentUserId,
+          receiverId:        widget.receiverId,
+          message:           imageUrl,
+          messageType:       'image',
+          messageId:         messageId,
+          isReceiverViewing: receiverViewingThisChat,
+          user1Name:         widget.currentUserName,
+          user2Name:         widget.receiverName,
+          user1Image:        widget.currentUserImage,
+          user2Image:        widget.receiverImage,
+        );
+
+        if (!receiverViewingThisChat) {
+          await NotificationService.sendChatNotification(
+            recipientUserId: widget.receiverId.toString(),
+            senderName: widget.currentUserName,
+            senderId: widget.currentUserId.toString(),
+            message: '📷 Photo',
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -1200,6 +1235,25 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     });
   }
 
+  /// Returns a short preview string for a replied-to message.
+  String _replySnippetText(Map<String, dynamic> repliedTo) {
+    switch (repliedTo['messageType'] as String? ?? 'text') {
+      case 'image':
+        return '📷 Photo';
+      case 'voice':
+        return '🎤 Voice message';
+      case 'call':
+        return '📞 Voice call';
+      case 'video_call':
+        return '📹 Video call';
+      case 'profile_card':
+        return '👤 Profile card';
+      default:
+        return repliedTo['message'] as String? ?? '';
+    }
+  }
+
+
   /// Returns true when the user is within 150px of the bottom of the list.
   bool _isNearBottom() {
     if (!_scrollController.hasClients) return true;
@@ -1289,6 +1343,40 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                       Text('Voice message',
                           style: TextStyle(fontSize: 13, color: _lightTextColor)),
                     ],
+                  )
+                else if (messageType == 'call')
+                  Row(
+                    children: [
+                      Icon(Icons.call, size: 15, color: _accentColor),
+                      const SizedBox(width: 4),
+                      Text('Voice call',
+                          style: TextStyle(fontSize: 13, color: _lightTextColor)),
+                    ],
+                  )
+                else if (messageType == 'video_call')
+                  Row(
+                    children: [
+                      Icon(Icons.videocam, size: 15, color: _accentColor),
+                      const SizedBox(width: 4),
+                      Text('Video call',
+                          style: TextStyle(fontSize: 13, color: _lightTextColor)),
+                    ],
+                  )
+                else if (messageType == 'profile_card')
+                  Row(
+                    children: [
+                      Icon(Icons.person, size: 15, color: _accentColor),
+                      const SizedBox(width: 4),
+                      Text('Profile card',
+                          style: TextStyle(fontSize: 13, color: _lightTextColor)),
+                    ],
+                  )
+                else
+                  Text(
+                    message ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 13, color: _lightTextColor),
                   ),
               ],
             ),
@@ -1486,11 +1574,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               ),
               const SizedBox(height: 2),
               Text(
-                repliedTo['messageType'] == 'text'
-                    ? repliedTo['message']
-                    : repliedTo['messageType'] == 'image'
-                        ? '📷 Photo'
-                        : '🎤 Voice message',
+                _replySnippetText(repliedTo),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 13, color: _lightTextColor),
@@ -1539,10 +1623,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 if (replyWidget != null) replyWidget,
 
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding: messageType == 'image'
+                      ? EdgeInsets.zero
+                      : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   constraints: BoxConstraints(
                     maxWidth: screenWidth * 0.75,
                   ),
+                  clipBehavior: messageType == 'image' ? Clip.antiAlias : Clip.none,
                   decoration: BoxDecoration(
                     gradient: isMine ? _primaryGradient : _secondaryGradient,
                     borderRadius: isMine
@@ -1697,64 +1784,62 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   }) {
     switch (messageType) {
       case 'image':
+        final double imgWidth = MediaQuery.of(context).size.width * 0.65;
         final bool shouldBlur = !isMine &&
             _privacyStatus.toLowerCase() != 'free' &&
             _photoRequestStatus.toLowerCase() != 'accepted';
 
         if (shouldBlur) {
-          return ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: SizedBox(
-              width: 200,
-              height: 150,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  ImageFiltered(
-                    imageFilter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                    child: Image.network(
-                      text,
-                      width: 200,
-                      height: 150,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: Colors.grey[300],
-                      ),
+          return SizedBox(
+            width: imgWidth,
+            height: imgWidth * 0.75,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ImageFiltered(
+                  imageFilter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                  child: Image.network(
+                    text,
+                    width: imgWidth,
+                    height: imgWidth * 0.75,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      color: Colors.grey[300],
                     ),
                   ),
-                  Container(
-                    color: Colors.black.withOpacity(0.4),
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.red.shade600.withOpacity(0.9),
-                            ),
-                            child: const Icon(
-                              Icons.lock,
-                              color: Colors.white,
-                              size: 22,
-                            ),
+                ),
+                Container(
+                  color: Colors.black.withOpacity(0.4),
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.grey.shade800.withOpacity(0.9),
                           ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'Photo Protected',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
+                          child: const Icon(
+                            Icons.lock,
+                            color: Colors.white,
+                            size: 22,
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Photo Protected',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           );
         }
@@ -1790,19 +1875,20 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               ),
             );
           },
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: imgWidth,
+              minWidth: 120,
+              maxHeight: 300,
+            ),
             child: Image.network(
               text,
-              width: 200,
-              height: 150,
               fit: BoxFit.cover,
               loadingBuilder: (context, child, loadingProgress) {
                 if (loadingProgress == null) return child;
-                return Container(
-                  width: 200,
-                  height: 150,
-                  color: Colors.grey[200],
+                return SizedBox(
+                  width: imgWidth,
+                  height: imgWidth * 0.75,
                   child: Center(
                     child: CircularProgressIndicator(
                       value: loadingProgress.expectedTotalBytes != null
@@ -2085,7 +2171,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           ),
                         )
                       : IconButton(
-                          onPressed: _pickAndSendImage,
+                          onPressed: _pickAndSendImages,
                           icon: const Icon(Icons.image_outlined, size: 24),
                           color: _accentColor,
                           padding: EdgeInsets.zero,

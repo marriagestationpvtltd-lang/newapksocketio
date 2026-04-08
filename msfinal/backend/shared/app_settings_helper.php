@@ -2,6 +2,8 @@
 
 require_once __DIR__ . '/../Api2/database.php';
 
+const APP_SETTINGS_PUBLIC_BASE_URL = 'https://digitallami.com';
+
 function app_settings_response(bool $success, string $message, array $data = [], int $statusCode = 200): void
 {
     http_response_code($statusCode);
@@ -38,6 +40,8 @@ function get_app_settings_defaults(): array
         'vat_enabled' => '0',
         'vat_rate' => '0',
         'call_tone_id' => 'default',
+        'custom_call_tone_url' => '',
+        'custom_call_tone_name' => '',
     ];
 }
 
@@ -93,5 +97,51 @@ function upsert_app_settings(PDO $pdo, array $settings): void
             }
             $updateStmt->execute($params);
         }
+    }
+}
+
+function app_settings_build_public_url(string $path): string
+{
+    $normalizedPath = '/' . ltrim($path, '/');
+    if (strpos($normalizedPath, '..') !== false || !preg_match('#^/uploads/app_settings/call_tones/[A-Za-z0-9_.-]+$#', $normalizedPath)) {
+        throw new InvalidArgumentException('Invalid public asset path.');
+    }
+    return rtrim(APP_SETTINGS_PUBLIC_BASE_URL, '/') . $normalizedPath;
+}
+
+function delete_uploaded_call_tone(?string $publicUrl): void
+{
+    if (!is_string($publicUrl) || trim($publicUrl) === '') {
+        return;
+    }
+
+    $urlPath = parse_url($publicUrl, PHP_URL_PATH);
+    if (!is_string($urlPath)) {
+        return;
+    }
+    $decodedPath = urldecode($urlPath);
+    if (strpos($decodedPath, '..') !== false) {
+        return;
+    }
+    if (strpos($decodedPath, '/uploads/app_settings/call_tones/') !== 0) {
+        return;
+    }
+
+    $projectRoot = realpath(__DIR__ . '/../../');
+    $baseDir = realpath($projectRoot . '/uploads/app_settings/call_tones');
+    if ($projectRoot === false || $baseDir === false) {
+        return;
+    }
+
+    $relativePath = ltrim($decodedPath, '/');
+    $absolutePath = $projectRoot . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativePath);
+    $parentDir = realpath(dirname($absolutePath));
+
+    if ($parentDir === false || strpos($parentDir, $baseDir) !== 0) {
+        return;
+    }
+
+    if (is_file($absolutePath)) {
+        @unlink($absolutePath);
     }
 }

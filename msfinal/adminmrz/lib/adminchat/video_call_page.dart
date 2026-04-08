@@ -140,7 +140,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
       final settings = context.read<CallSettingsProvider>();
       await _ringtonePlayer.stop();
       await _ringtonePlayer.setVolume(_speakerOn ? 1.0 : 0.8);
-      await _ringtonePlayer.play(AssetSource(settings.selectedTone.asset));
+      await _playPreferredTone(settings);
     } catch (_) {}
   }
 
@@ -150,9 +150,20 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
       await _stopRingtone();
       final settings = context.read<CallSettingsProvider>();
       await _ringtonePlayer.setVolume(_speakerOn ? 1.0 : 0.8);
-      await _ringtonePlayer.play(AssetSource(settings.selectedTone.asset));
+      await _playPreferredTone(settings);
     } catch (e) {
     }
+  }
+
+  Future<void> _playPreferredTone(CallSettingsProvider settings) async {
+    if (settings.hasCustomTone) {
+      try {
+        await _ringtonePlayer.play(UrlSource(settings.customToneUrl));
+        return;
+      } catch (_) {}
+    }
+
+    await _ringtonePlayer.play(AssetSource(settings.selectedTone.asset));
   }
 
   Future<void> _stopRingtone() async {

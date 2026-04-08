@@ -6,7 +6,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart'
+    if (dart.library.html) 'package:ms2026/utils/web_local_notifications_stub.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ms2026/Notification/notification_inbox_service.dart';
 import 'package:ms2026/pushnotification/pushservice.dart';
@@ -356,6 +357,8 @@ Future<void> _navigateToAdminChatFromNotification(Map<String, dynamic> data) asy
 
 // Create notification channels and configure actions
 Future<void> initLocalNotifications() async {
+  // Local notifications are not supported on web
+  if (kIsWeb) return;
   // Create Android notification channel for calls
   final callChannel = AndroidNotificationChannel(
     callChannelId,

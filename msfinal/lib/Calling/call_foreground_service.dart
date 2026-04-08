@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
-/// Service to interact with Android foreground service for calls
+/// Service to interact with Android foreground service for calls.
+/// All methods are no-ops on web (Flutter Web does not support foreground
+/// services — call state is managed entirely by the browser tab).
 class CallForegroundServiceManager {
   static const MethodChannel _channel =
       MethodChannel('com.marriage.station/call_service');
@@ -12,6 +15,7 @@ class CallForegroundServiceManager {
     required String callId,
     required bool isIncoming,
   }) async {
+    if (kIsWeb) return false;
     try {
       final result = await _channel.invokeMethod('startCallService', {
         'callType': callType,
@@ -29,6 +33,7 @@ class CallForegroundServiceManager {
 
   /// Stop foreground service
   static Future<bool> stopCallService() async {
+    if (kIsWeb) return false;
     try {
       final result = await _channel.invokeMethod('stopCallService');
       print('[CallForegroundService] Stopped: $result');
@@ -45,6 +50,7 @@ class CallForegroundServiceManager {
     required String callerName,
     required bool isOngoing,
   }) async {
+    if (kIsWeb) return false;
     try {
       final result = await _channel.invokeMethod('updateCallNotification', {
         'callType': callType,
@@ -61,6 +67,7 @@ class CallForegroundServiceManager {
 
   /// Check if service is running
   static Future<bool> isServiceRunning() async {
+    if (kIsWeb) return false;
     try {
       final result = await _channel.invokeMethod('isServiceRunning');
       return result == true;
@@ -75,6 +82,7 @@ class CallForegroundServiceManager {
     required String otherUserName,
     required String callId,
   }) async {
+    if (kIsWeb) return;
     await startCallService(
       callType: callType,
       callerName: otherUserName,

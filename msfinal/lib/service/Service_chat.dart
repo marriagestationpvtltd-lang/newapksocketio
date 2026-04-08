@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -116,8 +117,10 @@ class _ServiceChatPageState extends State<ServiceChatPage> {
     if (image == null) return;
 
     try {
+      final bytes = await image.readAsBytes();
       final url = await _socketService.uploadChatImage(
-        imageFile: File(image.path),
+        bytes: bytes,
+        filename: image.name,
         userId: widget.senderId,
         chatRoomId: chatId,
       );

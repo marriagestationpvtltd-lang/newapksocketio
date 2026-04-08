@@ -1,12 +1,16 @@
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
 import 'dart:math';
+import 'dart:typed_data';
 import 'dart:ui';
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart' show XFile;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:permission_handler/permission_handler.dart'
+    if (dart.library.html) 'package:ms2026/utils/web_permission_stub.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
@@ -952,13 +956,20 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'],
+      withData: kIsWeb,
     );
     if (result != null) {
-      final file = File(result.files.single.path!);
       final fileName = result.files.single.name;
       try {
+        Uint8List bytes;
+        if (kIsWeb) {
+          bytes = result.files.single.bytes!;
+        } else {
+          bytes = await File(result.files.single.path!).readAsBytes();
+        }
         final url = await _socketService.uploadChatImage(
-          imageFile: file,
+          bytes: bytes,
+          filename: fileName,
           userId: _mySenderId,
           chatRoomId: _chatRoomId,
         );
@@ -972,12 +983,20 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   Future<void> _sendImage() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.image,
+      withData: kIsWeb,
     );
     if (result != null) {
-      final file = File(result.files.single.path!);
+      final fileName = result.files.single.name;
       try {
+        Uint8List bytes;
+        if (kIsWeb) {
+          bytes = result.files.single.bytes!;
+        } else {
+          bytes = await File(result.files.single.path!).readAsBytes();
+        }
         final url = await _socketService.uploadChatImage(
-          imageFile: file,
+          bytes: bytes,
+          filename: fileName,
           userId: _mySenderId,
           chatRoomId: _chatRoomId,
         );
@@ -996,23 +1015,32 @@ class _AdminChatScreenState extends State<AdminChatScreen>
 
   Future<void> _startRecording() async {
     if (_isRecording) return;
-    final status = await Permission.microphone.request();
-    if (status != PermissionStatus.granted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Microphone permission is required to send voice messages.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+    if (!kIsWeb) {
+      final status = await Permission.microphone.request();
+      if (status != PermissionStatus.granted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Microphone permission is required to send voice messages.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
       }
-      return;
     }
     try {
-      final dir = await getTemporaryDirectory();
-      final path = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      String path;
+      if (kIsWeb) {
+        path = 'voice_${DateTime.now().millisecondsSinceEpoch}.webm';
+      } else {
+        final dir = await getTemporaryDirectory();
+        path = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      }
       await _audioRecorder.start(
-        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 44100),
+        kIsWeb
+            ? const RecordConfig(encoder: AudioEncoder.opus, bitRate: 64000, sampleRate: 44100)
+            : const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 44100),
         path: path,
       );
       setState(() {
@@ -1045,9 +1073,15 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         _isSendingVoice = true;
       });
       if (path == null || path.isEmpty) return;
-      final file = File(path);
+      Uint8List voiceBytes;
+      if (kIsWeb) {
+        voiceBytes = await XFile(path).readAsBytes();
+      } else {
+        voiceBytes = await File(path).readAsBytes();
+      }
       final url = await _socketService.uploadVoiceMessage(
-        voiceFile: file,
+        bytes: voiceBytes,
+        filename: 'voice_${DateTime.now().millisecondsSinceEpoch}.mp3',
         userId: _mySenderId,
         chatRoomId: _chatRoomId,
       );

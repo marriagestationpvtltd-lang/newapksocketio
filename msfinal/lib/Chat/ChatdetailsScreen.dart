@@ -1,13 +1,14 @@
 // lib/screens/ChatDetailScreen.dart
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:ms2026/Chat/screen_state_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,8 +16,11 @@ import 'package:uuid/uuid.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'dart:async';
+import 'package:permission_handler/permission_handler.dart'
+    if (dart.library.html) 'package:ms2026/utils/web_permission_stub.dart';
+
+// dart:io is only available on native platforms
+import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
 
 import '../service/socket_service.dart';
 import '../Calling/videocall.dart';
@@ -853,7 +857,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         picked.map((xfile) async {
           try {
             return await _socketService.uploadChatImage(
-              imageFile: File(xfile.path),
+              bytes: await xfile.readAsBytes(),
+              filename: xfile.name,
               userId:    widget.currentUserId,
               chatRoomId: widget.chatRoomId,
             );
@@ -929,26 +934,35 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   Future<void> _startRecording() async {
     if (_isBlocked || _isRecording) return;
 
-    // Request microphone permission
-    final status = await Permission.microphone.request();
-    if (status != PermissionStatus.granted) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Microphone permission is required to record voice messages.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+    // Request microphone permission (native only; web uses browser prompt)
+    if (!kIsWeb) {
+      final status = await Permission.microphone.request();
+      if (status != PermissionStatus.granted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Microphone permission is required to record voice messages.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
       }
-      return;
     }
 
     try {
-      final dir = await getTemporaryDirectory();
-      final path = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      String path;
+      if (kIsWeb) {
+        path = 'voice_${DateTime.now().millisecondsSinceEpoch}.webm';
+      } else {
+        final dir = await getTemporaryDirectory();
+        path = '${dir.path}/voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      }
 
       await _audioRecorder.start(
-        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 44100),
+        kIsWeb
+            ? const RecordConfig(encoder: AudioEncoder.opus, bitRate: 64000, sampleRate: 44100)
+            : const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 64000, sampleRate: 44100),
         path: path,
       );
 
@@ -1001,11 +1015,21 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       if (path == null || path.isEmpty) return;
 
       final messageId = _uuid.v4();
-      final file = File(path);
       final bool receiverViewingThisChat = _isReceiverViewingThisChat;
 
+      // Read file bytes cross-platform (works on web and native)
+      Uint8List voiceBytes;
+      if (kIsWeb) {
+        // On web path is a blob URL; use XFile to read bytes
+        final xfile = XFile(path);
+        voiceBytes = await xfile.readAsBytes();
+      } else {
+        voiceBytes = await File(path).readAsBytes();
+      }
+
       final voiceUrl = await _socketService.uploadVoiceMessage(
-        voiceFile: file,
+        bytes: voiceBytes,
+        filename: 'voice_${DateTime.now().millisecondsSinceEpoch}.mp3',
         userId: widget.currentUserId,
         chatRoomId: widget.chatRoomId,
       );

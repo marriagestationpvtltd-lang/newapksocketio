@@ -3,7 +3,14 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+// Platform-conditional multipart upload helper.
+// On native (dart:io) it manually follows redirects to preserve POST.
+// On web the browser's XHR layer is used unchanged.
+import '_http_upload_stub.dart'
+    if (dart.library.io) '_http_upload_io.dart';
 
 /// Available ringtone options bundled with the app.
 class RingtoneTone {
@@ -112,18 +119,33 @@ class CallSettingsProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final request = http.MultipartRequest('POST', Uri.parse(_uploadToneUrl));
-      if (bytes != null && bytes.isNotEmpty) {
-        request.files.add(
-          http.MultipartFile.fromBytes('file', bytes, filename: fileName),
-        );
+      // Prefer in-memory bytes (always available with FilePicker withData:true).
+      // Path-based uploads are kept as a fallback for native platforms only.
+      Uint8List? fileBytes = (bytes != null && bytes.isNotEmpty) ? bytes : null;
+
+      late http.StreamedResponse response;
+
+      if (fileBytes != null) {
+        // Use the redirect-aware helper so that a server-side 301/302 redirect
+        // does NOT silently convert POST → GET (which would cause the PHP
+        // endpoint to return "Invalid request method.").
+        response = await uploadMultipartPost(
+          url: _uploadToneUrl,
+          fieldName: 'file',
+          bytes: fileBytes,
+          filename: fileName,
+          contentType: _audioMediaType(fileName),
+        ).timeout(const Duration(seconds: 30));
       } else {
+        // Fallback: path available but bytes were not pre-read (native only).
+        final request =
+            http.MultipartRequest('POST', Uri.parse(_uploadToneUrl));
         request.files.add(
           await http.MultipartFile.fromPath('file', path!, filename: fileName),
         );
+        response = await request.send().timeout(const Duration(seconds: 30));
       }
 
-      final response = await request.send().timeout(const Duration(seconds: 30));
       final body = await response.stream.bytesToString();
 
       Map<String, dynamic>? decoded;
@@ -140,7 +162,7 @@ class CallSettingsProvider extends ChangeNotifier {
 
       if (response.statusCode != 200) {
         final message = decoded?['message']?.toString();
-        throw Exception(message ?? 'Upload failed.');
+        throw Exception(message ?? 'Upload failed (HTTP ${response.statusCode}).');
       }
 
       if (decoded == null) {
@@ -159,17 +181,29 @@ class CallSettingsProvider extends ChangeNotifier {
     }
   }
 
+  /// Returns a [MediaType] for common audio extensions so the server can
+  /// identify the content without relying solely on the file name.
+  static MediaType? _audioMediaType(String fileName) {
+    final ext = fileName.split('.').last.toLowerCase();
+    const map = <String, String>{
+      'mp3': 'audio/mpeg',
+      'mp4': 'audio/mp4',
+      'ogg': 'audio/ogg',
+      'webm': 'audio/webm',
+      'aac': 'audio/aac',
+      'wav': 'audio/wav',
+      'm4a': 'audio/x-m4a',
+    };
+    final mimeStr = map[ext];
+    if (mimeStr == null) return null;
+    return MediaType.parse(mimeStr);
+  }
+
   Future<void> clearCustomTone() async {
-    final response = await http
-        .post(
-          Uri.parse(_updateSettingsUrl),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: jsonEncode({'clear_custom_call_tone': true}),
-        )
-        .timeout(const Duration(seconds: 5));
+    final response = await sendJsonPost(
+      _updateSettingsUrl,
+      {'clear_custom_call_tone': true},
+    ).timeout(const Duration(seconds: 5));
 
     if (response.statusCode != 200) {
       throw Exception('Failed to remove custom ringtone.');
@@ -259,16 +293,10 @@ class CallSettingsProvider extends ChangeNotifier {
 
   Future<void> _saveToneToServer() async {
     try {
-      final response = await http
-          .post(
-            Uri.parse(_updateSettingsUrl),
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-            },
-            body: jsonEncode({'call_tone_id': _selectedToneId}),
-          )
-          .timeout(const Duration(seconds: 5));
+      final response = await sendJsonPost(
+            _updateSettingsUrl,
+            {'call_tone_id': _selectedToneId},
+          ).timeout(const Duration(seconds: 5));
 
       if (response.statusCode != 200) return;
 

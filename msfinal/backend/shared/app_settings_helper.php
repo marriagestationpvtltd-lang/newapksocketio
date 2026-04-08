@@ -50,8 +50,8 @@ function read_app_settings(PDO $pdo): array
     $rows = $stmt->fetchAll();
 
     foreach ($rows as $row) {
-        $key = $row['setting_key'] ?? '';
-        if ($key === '') {
+        $key = $row['setting_key'] ?? null;
+        if ($key === null || $key === '') {
             continue;
         }
         $defaults[$key] = $row['setting_value'];
@@ -64,16 +64,16 @@ function upsert_app_settings(PDO $pdo, array $settings): void
 {
     ensure_app_settings_table($pdo);
 
+    $insertStmt = $pdo->prepare("
+        INSERT INTO app_settings (setting_key, setting_value)
+        VALUES (:setting_key, :setting_value)
+    ");
+
     $updateStmt = $pdo->prepare("
         UPDATE app_settings
         SET setting_value = :setting_value,
             updated_at = CURRENT_TIMESTAMP
         WHERE setting_key = :setting_key
-    ");
-
-    $insertStmt = $pdo->prepare("
-        INSERT INTO app_settings (setting_key, setting_value)
-        VALUES (:setting_key, :setting_value)
     ");
 
     foreach ($settings as $key => $value) {
@@ -82,9 +82,14 @@ function upsert_app_settings(PDO $pdo, array $settings): void
             ':setting_value' => $value,
         ];
 
-        $updateStmt->execute($params);
-        if ($updateStmt->rowCount() === 0) {
+        try {
             $insertStmt->execute($params);
+        } catch (PDOException $e) {
+            $isDuplicateKey = isset($e->errorInfo[1]) && (int)$e->errorInfo[1] === 1062;
+            if (!$isDuplicateKey) {
+                throw $e;
+            }
+            $updateStmt->execute($params);
         }
     }
 }

@@ -1,11 +1,12 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CallToneSettings {
   static const defaultToneId = 'default';
-  static const defaultAssetPath = 'images/outcall.mp3';
+  static const defaultAssetPath = 'audio/outcall.mp3';
   static const _toneAssets = <String, String>{
     'classic': 'audio/ring_classic.wav',
     'soft': 'audio/ring_soft.wav',
@@ -55,7 +56,9 @@ class CallToneSettingsService {
           }
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Error loading caller tone settings: $e');
+    }
 
     return CallToneSettings(toneId: cachedToneId);
   }

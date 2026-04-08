@@ -108,7 +108,7 @@ class CallSettingsProvider extends ChangeNotifier {
       await prefs.setString(_keyToneId, _selectedToneId);
       notifyListeners();
     } catch (e) {
-      debugPrint('Error loading remote call tone: $e');
+      debugPrint('Error loading remote call tone from app_settings.php: ${e.runtimeType} - $e');
     }
   }
 
@@ -125,7 +125,7 @@ class CallSettingsProvider extends ChangeNotifier {
           )
           .timeout(const Duration(seconds: 5));
     } catch (e) {
-      debugPrint('Error saving remote call tone: $e');
+      debugPrint('Error saving remote call tone to update_app_settings.php: ${e.runtimeType} - $e');
     }
   }
 }

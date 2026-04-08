@@ -222,7 +222,7 @@ class _CallSettingsScreenState extends State<CallSettingsScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                'This uploaded tone plays first for calls. The selected ringtone above stays as fallback.',
+                                'This uploaded tone plays first for calls. If it fails to load, the selected ringtone above is used as fallback.',
                                 style: TextStyle(fontSize: 12, color: mutedColor),
                               ),
                             ],
@@ -252,7 +252,7 @@ class _CallSettingsScreenState extends State<CallSettingsScreen> {
                     const SizedBox(height: 14),
                   ] else
                     Text(
-                      'No custom ringtone uploaded yet. If you upload one, it will override the selected default ringtone during calls.',
+                      'No custom ringtone uploaded yet. If you upload one, it will play first during calls, with the selected ringtone as fallback.',
                       style: TextStyle(fontSize: 12, color: mutedColor),
                     ),
                   SizedBox(
@@ -385,7 +385,7 @@ class _CallSettingsScreenState extends State<CallSettingsScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'The selected tone is saved automatically for user-to-user audio and video calls. Uploaded custom tones take priority, and the selected default tone is used when no upload is available.',
+                      'The selected tone is saved automatically for user-to-user audio and video calls. Uploaded custom tones play first; the selected tone is used as fallback if no custom tone is uploaded or if playback fails.',
                       style: TextStyle(fontSize: 12, color: mutedColor),
                     ),
                   ),

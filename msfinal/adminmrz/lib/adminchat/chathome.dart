@@ -65,6 +65,7 @@ class _ChatWindowState extends State<ChatWindow> {
   bool _userStoppedListening = false;
   bool _isSearching = false;
   bool _showMatchInfo = false;
+  bool _isHorizontalDragging = false;
   File? _selectedImage;
   Uint8List? _selectedImageBytes;
   js.JsObject? _webSpeechRecognition;
@@ -1954,6 +1955,9 @@ class _ChatWindowState extends State<ChatWindow> {
                   },
                   child: CustomScrollView(
                   controller: _scrollController,
+                  physics: _isHorizontalDragging
+                      ? const NeverScrollableScrollPhysics()
+                      : null,
                   slivers: [
                     if (_hasMoreMessages || _isLoadingMore)
                       SliverToBoxAdapter(
@@ -2012,8 +2016,27 @@ class _ChatWindowState extends State<ChatWindow> {
                               final canEdit = _canEditMessage(data, isSentByMe);
                               final canMutate = _canMutateMessage(data, isSentByMe);
 
-                              return GestureDetector(
+                              return _AdminSwipeToReplyWrapper(
                                 key: ValueKey(msgId),
+                                isMine: isSentByMe,
+                                onReply: () => _startReply(
+                                  msgId,
+                                  replyPayload['message']?.toString() ?? '',
+                                  replyPayload['senderid']?.toString() ?? '',
+                                  replyPayload['senderName']?.toString() ?? 'User',
+                                  replyPayload,
+                                ),
+                                onDragStart: () {
+                                  if (mounted) {
+                                    setState(() => _isHorizontalDragging = true);
+                                  }
+                                },
+                                onDragEnd: () {
+                                  if (mounted) {
+                                    setState(() => _isHorizontalDragging = false);
+                                  }
+                                },
+                                child: GestureDetector(
                                 onLongPress: () {
                                   _showMessageOptions(
                                     context,
@@ -2052,6 +2075,7 @@ class _ChatWindowState extends State<ChatWindow> {
                                     replyPayload,
                                   ),
                                 ),
+                              ),
                               );
                             },
                             childCount: group.messages.length,
@@ -4851,6 +4875,136 @@ class _AdminVoiceWaveformState extends State<_AdminVoiceWaveform>
           }),
         );
       },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Admin swipe-to-reply wrapper
+// Encapsulates swipe state so that per-frame offset updates rebuild only this
+// widget instead of the full chat screen.
+// ---------------------------------------------------------------------------
+class _AdminSwipeToReplyWrapper extends StatefulWidget {
+  const _AdminSwipeToReplyWrapper({
+    super.key,
+    required this.child,
+    required this.isMine,
+    required this.onReply,
+    this.onDragStart,
+    this.onDragEnd,
+  });
+
+  final Widget child;
+  final bool isMine;
+  final VoidCallback onReply;
+  final VoidCallback? onDragStart;
+  final VoidCallback? onDragEnd;
+
+  @override
+  State<_AdminSwipeToReplyWrapper> createState() =>
+      _AdminSwipeToReplyWrapperState();
+}
+
+class _AdminSwipeToReplyWrapperState extends State<_AdminSwipeToReplyWrapper>
+    with SingleTickerProviderStateMixin {
+  double _dragOffset = 0.0;
+  bool _isDragging = false;
+  late final AnimationController _animCtrl;
+  late final Animation<double> _anim;
+
+  static const double _kThreshold = 60.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _animCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _anim = Tween<double>(begin: 0.0, end: 1.0)
+        .animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut));
+  }
+
+  @override
+  void dispose() {
+    _animCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onDragStart(DragStartDetails _) {
+    _isDragging = true;
+    _dragOffset = 0.0;
+    _animCtrl.forward();
+    widget.onDragStart?.call();
+  }
+
+  void _onDragUpdate(DragUpdateDetails details) {
+    if (!_isDragging) return;
+    setState(() {
+      _dragOffset = (_dragOffset + details.delta.dx).clamp(-100.0, 100.0);
+    });
+  }
+
+  void _onDragEnd(DragEndDetails _) {
+    if (!_isDragging) return;
+    _isDragging = false;
+    if (_dragOffset.abs() >= _kThreshold) {
+      HapticFeedback.lightImpact();
+      widget.onReply();
+    }
+    _animCtrl.reverse().then((_) {
+      if (mounted) setState(() => _dragOffset = 0.0);
+    });
+    widget.onDragEnd?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final double offset = _dragOffset;
+    return GestureDetector(
+      onHorizontalDragStart: _onDragStart,
+      onHorizontalDragUpdate: _onDragUpdate,
+      onHorizontalDragEnd: _onDragEnd,
+      child: Stack(
+        children: [
+          AnimatedBuilder(
+            animation: _anim,
+            builder: (_, __) => Transform.translate(
+              offset: Offset(offset * _anim.value, 0),
+              child: widget.child,
+            ),
+          ),
+          if (offset.abs() > 8)
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: _anim,
+                builder: (_, __) {
+                  final opacity =
+                      (offset.abs() / 100.0).clamp(0.0, 1.0) * _anim.value;
+                  return Row(
+                    mainAxisAlignment: widget.isMine
+                        ? MainAxisAlignment.start
+                        : MainAxisAlignment.end,
+                    children: [
+                      if (widget.isMine)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 20),
+                          child: Icon(Icons.reply,
+                              color: Colors.grey.withOpacity(opacity)),
+                        ),
+                      if (!widget.isMine)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 20),
+                          child: Icon(Icons.reply,
+                              color: Colors.grey.withOpacity(opacity)),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

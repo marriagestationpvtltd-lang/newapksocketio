@@ -114,13 +114,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   double _audioAmplitude = -160.0; // dBFS — updated while recording
   StreamSubscription? _amplitudeSubscription;
 
-  // Swipe reply variables
-  Map<String, dynamic>? _swipedMessage;
-  double _dragOffset = 0.0;
-  bool _isDragging = false;
-  bool _showSwipeIndicator = false;
-  AnimationController? _swipeAnimationController;
-  Animation<double>? _swipeAnimation;
+  // Scroll lock during swipe-to-reply
+  bool _isHorizontalDragging = false;
 
   // Cached messages to prevent blinking
   List<Map<String, dynamic>> _cachedMessages = [];
@@ -219,18 +214,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     super.initState();
     myImage = widget.currentUserImage;
     otherUserImage = widget.receiverImage;
-
-    _swipeAnimationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 200),
-    );
-
-    _swipeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _swipeAnimationController!,
-        curve: Curves.easeOut,
-      ),
-    );
 
     _recordingAnimController = AnimationController(
       vsync: this,
@@ -687,7 +670,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     _amplitudeSubscription?.cancel();
     _audioRecorder.dispose();
     _recordingAnimController?.dispose();
-    _swipeAnimationController?.dispose();
     _typingDebounce?.cancel();
     _typingSubscription?.cancel();
     _otherUserStatusSub?.cancel();
@@ -1204,55 +1186,6 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     }
   }
 
-  // SWIPE HANDLING
-  void _onHorizontalDragStart(
-      DragStartDetails details, Map<String, dynamic> messageData, bool isMine) {
-    _swipedMessage = messageData;
-    _dragOffset = 0.0;
-    _isDragging = true;
-    _showSwipeIndicator = true;
-    _swipeAnimationController?.forward();
-  }
-
-  void _onHorizontalDragUpdate(DragUpdateDetails details, bool isMine) {
-    if (!_isDragging) return;
-
-    final newOffset = _dragOffset + details.delta.dx;
-
-    // Only accept leftward drag on own messages, rightward on others'
-    if (isMine && newOffset > 0) return;
-    if (!isMine && newOffset < 0) return;
-
-    setState(() {
-      _dragOffset = newOffset.clamp(-100.0, 100.0);
-    });
-  }
-
-  void _onHorizontalDragEnd(DragEndDetails details, bool isMine) {
-    if (!_isDragging) return;
-
-    final threshold = 60.0;
-    final shouldReply = isMine
-        ? _dragOffset < -threshold
-        : _dragOffset > threshold;
-
-    if (shouldReply && _swipedMessage != null) {
-      HapticFeedback.lightImpact();
-      _setReplyMessage(_swipedMessage!);
-    }
-
-    _swipeAnimationController?.reverse().then((value) {
-      if (mounted) {
-        setState(() {
-          _swipedMessage = null;
-          _dragOffset = 0.0;
-          _isDragging = false;
-          _showSwipeIndicator = false;
-        });
-      }
-    });
-  }
-
   // FORMATTING HELPERS
   String _formatTime(DateTime timestamp) {
     return DateFormat('hh:mm a').format(timestamp);
@@ -1508,60 +1441,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     required Map<String, dynamic> messageData,
     required bool isMine,
   }) {
-    final messageId = messageData['messageId'];
-    final isSwiped = _swipedMessage?['messageId'] == messageId;
-
-    return GestureDetector(
-      onHorizontalDragStart: (details) =>
-          _onHorizontalDragStart(details, messageData, isMine),
-      onHorizontalDragUpdate: (details) => _onHorizontalDragUpdate(details, isMine),
-      onHorizontalDragEnd: (details) => _onHorizontalDragEnd(details, isMine),
-      child: Stack(
-        children: [
-          if (isSwiped && _showSwipeIndicator)
-            Positioned.fill(
-              child: AnimatedBuilder(
-                animation: _swipeAnimation!,
-                builder: (context, child) {
-                  return Transform.translate(
-                    offset: Offset(_dragOffset * _swipeAnimation!.value, 0),
-                    child: Container(
-                      color: Colors.grey.withOpacity(0.1),
-                      child: Row(
-                        mainAxisAlignment: isMine
-                            ? MainAxisAlignment.start
-                            : MainAxisAlignment.end,
-                        children: [
-                          if (isMine)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 20),
-                              child: Icon(
-                                Icons.reply,
-                                color: Colors.grey.withOpacity(_swipeAnimation!.value),
-                              ),
-                            ),
-                          if (!isMine)
-                            Padding(
-                              padding: const EdgeInsets.only(right: 20),
-                              child: Icon(
-                                Icons.reply,
-                                color: Colors.grey.withOpacity(_swipeAnimation!.value),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-
-          Transform.translate(
-            offset: Offset(isSwiped ? _dragOffset : 0.0, 0.0),
-            child: child,
-          ),
-        ],
-      ),
+    return _SwipeToReplyWrapper(
+      isMine: isMine,
+      onReply: () => _setReplyMessage(messageData),
+      onDragStart: () {
+        if (mounted) setState(() => _isHorizontalDragging = true);
+      },
+      onDragEnd: () {
+        if (mounted) setState(() => _isHorizontalDragging = false);
+      },
+      child: child,
     );
   }
 
@@ -2802,6 +2691,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     return ListView.builder(
       reverse: false, // Keep as false for natural order
       controller: _scrollController,
+      physics: _isHorizontalDragging
+          ? const NeverScrollableScrollPhysics()
+          : null,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
       itemCount: messageWidgets.length,
       itemBuilder: (context, index) {
@@ -3787,4 +3679,132 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     }
   }
 
+}
+
+// ---------------------------------------------------------------------------
+// Swipe-to-reply wrapper
+// Encapsulates all swipe state so that per-frame offset updates only rebuild
+// this single widget, not the entire chat screen.
+// ---------------------------------------------------------------------------
+class _SwipeToReplyWrapper extends StatefulWidget {
+  const _SwipeToReplyWrapper({
+    required this.child,
+    required this.isMine,
+    required this.onReply,
+    this.onDragStart,
+    this.onDragEnd,
+  });
+
+  final Widget child;
+  final bool isMine;
+  final VoidCallback onReply;
+  final VoidCallback? onDragStart;
+  final VoidCallback? onDragEnd;
+
+  @override
+  State<_SwipeToReplyWrapper> createState() => _SwipeToReplyWrapperState();
+}
+
+class _SwipeToReplyWrapperState extends State<_SwipeToReplyWrapper>
+    with SingleTickerProviderStateMixin {
+  double _dragOffset = 0.0;
+  bool _isDragging = false;
+  late final AnimationController _animCtrl;
+  late final Animation<double> _anim;
+
+  static const double _kThreshold = 60.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _animCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _anim = Tween<double>(begin: 0.0, end: 1.0)
+        .animate(CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut));
+  }
+
+  @override
+  void dispose() {
+    _animCtrl.dispose();
+    super.dispose();
+  }
+
+  void _onDragStart(DragStartDetails _) {
+    _isDragging = true;
+    _dragOffset = 0.0;
+    _animCtrl.forward();
+    widget.onDragStart?.call();
+  }
+
+  void _onDragUpdate(DragUpdateDetails details) {
+    if (!_isDragging) return;
+    setState(() {
+      _dragOffset = (_dragOffset + details.delta.dx).clamp(-100.0, 100.0);
+    });
+  }
+
+  void _onDragEnd(DragEndDetails _) {
+    if (!_isDragging) return;
+    _isDragging = false;
+    if (_dragOffset.abs() >= _kThreshold) {
+      HapticFeedback.lightImpact();
+      widget.onReply();
+    }
+    _animCtrl.reverse().then((_) {
+      if (mounted) setState(() => _dragOffset = 0.0);
+    });
+    widget.onDragEnd?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final double offset = _dragOffset;
+    return GestureDetector(
+      onHorizontalDragStart: _onDragStart,
+      onHorizontalDragUpdate: _onDragUpdate,
+      onHorizontalDragEnd: _onDragEnd,
+      child: Stack(
+        children: [
+          AnimatedBuilder(
+            animation: _anim,
+            builder: (_, __) => Transform.translate(
+              offset: Offset(offset * _anim.value, 0),
+              child: widget.child,
+            ),
+          ),
+          if (offset.abs() > 8)
+            Positioned.fill(
+              child: AnimatedBuilder(
+                animation: _anim,
+                builder: (_, __) {
+                  final opacity =
+                      (offset.abs() / 100.0).clamp(0.0, 1.0) * _anim.value;
+                  return Row(
+                    mainAxisAlignment: widget.isMine
+                        ? MainAxisAlignment.start
+                        : MainAxisAlignment.end,
+                    children: [
+                      if (widget.isMine)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 20),
+                          child: Icon(Icons.reply,
+                              color: Colors.grey.withOpacity(opacity)),
+                        ),
+                      if (!widget.isMine)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 20),
+                          child: Icon(Icons.reply,
+                              color: Colors.grey.withOpacity(opacity)),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

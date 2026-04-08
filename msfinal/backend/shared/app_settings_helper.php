@@ -1,9 +1,6 @@
 <?php
 
-define('APP_SETTINGS_DB_HOST', 'localhost');
-define('APP_SETTINGS_DB_NAME', 'ms');
-define('APP_SETTINGS_DB_USER', 'ms');
-define('APP_SETTINGS_DB_PASS', 'ms');
+require_once __DIR__ . '/../Api2/database.php';
 
 function app_settings_response(bool $success, string $message, array $data = [], int $statusCode = 200): void
 {
@@ -18,15 +15,10 @@ function app_settings_response(bool $success, string $message, array $data = [],
 
 function app_settings_pdo(): PDO
 {
-    return new PDO(
-        "mysql:host=" . APP_SETTINGS_DB_HOST . ";dbname=" . APP_SETTINGS_DB_NAME,
-        APP_SETTINGS_DB_USER,
-        APP_SETTINGS_DB_PASS,
-        [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        ]
-    );
+    $database = new Database();
+    $pdo = $database->getConnection();
+    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+    return $pdo;
 }
 
 function ensure_app_settings_table(PDO $pdo): void

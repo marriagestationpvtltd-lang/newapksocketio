@@ -81,7 +81,10 @@ class CallSettingsProvider extends ChangeNotifier {
   }
 
   String _normalizeToneId(String? toneId) {
-    return availableTones.any((tone) => tone.id == toneId) ? toneId! : 'default';
+    final normalizedToneId = toneId ?? 'default';
+    return availableTones.any((tone) => tone.id == normalizedToneId)
+        ? normalizedToneId
+        : 'default';
   }
 
   Future<void> _syncToneFromServer() async {

@@ -5,18 +5,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class CallToneSettings {
   static const defaultToneId = 'default';
+  static const defaultAssetPath = 'audio/outcall.mp3';
   static const _toneAssets = <String, String>{
     'classic': 'audio/ring_classic.wav',
     'soft': 'audio/ring_soft.wav',
     'modern': 'audio/ring_modern.wav',
-    defaultToneId: 'audio/outcall.mp3',
+    defaultToneId: defaultAssetPath,
   };
 
   final String toneId;
 
   const CallToneSettings({this.toneId = defaultToneId});
 
-  String get assetPath => _toneAssets[toneId] ?? _toneAssets[defaultToneId]!;
+  String get assetPath => _toneAssets[toneId] ?? defaultAssetPath;
 
   static String normalizeToneId(String? toneId) {
     return _toneAssets.containsKey(toneId) ? toneId! : defaultToneId;

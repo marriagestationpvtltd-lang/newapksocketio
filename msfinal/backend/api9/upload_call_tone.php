@@ -60,8 +60,10 @@ if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)
     app_settings_response(false, 'Unable to prepare upload folder.', [], 500);
 }
 
-$filename = sprintf('call_tone_%s.%s', bin2hex(random_bytes(16)), $extension);
-$destination = $uploadDir . $filename;
+do {
+    $filename = sprintf('call_tone_%s.%s', bin2hex(random_bytes(16)), $extension);
+    $destination = $uploadDir . $filename;
+} while (file_exists($destination));
 
 if (!move_uploaded_file($_FILES['file']['tmp_name'], $destination)) {
     app_settings_response(false, 'Failed to save ringtone file.', [], 500);
@@ -70,6 +72,7 @@ if (!move_uploaded_file($_FILES['file']['tmp_name'], $destination)) {
 $publicUrl = app_settings_build_public_url('/uploads/app_settings/call_tones/' . $filename);
 $displayName = trim((string) $originalName);
 $displayName = preg_replace('/[^\w\-. ]+/u', '_', $displayName) ?: 'custom-tone.' . $extension;
+$displayName = str_replace(' ', '_', $displayName);
 $displayName = preg_replace('/\.{2,}/', '.', $displayName) ?: 'custom-tone.' . $extension;
 
 try {

@@ -2,6 +2,8 @@
 
 require_once __DIR__ . '/../Api2/database.php';
 
+const APP_SETTINGS_PUBLIC_BASE_URL = 'https://digitallami.com';
+
 function app_settings_response(bool $success, string $message, array $data = [], int $statusCode = 200): void
 {
     http_response_code($statusCode);
@@ -101,11 +103,7 @@ function upsert_app_settings(PDO $pdo, array $settings): void
 function app_settings_build_public_url(string $path): string
 {
     $normalizedPath = '/' . ltrim($path, '/');
-    $host = $_SERVER['HTTP_HOST'] ?? 'digitallami.com';
-    $isHttps = !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off';
-    $protocol = $isHttps ? 'https' : 'http';
-
-    return $protocol . '://' . $host . $normalizedPath;
+    return rtrim(APP_SETTINGS_PUBLIC_BASE_URL, '/') . $normalizedPath;
 }
 
 function delete_uploaded_call_tone(?string $publicUrl): void

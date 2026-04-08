@@ -271,7 +271,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
       await _stopRingtone();
 
       await _ringtonePlayer.setReleaseMode(ReleaseMode.loop);
-      await _ringtonePlayer.play(AssetSource(_callToneSettings.assetPath));
+      await _playConfiguredTone();
 
       if (mounted) {
         setState(() => _isPlayingRingtone = true);
@@ -286,6 +286,19 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
     if (_callToneSettingsLoaded) return;
     _callToneSettings = await CallToneSettingsService.instance.load();
     _callToneSettingsLoaded = true;
+  }
+
+  Future<void> _playConfiguredTone() async {
+    Object? lastError;
+    for (final assetPath in _callToneSettings.fallbackAssetPaths) {
+      try {
+        await _ringtonePlayer.play(AssetSource(assetPath));
+        return;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    if (lastError != null) throw lastError;
   }
 
 

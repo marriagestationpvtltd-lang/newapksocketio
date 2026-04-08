@@ -186,6 +186,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   static const Duration _kTypingDebounceDelay = Duration(seconds: 3);
   static const Duration _kHighlightDuration = Duration(milliseconds: 700);
   static const Duration _kActiveChatPresenceWindow = Duration(seconds: 30);
+  static const Duration _kScrollToMessageDelay = Duration(milliseconds: 400);
+
+  // Image display constants
+  static const double _kImageWidthFraction = 0.65;
+  static const double _kImageAspectRatio = 0.75; // 4:3
+  static const double _kImageMinWidth = 120.0;
+  static const double _kImageMaxHeight = 300.0;
 
   static const LinearGradient _primaryGradient = LinearGradient(
     colors: [Color(0xFFF90E18), Color(0xFFD00D15)],
@@ -638,7 +645,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     );
 
     // After scrolling completes, try ensureVisible then highlight
-    Future.delayed(const Duration(milliseconds: 400), () {
+    Future.delayed(_kScrollToMessageDelay, () {
       if (!mounted) return;
       final k = _messageKeys[messageId];
       if (k?.currentContext != null) {
@@ -847,21 +854,30 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
     setState(() => _isSendingImage = true);
     try {
-      for (final xfile in picked) {
-        if (!mounted) break;
+      final bool receiverViewingThisChat = _isReceiverViewingThisChat;
+      // Upload all images in parallel for speed
+      final List<String?> urls = await Future.wait(
+        picked.map((xfile) async {
+          try {
+            return await _socketService.uploadChatImage(
+              imageFile: File(xfile.path),
+              userId:    widget.currentUserId,
+              chatRoomId: widget.chatRoomId,
+            );
+          } catch (_) {
+            return null;
+          }
+        }),
+      );
+
+      if (!mounted) return;
+      _forceScrollToBottom = true;
+      _scrollToBottom();
+
+      // Send messages in order and notify for any successful upload
+      for (final imageUrl in urls) {
+        if (imageUrl == null) continue;
         final messageId = _uuid.v4();
-        final file = File(xfile.path);
-        final bool receiverViewingThisChat = _isReceiverViewingThisChat;
-
-        final imageUrl = await _socketService.uploadChatImage(
-          imageFile: file,
-          userId:    widget.currentUserId,
-          chatRoomId: widget.chatRoomId,
-        );
-
-        _forceScrollToBottom = true;
-        _scrollToBottom();
-
         _socketService.sendMessage(
           chatRoomId:        widget.chatRoomId,
           senderId:          widget.currentUserId,
@@ -875,15 +891,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           user1Image:        widget.currentUserImage,
           user2Image:        widget.receiverImage,
         );
+      }
 
-        if (!receiverViewingThisChat) {
-          await NotificationService.sendChatNotification(
-            recipientUserId: widget.receiverId.toString(),
-            senderName: widget.currentUserName,
-            senderId: widget.currentUserId.toString(),
-            message: '📷 Photo',
-          );
-        }
+      if (!receiverViewingThisChat && urls.any((u) => u != null)) {
+        await NotificationService.sendChatNotification(
+          recipientUserId: widget.receiverId.toString(),
+          senderName: widget.currentUserName,
+          senderId: widget.currentUserId.toString(),
+          message: urls.length == 1 ? '📷 Photo' : '📷 ${urls.where((u) => u != null).length} Photos',
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -1784,7 +1800,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   }) {
     switch (messageType) {
       case 'image':
-        final double imgWidth = MediaQuery.of(context).size.width * 0.65;
+        final double imgWidth = MediaQuery.of(context).size.width * _kImageWidthFraction;
         final bool shouldBlur = !isMine &&
             _privacyStatus.toLowerCase() != 'free' &&
             _photoRequestStatus.toLowerCase() != 'accepted';
@@ -1792,7 +1808,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         if (shouldBlur) {
           return SizedBox(
             width: imgWidth,
-            height: imgWidth * 0.75,
+            height: imgWidth * _kImageAspectRatio,
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -1801,7 +1817,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   child: Image.network(
                     text,
                     width: imgWidth,
-                    height: imgWidth * 0.75,
+                    height: imgWidth * _kImageAspectRatio,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) => Container(
                       color: Colors.grey[300],
@@ -1878,8 +1894,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           child: ConstrainedBox(
             constraints: BoxConstraints(
               maxWidth: imgWidth,
-              minWidth: 120,
-              maxHeight: 300,
+              minWidth: _kImageMinWidth,
+              maxHeight: _kImageMaxHeight,
             ),
             child: Image.network(
               text,
@@ -1888,7 +1904,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 if (loadingProgress == null) return child;
                 return SizedBox(
                   width: imgWidth,
-                  height: imgWidth * 0.75,
+                  height: imgWidth * _kImageAspectRatio,
                   child: Center(
                     child: CircularProgressIndicator(
                       value: loadingProgress.expectedTotalBytes != null

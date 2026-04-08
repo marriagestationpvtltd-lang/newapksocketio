@@ -65,7 +65,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   bool _frontCamera = true;
   bool _ending = false;
   bool _remoteAccepted = false;
-  bool _isCallRinging = true; // Add ringing state
+  bool _isCallRinging = true; // ringing state: false once remote joins
   bool _isRecipientRinging = false; // true when recipient device is ringing
   bool _foregroundServiceStarted = false;
 

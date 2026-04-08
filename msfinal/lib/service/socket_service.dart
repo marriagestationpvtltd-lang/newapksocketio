@@ -570,5 +570,11 @@ class SocketService {
     _userStatusCtrl.close();
     _chatRoomsUpdateCtrl.close();
     _connectionCtrl.close();
+    _incomingCallCtrl.close();
+    _callAcceptedCtrl.close();
+    _callRejectedCtrl.close();
+    _callCancelledCtrl.close();
+    _callEndedCtrl.close();
+    _callRingingCtrl.close();
   }
 }

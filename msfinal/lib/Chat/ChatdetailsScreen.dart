@@ -1982,7 +1982,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       } else {
         urls = [text];
       }
-    } catch (_) {
+    } on FormatException catch (e) {
+      debugPrint('image_gallery: JSON parse error: $e');
+      urls = [text];
+    } catch (e) {
+      debugPrint('image_gallery: unexpected error: $e');
       urls = [text];
     }
     if (urls.isEmpty) return const SizedBox.shrink();
@@ -1998,7 +2002,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     final double gridWidth = screenWidth * 0.65;
     const double gap = 2;
 
-    Widget buildThumb(String url, {bool showOverlay = false, int extra = 0}) {
+    Widget buildThumb(int index, {bool showOverlay = false, int extra = 0}) {
+      final url = urls[index];
       Widget img = Image.network(
         url,
         fit: BoxFit.cover,
@@ -2023,7 +2028,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       );
 
       Widget tile = GestureDetector(
-        onTap: () => _openGalleryViewer(urls, urls.indexOf(url)),
+        onTap: () => _openGalleryViewer(urls, index),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(4),
           child: showOverlay
@@ -2058,9 +2063,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         width: gridWidth,
         child: Row(
           children: [
-            Expanded(child: SizedBox(height: h, child: buildThumb(urls[0]))),
+            Expanded(child: SizedBox(height: h, child: buildThumb(0))),
             SizedBox(width: gap),
-            Expanded(child: SizedBox(height: h, child: buildThumb(urls[1]))),
+            Expanded(child: SizedBox(height: h, child: buildThumb(1))),
           ],
         ),
       );
@@ -2074,15 +2079,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         height: h,
         child: Row(
           children: [
-            Expanded(flex: 2, child: SizedBox(height: h, child: buildThumb(urls[0]))),
+            Expanded(flex: 2, child: SizedBox(height: h, child: buildThumb(0))),
             SizedBox(width: gap),
             Expanded(
               flex: 1,
               child: Column(
                 children: [
-                  Expanded(child: buildThumb(urls[1])),
+                  Expanded(child: buildThumb(1)),
                   SizedBox(height: gap),
-                  Expanded(child: buildThumb(urls[2])),
+                  Expanded(child: buildThumb(2)),
                 ],
               ),
             ),
@@ -2100,15 +2105,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         child: Column(
           children: [
             Row(children: [
-              SizedBox(width: cellW, height: h, child: buildThumb(urls[0])),
+              SizedBox(width: cellW, height: h, child: buildThumb(0)),
               SizedBox(width: gap),
-              SizedBox(width: cellW, height: h, child: buildThumb(urls[1])),
+              SizedBox(width: cellW, height: h, child: buildThumb(1)),
             ]),
             SizedBox(height: gap),
             Row(children: [
-              SizedBox(width: cellW, height: h, child: buildThumb(urls[2])),
+              SizedBox(width: cellW, height: h, child: buildThumb(2)),
               SizedBox(width: gap),
-              SizedBox(width: cellW, height: h, child: buildThumb(urls[3])),
+              SizedBox(width: cellW, height: h, child: buildThumb(3)),
             ]),
           ],
         ),
@@ -2124,7 +2129,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       cells.add(SizedBox(
         width: cellW,
         height: cellH,
-        child: buildThumb(urls[i], showOverlay: isLast, extra: extraCount),
+        child: buildThumb(i, showOverlay: isLast, extra: extraCount),
       ));
     }
 

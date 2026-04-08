@@ -2663,7 +2663,11 @@ class _ChatWindowState extends State<ChatWindow> {
         } else {
           galleryUrls = [rawMessage];
         }
-      } catch (_) {
+      } on FormatException catch (e) {
+        debugPrint('image_gallery: JSON parse error: $e');
+        galleryUrls = [rawMessage];
+      } catch (e) {
+        debugPrint('image_gallery: unexpected error: $e');
         galleryUrls = [rawMessage];
       }
 
@@ -3275,7 +3279,9 @@ class _ChatWindowState extends State<ChatWindow> {
         if (decoded is List && decoded.isNotEmpty) {
           imageUrl = decoded.first?.toString();
         }
-      } catch (_) {}
+      } on FormatException catch (_) {
+        // Malformed gallery JSON — leave imageUrl null
+      }
     }
     final bool hasImage = imageUrl != null && imageUrl.isNotEmpty;
 
@@ -3401,7 +3407,8 @@ class _ChatWindowState extends State<ChatWindow> {
     final double gridWidth = MediaQuery.of(context).size.width * 0.24;
     const double gap = 2;
 
-    Widget thumb(String url, {bool showOverlay = false, int extra = 0}) {
+    Widget thumb(int index, {bool showOverlay = false, int extra = 0}) {
+      final url = urls[index];
       Widget img = Image.network(
         url,
         fit: BoxFit.cover,
@@ -3418,7 +3425,7 @@ class _ChatWindowState extends State<ChatWindow> {
         ),
       );
       return GestureDetector(
-        onTap: () => _openAdminGalleryViewer(urls, urls.indexOf(url)),
+        onTap: () => _openAdminGalleryViewer(urls, index),
         child: showOverlay
             ? Stack(
                 fit: StackFit.expand,
@@ -3439,7 +3446,7 @@ class _ChatWindowState extends State<ChatWindow> {
       return SizedBox(
         width: gridWidth,
         height: gridWidth,
-        child: thumb(urls[0]),
+        child: thumb(0),
       );
     }
     if (urls.length == 2) {
@@ -3447,9 +3454,9 @@ class _ChatWindowState extends State<ChatWindow> {
       return SizedBox(
         width: gridWidth,
         child: Row(children: [
-          Expanded(child: SizedBox(height: h, child: thumb(urls[0]))),
+          Expanded(child: SizedBox(height: h, child: thumb(0))),
           SizedBox(width: gap),
-          Expanded(child: SizedBox(height: h, child: thumb(urls[1]))),
+          Expanded(child: SizedBox(height: h, child: thumb(1))),
         ]),
       );
     }
@@ -3459,14 +3466,14 @@ class _ChatWindowState extends State<ChatWindow> {
         width: gridWidth,
         height: h,
         child: Row(children: [
-          Expanded(flex: 2, child: SizedBox(height: h, child: thumb(urls[0]))),
+          Expanded(flex: 2, child: SizedBox(height: h, child: thumb(0))),
           SizedBox(width: gap),
           Expanded(
             flex: 1,
             child: Column(children: [
-              Expanded(child: thumb(urls[1])),
+              Expanded(child: thumb(1)),
               SizedBox(height: gap),
-              Expanded(child: thumb(urls[2])),
+              Expanded(child: thumb(2)),
             ]),
           ),
         ]),
@@ -3478,15 +3485,15 @@ class _ChatWindowState extends State<ChatWindow> {
         width: gridWidth,
         child: Column(children: [
           Row(children: [
-            SizedBox(width: cellW, height: cellW, child: thumb(urls[0])),
+            SizedBox(width: cellW, height: cellW, child: thumb(0)),
             SizedBox(width: gap),
-            SizedBox(width: cellW, height: cellW, child: thumb(urls[1])),
+            SizedBox(width: cellW, height: cellW, child: thumb(1)),
           ]),
           SizedBox(height: gap),
           Row(children: [
-            SizedBox(width: cellW, height: cellW, child: thumb(urls[2])),
+            SizedBox(width: cellW, height: cellW, child: thumb(2)),
             SizedBox(width: gap),
-            SizedBox(width: cellW, height: cellW, child: thumb(urls[3])),
+            SizedBox(width: cellW, height: cellW, child: thumb(3)),
           ]),
         ]),
       );
@@ -3499,7 +3506,7 @@ class _ChatWindowState extends State<ChatWindow> {
     final double cellW = (gridWidth - gap) / 2;
     final List<Widget> cells = List.generate(displayCount, (i) {
       final isLast = i == displayCount - 1 && extraCount > 0;
-      return SizedBox(width: cellW, height: cellW, child: thumb(urls[i], showOverlay: isLast, extra: extraCount));
+      return SizedBox(width: cellW, height: cellW, child: thumb(i, showOverlay: isLast, extra: extraCount));
     });
     final List<Widget> rows = [];
     for (int i = 0; i < cells.length; i += 2) {

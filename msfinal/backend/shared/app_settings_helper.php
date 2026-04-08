@@ -112,7 +112,7 @@ function delete_uploaded_call_tone(?string $publicUrl): void
         return;
     }
 
-    $projectRoot = realpath(__DIR__ . '/../../');
+    $projectRoot = realpath(__DIR__ . '/../');
     $baseDir = realpath($projectRoot . '/uploads/app_settings/call_tones');
     if ($projectRoot === false || $baseDir === false) {
         return;

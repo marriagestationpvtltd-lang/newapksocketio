@@ -60,7 +60,7 @@ if (($_FILES['file']['size'] ?? 0) > $maxBytes) {
     app_settings_response(false, 'Ringtone file is too large.', [], 422);
 }
 
-$uploadDir = __DIR__ . '/../../uploads/app_settings/call_tones/';
+$uploadDir = __DIR__ . '/../uploads/app_settings/call_tones/';
 if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)) {
     app_settings_response(false, 'Unable to prepare upload folder.', [], 500);
 }

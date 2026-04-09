@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 // ================= DB CONFIG =================
 // ✅ BASE URL FOR PROFILE PICTURES
-define('PROFILE_BASE_URL', 'https://digitallami.com/Api2/');
+define('PROFILE_BASE_URL', APP_API2_BASE_URL);
 
 try {
     $pdo = new PDO(

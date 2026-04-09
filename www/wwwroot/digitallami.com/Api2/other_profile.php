@@ -7,7 +7,7 @@ header("Access-Control-Allow-Headers: Content-Type, Authorization");
 header("Content-Type: application/json");
 
 // Base URL for profile pictures
-$base_url = "https://digitallami.com/Api2/";
+$base_url = APP_API2_BASE_URL;
 
 // Database configuration
 $host = DB_HOST;

@@ -10,6 +10,7 @@ import '../../constant/app_colors.dart';
 import '../../main.dart';
 import '../../otherprofile/otherprofileview.dart';
 import '../../pushnotification/pushservice.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 /// Gallery image model
 class GalleryImagee {
@@ -391,7 +392,7 @@ class _ProfileSwipeUIState extends State<ProfileSwipeUI> {
 
   Future<UserMasterData> fetchUserMasterData(String userId) async {
     final url = Uri.parse(
-      "https://digitallami.com/Api2/masterdata.php?userid=$userId",
+      "${kApiBaseUrl}/Api2/masterdata.php?userid=$userId",
     );
 
     final response = await http.get(url);
@@ -451,7 +452,7 @@ class _ProfileSwipeUIState extends State<ProfileSwipeUI> {
       print("Checking document status for user ID: $userId");
 
       final response = await http.post(
-        Uri.parse("https://digitallami.com/Api2/check_document_status.php"),
+        Uri.parse("${kApiBaseUrl}/Api2/check_document_status.php"),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'user_id': userId}),
       );

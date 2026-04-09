@@ -12,6 +12,7 @@ import '../../Models/masterdata.dart';
 import '../../main.dart';
 import '../../ReUsable/loading_widgets.dart';
 import '../../utils/privacy_utils.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class PaidUsersListPage extends StatefulWidget {
   final int userId;
@@ -80,7 +81,7 @@ class _PaidUsersListPageState extends State<PaidUsersListPage> {
 
   Future<UserMasterData> fetchUserMasterData(String userId) async {
     final url = Uri.parse(
-      "https://digitallami.com/Api2/masterdata.php?userid=$userId",
+      "${kApiBaseUrl}/Api2/masterdata.php?userid=$userId",
     );
     final response = await http.get(url);
     if (response.statusCode != 200) {
@@ -129,7 +130,7 @@ class _PaidUsersListPageState extends State<PaidUsersListPage> {
 
     try {
       final response = await http.get(
-        Uri.parse('https://digitallami.com/Api2/premiuimmember.php?user_id=${widget.userId}&page=$_currentPage'),
+        Uri.parse('${kApiBaseUrl}/Api2/premiuimmember.php?user_id=${widget.userId}&page=$_currentPage'),
       );
 
       if (response.statusCode == 200) {
@@ -259,7 +260,7 @@ class _PaidUsersListPageState extends State<PaidUsersListPage> {
     final isVerified = user['isVerified'] == 1;
     final profilePic = user['profile_picture'];
     final imageUrl = profilePic != null && profilePic.toString().isNotEmpty
-        ? 'https://digitallami.com/Api2/$profilePic'
+        ? '${kApiBaseUrl}/Api2/$profilePic'
         : 'https://via.placeholder.com/150?text=No+Image';
 
     // Use profile owner's privacy setting, not viewer's subscription

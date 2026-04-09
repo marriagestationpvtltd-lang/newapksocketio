@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:adminmrz/payment/paymentmodel.dart';
 import 'package:http/http.dart' as http;
+import 'package:adminmrz/config/app_endpoints.dart';
 
 class PaymentService {
-  static const String _baseUrl = 'https://digitallami.com/api9';
+  static const String _baseUrl = '${kAdminApiBaseUrl}/api9';
 
   // Get payment history
   Future<PaymentHistoryResponse> getPaymentHistory() async {

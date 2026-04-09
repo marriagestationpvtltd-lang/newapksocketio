@@ -5,7 +5,7 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
 
-$base_url = "https://digitallami.com/Api2/";
+$base_url = APP_API2_BASE_URL;
 
 $host = DB_HOST;
 $db_name = DB_NAME;

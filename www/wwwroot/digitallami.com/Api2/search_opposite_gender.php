@@ -170,7 +170,7 @@ try {
 
     $rows = $stmt2->fetchAll();
 
-    $imageBaseUrl = 'https://digitallami.com/Api2/';
+    $imageBaseUrl = APP_API2_BASE_URL;
 
     foreach ($rows as &$row) {
         // Prepend base URL to profile picture

@@ -21,6 +21,7 @@ import '../service/socket_service.dart';
 import '../utils/image_utils.dart';
 import '../utils/time_utils.dart';
 import 'modelfile.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String userId;
@@ -33,7 +34,7 @@ ProfileScreen({super.key, required this.userId,});
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  static const String _requestBaseUrl = 'https://digitallami.com/request';
+  static const String _requestBaseUrl = '${kApiBaseUrl}/request';
 
   bool _isBlocked = false;
   bool _isLoadingBlock = false;

@@ -9,6 +9,7 @@ import '../../ReUsable/registration_progress.dart';
 import '../../ReUsable/enhanced_form_fields.dart';
 import '../../constant/app_colors.dart';
 import '../../service/updatepage.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class LifestylePage extends StatefulWidget {
   const LifestylePage({super.key});
@@ -526,7 +527,7 @@ class _LifestylePageState extends State<LifestylePage> with SingleTickerProvider
       body.removeWhere((key, value) => value.isEmpty);
 
       // API URL
-      String url = "https://digitallami.com/Api2/user_lifestyle.php";
+      String url = "${kApiBaseUrl}/Api2/user_lifestyle.php";
 
       print("Submitting data: $body");
 

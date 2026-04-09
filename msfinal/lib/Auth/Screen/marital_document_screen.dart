@@ -9,6 +9,7 @@ import '../../constant/app_colors.dart';
 import '../../service/ocr_service.dart';
 import '../../service/document_scanner_service.dart';
 import '../../Startup/MainControllere.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 /// Screen for uploading a marital-status supporting document (additional
 /// details verification). Completely separate from [IDVerificationScreen]
@@ -117,7 +118,7 @@ class _MaritalDocumentUploadScreenState
 
       final response = await http.post(
         Uri.parse(
-            'https://digitallami.com/Api2/check_document_status.php'),
+            '${kApiBaseUrl}/Api2/check_document_status.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'user_id': userId}),
       );
@@ -151,7 +152,7 @@ class _MaritalDocumentUploadScreenState
       final userId = int.tryParse(userData['id'].toString());
 
       final uri = Uri.parse(
-          'https://digitallami.com/Api2/upload_document.php');
+          '${kApiBaseUrl}/Api2/upload_document.php');
       final request = http.MultipartRequest('POST', uri);
       request.fields['userid'] = userId.toString();
       request.fields['documenttype'] = _selectedDocumentType!;

@@ -37,6 +37,7 @@ import '../../purposal/requestcard.dart' show showUpgradeDialog;
 import '../../service/Service_chat.dart';
 import '../../ReUsable/loading_widgets.dart';
 import 'machprofilescreen.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 // Cache data structure for better performance
 class CachedData {
@@ -64,7 +65,7 @@ class MatrimonyHomeScreen extends StatefulWidget {
 }
 
 class _MatrimonyHomeScreenState extends State<MatrimonyHomeScreen> {
-  static const String _apiBaseUrl = 'https://digitallami.com/Api2';
+  static const String _apiBaseUrl = '${kApiBaseUrl}/Api2';
   static const String _placeholderProfileImage =
       'https://via.placeholder.com/150';
   static const Color _brandRed = AppColors.primary;
@@ -133,7 +134,7 @@ class _MatrimonyHomeScreenState extends State<MatrimonyHomeScreen> {
       debugPrint("Checking document status for user ID: $userId");
 
       final response = await http.post(
-        Uri.parse("https://digitallami.com/Api2/check_document_status.php"),
+        Uri.parse("${kApiBaseUrl}/Api2/check_document_status.php"),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'user_id': userId}),
       );
@@ -251,7 +252,7 @@ class _MatrimonyHomeScreenState extends State<MatrimonyHomeScreen> {
 
 
       // Make API call
-      final url = Uri.parse('https://digitallami.com/Api2/match.php?userid=$userId');
+      final url = Uri.parse('${kApiBaseUrl}/Api2/match.php?userid=$userId');
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -458,7 +459,7 @@ class _MatrimonyHomeScreenState extends State<MatrimonyHomeScreen> {
     final userid = userData["id"];
 
     try {
-      final url = Uri.parse('https://digitallami.com/Api2/premiuimmember.php?user_id=${userid}');
+      final url = Uri.parse('${kApiBaseUrl}/Api2/premiuimmember.php?user_id=${userid}');
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -472,7 +473,7 @@ class _MatrimonyHomeScreenState extends State<MatrimonyHomeScreen> {
             final rawImage = member['profile_picture'] ?? '';
             final imageUrl = rawImage.startsWith('http')
                 ? rawImage
-                : 'https://digitallami.com/Api2/$rawImage';
+                : '${kApiBaseUrl}/Api2/$rawImage';
 
             return {
               'firstName': member['firstName'] ?? '',
@@ -545,7 +546,7 @@ class _MatrimonyHomeScreenState extends State<MatrimonyHomeScreen> {
 
     try {
       // Use search_opposite_gender API with sort by recent registration
-      final url = Uri.parse('https://digitallami.com/Api2/search_opposite_gender.php?user_id=$userid&sort_by=recent&limit=10');
+      final url = Uri.parse('${kApiBaseUrl}/Api2/search_opposite_gender.php?user_id=$userid&sort_by=recent&limit=10');
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -571,7 +572,7 @@ class _MatrimonyHomeScreenState extends State<MatrimonyHomeScreen> {
             final rawImage = member['profile_picture'] ?? '';
             final imageUrl = rawImage.startsWith('http')
                 ? rawImage
-                : 'https://digitallami.com/Api2/$rawImage';
+                : '${kApiBaseUrl}/Api2/$rawImage';
 
             return {
               'userId': member['userid'] ?? member['id'],
@@ -635,7 +636,7 @@ class _MatrimonyHomeScreenState extends State<MatrimonyHomeScreen> {
 
   Future<UserMasterData> fetchUserMasterData(String userId) async {
     final url = Uri.parse(
-      "https://digitallami.com/Api2/masterdata.php?userid=$userId",
+      "${kApiBaseUrl}/Api2/masterdata.php?userid=$userId",
     );
 
     final response = await http.get(url);
@@ -667,7 +668,7 @@ class _MatrimonyHomeScreenState extends State<MatrimonyHomeScreen> {
     }
 
     try {
-      final url = Uri.parse('https://digitallami.com/Api2/services_api.php');
+      final url = Uri.parse('${kApiBaseUrl}/Api2/services_api.php');
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -681,7 +682,7 @@ class _MatrimonyHomeScreenState extends State<MatrimonyHomeScreen> {
             final rawImage = service['profile_picture'] ?? '';
             final imageUrl = rawImage.startsWith('http')
                 ? rawImage
-                : 'https://digitallami.com/$rawImage';
+                : '${kApiBaseUrl}/$rawImage';
 
             return {
               'category': service['servicetype'] ?? '',
@@ -1031,10 +1032,10 @@ String usertye = '';
                         borderRadius: AppDimensions.borderRadiusXL,
                         child: ProfileSwipeUI(
                           userId: userid,
-                          matchApiUrl: 'https://digitallami.com/Api2/match.php',
-                          baseUrl: 'https://digitallami.com/Api2',
-                          sendRequestApiUrl: 'https://digitallami.com/Api2/send_request.php',
-                          likeApiUrl: 'https://digitallami.com/Api2/like_action.php',
+                          matchApiUrl: '${kApiBaseUrl}/Api2/match.php',
+                          baseUrl: '${kApiBaseUrl}/Api2',
+                          sendRequestApiUrl: '${kApiBaseUrl}/Api2/send_request.php',
+                          likeApiUrl: '${kApiBaseUrl}/Api2/like_action.php',
                         ),
                       ),
                     ),
@@ -1188,7 +1189,7 @@ String usertye = '';
               child: CircleAvatar(
                 radius: 20,
                 backgroundImage: userimage.isNotEmpty
-                    ? NetworkImage('https://digitallami.com/Api2/$userimage')
+                    ? NetworkImage('${kApiBaseUrl}/Api2/$userimage')
                     : null,
                 onBackgroundImageError:
                     userimage.isNotEmpty ? (_, __) {} : null,
@@ -1835,7 +1836,7 @@ String usertye = '';
               '$city${city.isNotEmpty && country.isNotEmpty ? ', ' : ''}$country';
           final profilePicture = profile['profile_picture'] ?? '';
           final imageUrl = profilePicture.isNotEmpty
-              ? 'https://digitallami.com/Api2/$profilePicture'
+              ? '${kApiBaseUrl}/Api2/$profilePicture'
               : '';
           final matchPercent = profile['matchPercent'];
           final isVerified = profile['isVerified'] == 1;
@@ -2163,7 +2164,7 @@ String usertye = '';
           final imageUrl = profilePicture.isNotEmpty
               ? (profilePicture.startsWith('http')
                   ? profilePicture
-                  : 'https://digitallami.com/Api2/$profilePicture')
+                  : '${kApiBaseUrl}/Api2/$profilePicture')
               : '';
           final isVerified =
               person['isVerified'] == 1 || person['isVerified'] == '1';

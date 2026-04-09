@@ -3,11 +3,12 @@ import 'dart:convert';
 
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'callmanager.dart';
+import 'package:adminmrz/config/app_endpoints.dart';
 
 /// URL of the Node.js Socket.IO server.
 /// ⚠️  Replace this with your actual deployed server URL before building.
 /// Example: 'https://socket.yourserver.com:3001'
-const String kAdminSocketUrl = 'https://adminnew.marriagestation.com.np/';
+const String kAdminSocketUrl = '$kAdminSocketBaseUrl/';
 
 /// Admin user ID — always '1'.
 const String kAdminUserId = '1';

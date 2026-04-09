@@ -9,6 +9,7 @@ import '../main.dart';
 import '../pushnotification/pushservice.dart';
 import '../utils/privacy_utils.dart'; // Add privacy utils import
 import 'filterPage.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class SearchResultPage extends StatefulWidget {
   final Map<String, dynamic>? filterParams;
@@ -86,7 +87,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
   Future<void> _checkDocumentStatus(int userId) async {
     try {
       final response = await http.post(
-        Uri.parse("https://digitallami.com/Api2/check_document_status.php"),
+        Uri.parse("${kApiBaseUrl}/Api2/check_document_status.php"),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'user_id': userId}),
       );
@@ -115,7 +116,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
       final myId = userData["id"].toString();
 
       final response = await http.post(
-        Uri.parse('https://digitallami.com/Api2/get_blocked_users.php'),
+        Uri.parse('${kApiBaseUrl}/Api2/get_blocked_users.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'my_id': myId}),
       );
@@ -145,7 +146,7 @@ class _SearchResultPageState extends State<SearchResultPage> {
       });
 
       String baseUrl =
-          'https://digitallami.com/Api2/search_opposite_gender.php?user_id=$userId';
+          '${kApiBaseUrl}/Api2/search_opposite_gender.php?user_id=$userId';
 
       // Quick search by phone / id / email / name
       if (widget.quickSearchType != null &&

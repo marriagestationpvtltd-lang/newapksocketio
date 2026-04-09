@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'constant.dart';
+import 'package:adminmrz/config/app_endpoints.dart';
 
 class ChatProvider extends ChangeNotifier {
   List<Map<String, String>> _chatList = [];
@@ -38,7 +39,7 @@ class ChatProvider extends ChangeNotifier {
 
   // Fetch chat list from API
   Future<void> fetchChatList() async {
-    final url = Uri.parse('https://digitallami.com/get.php');
+    final url = Uri.parse('${kAdminApiBaseUrl}/get.php');
 
     try {
       final response = await http.get(url);
@@ -89,7 +90,7 @@ class ChatProvider extends ChangeNotifier {
 
     try {
       // You'll need to create this API endpoint on your server
-      final url = Uri.parse('https://digitallami.com/get_matches.php?user_id=$userId');
+      final url = Uri.parse('${kAdminApiBaseUrl}/get_matches.php?user_id=$userId');
 
       final response = await http.get(url);
 

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import '../Notification/notification_inbox_service.dart';
 import '../Calling/callmanager.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 /// Notification Service
 ///
@@ -42,7 +43,7 @@ class NotificationService {
 
 
   // Your existing PHP API endpoint
-  static const String _notificationUrl = 'https://digitallami.com/Api2/send_notification.php';
+  static const String _notificationUrl = '${kApiBaseUrl}/Api2/send_notification.php';
 
   // Stream for call responses (listen in outgoing call screen)
   static void triggerCallResponse(Map<String, dynamic> data) {

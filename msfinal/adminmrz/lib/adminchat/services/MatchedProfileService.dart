@@ -4,6 +4,7 @@ import 'package:adminmrz/adminchat/services/admin_socket_service.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../model/MatchedProfile.dart';
+import 'package:adminmrz/config/app_endpoints.dart';
 
 class MatchedProfileProvider with ChangeNotifier {
   String _name = '';
@@ -83,7 +84,7 @@ class MatchedProfileProvider with ChangeNotifier {
 
     try {
       final response = await http.post(
-        Uri.parse('https://digitallami.com/match_admin.php'),
+        Uri.parse('${kAdminApiBaseUrl}/match_admin.php'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'user_id': userId,
@@ -135,7 +136,7 @@ class MatchedProfileProvider with ChangeNotifier {
 
     try {
       final response = await http.post(
-        Uri.parse('https://digitallami.com/match_admin.php'),
+        Uri.parse('${kAdminApiBaseUrl}/match_admin.php'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'user_id': _currentUserId,
@@ -220,7 +221,7 @@ class MatchedProfileProvider with ChangeNotifier {
 
     try {
       final response = await http.post(
-        Uri.parse('https://digitallami.com/match_admin.php'),
+        Uri.parse('${kAdminApiBaseUrl}/match_admin.php'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'user_id': _currentUserId,

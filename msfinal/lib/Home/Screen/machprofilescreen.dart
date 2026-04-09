@@ -10,6 +10,7 @@ import '../../otherprofile/otherprofileview.dart';
 import '../../pushnotification/pushservice.dart';
 import '../../ReUsable/loading_widgets.dart';
 import '../../utils/privacy_utils.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class MatchedProfilesPagee extends StatefulWidget {
   final int currentUserId;
@@ -31,7 +32,7 @@ class _MatchedProfilesPageeState extends State<MatchedProfilesPagee> {
   bool _isRefreshing = false;
   String _errorMessage = '';
   bool _isBlurred = true;
-  final String _apiUrl = 'https://digitallami.com/Api2/match.php';
+  final String _apiUrl = '${kApiBaseUrl}/Api2/match.php';
   String _userName = '';
   String _userLastName = '';
   int _userId = 0;
@@ -126,7 +127,7 @@ class _MatchedProfilesPageeState extends State<MatchedProfilesPagee> {
   Future<void> _handleLikeProfile(int profileId, bool isCurrentlyLiked) async {
     try {
       final response = await http.post(
-        Uri.parse('https://digitallami.com/Api2/like_profile.php'),
+        Uri.parse('${kApiBaseUrl}/Api2/like_profile.php'),
         body: {
           'sender_id': widget.currentUserId.toString(),
           'receiver_id': profileId.toString(),
@@ -182,7 +183,7 @@ class _MatchedProfilesPageeState extends State<MatchedProfilesPagee> {
     final photoRequestStatus = profile['photo_request']?.toString().toLowerCase() ?? 'not_sent';
 
     // Construct image URL
-    final baseImageUrl = 'https://digitallami.com/Api2/';
+    final baseImageUrl = '${kApiBaseUrl}/Api2/';
     final profilePicture = profile['profile_picture'] ?? '';
     final imageUrl = profilePicture.isNotEmpty
         ? baseImageUrl + profilePicture

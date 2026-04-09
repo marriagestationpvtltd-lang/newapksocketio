@@ -19,6 +19,7 @@ import '../Package/PackageScreen.dart';
 import '../Startup/onboarding.dart';
 import '../constant/app_colors.dart';
 import '../otherenew/blocked_users_screen.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({Key? key}) : super(key: key);
@@ -44,9 +45,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _currentPrivacy = 'Private';
   bool _loadingPrivacy = true;
 
-  final String _baseUrl = 'https://digitallami.com/Api2';
-  final String _privacyGetUrl = 'https://digitallami.com/Api3/get_privacy.php';
-  final String _privacyUpdateUrl = 'https://digitallami.com/Api3/privacy.php';
+  final String _baseUrl = '${kApiBaseUrl}/Api2';
+  final String _privacyGetUrl = '${kApiBaseUrl}/Api3/get_privacy.php';
+  final String _privacyUpdateUrl = '${kApiBaseUrl}/Api3/privacy.php';
 
   @override
   void initState() {

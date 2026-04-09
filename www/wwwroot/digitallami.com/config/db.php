@@ -37,6 +37,10 @@ if (!defined('DB_NAME')) define('DB_NAME', getenv('DB_NAME') ?: 'ms');
 if (!defined('DB_USER')) define('DB_USER', getenv('DB_USER') ?: 'ms');
 if (!defined('DB_PASS')) define('DB_PASS', getenv('DB_PASS') ?: 'ms');
 
+// ── Public URL constants (for absolute media/profile links) ──────────────────
+if (!defined('APP_PUBLIC_BASE_URL')) define('APP_PUBLIC_BASE_URL', rtrim(getenv('APP_PUBLIC_BASE_URL') ?: 'https://digitallami.com', '/'));
+if (!defined('APP_API2_BASE_URL')) define('APP_API2_BASE_URL', APP_PUBLIC_BASE_URL . '/Api2/');
+
 // ── "adminchat" database constants ───────────────────────────────────────────
 if (!defined('ADMINCHAT_DB_HOST')) define('ADMINCHAT_DB_HOST', getenv('ADMINCHAT_DB_HOST') ?: DB_HOST);
 if (!defined('ADMINCHAT_DB_NAME')) define('ADMINCHAT_DB_NAME', getenv('ADMINCHAT_DB_NAME') ?: 'adminchat');

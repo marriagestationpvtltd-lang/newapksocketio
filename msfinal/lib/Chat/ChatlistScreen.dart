@@ -23,6 +23,7 @@ import '../Calling/call_history_screen.dart';
 import 'ChatdetailsScreen.dart';
 import 'adminchat.dart';
 import '../service/socket_service.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -165,7 +166,7 @@ class _ChatListScreenState extends State<ChatListScreen>
 
   Future<UserMasterData> fetchUserMasterData(String userId) async {
     final url = Uri.parse(
-      "https://digitallami.com/Api2/masterdata.php?userid=$userId",
+      "${kApiBaseUrl}/Api2/masterdata.php?userid=$userId",
     );
 
     final response = await http.get(url);

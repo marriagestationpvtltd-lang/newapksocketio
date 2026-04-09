@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'activity_model.dart';
+import 'package:adminmrz/config/app_endpoints.dart';
 
 class ActivityService {
-  static const String _baseUrl = 'https://digitallami.com/api9';
+  static const String _baseUrl = '${kAdminApiBaseUrl}/api9';
 
   Future<ActivityFeedResponse> getActivities({
     int page = 1,

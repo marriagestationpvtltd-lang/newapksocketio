@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 // On native (dart:io) it manually follows redirects to preserve POST.
 // On web the browser's XHR layer is used unchanged.
 import '_http_upload_stub.dart'
+import 'package:adminmrz/config/app_endpoints.dart';
     if (dart.library.io) '_http_upload_io.dart';
 
 /// Available ringtone options bundled with the app.
@@ -30,9 +31,9 @@ class CallSettingsProvider extends ChangeNotifier {
   static const _keyCustomToneUrl = 'custom_call_tone_url';
   static const _keyCustomToneName = 'custom_call_tone_name';
   static const _keyRepeatInterval = 'call_repeat_interval';
-  static const _settingsUrl = 'https://digitallami.com/Api2/app_settings.php';
-  static const _updateSettingsUrl = 'https://digitallami.com/api9/update_app_settings.php';
-  static const _uploadToneUrl = 'https://digitallami.com/api9/upload_call_tone.php';
+  static const _settingsUrl = '${kAdminApiBaseUrl}/Api2/app_settings.php';
+  static const _updateSettingsUrl = '${kAdminApiBaseUrl}/api9/update_app_settings.php';
+  static const _uploadToneUrl = '${kAdminApiBaseUrl}/api9/upload_call_tone.php';
 
   static const List<RingtoneTone> availableTones = [
     RingtoneTone(

@@ -3,9 +3,10 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../model/usermodel.dart';
+import 'package:adminmrz/config/app_endpoints.dart';
 
 class UserService {
-  static const String baseUrl = 'https://digitallami.com/api9';
+  static const String baseUrl = '${kAdminApiBaseUrl}/api9';
 
   Future<UserListResponse> getUsers() async {
     try {

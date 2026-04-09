@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class LoginModel extends ChangeNotifier {
   // Login fields
@@ -20,7 +21,7 @@ class LoginModel extends ChangeNotifier {
   void clearError() { error = null; notifyListeners(); }
 
   // Login method
-  Future<bool> login({String url = 'https://digitallami.com/Api2/signin.php'}) async {
+  Future<bool> login({String url = '${kApiBaseUrl}/Api2/signin.php'}) async {
     isSubmitting = true;
     error = null;
     notifyListeners();

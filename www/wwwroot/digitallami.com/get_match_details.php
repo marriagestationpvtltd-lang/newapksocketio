@@ -11,7 +11,7 @@ date_default_timezone_set('Asia/Kathmandu');
 $conn->query("SET time_zone = '+05:45'");
 
 // ✅ Base URL for images
-$base_url = "https://digitallami.com/Api2/";
+$base_url = APP_API2_BASE_URL;
 
 /* ----------------------------------------------------------
    STEP 0: Get user_id from GET request

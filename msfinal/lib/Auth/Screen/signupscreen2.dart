@@ -11,6 +11,7 @@ import '../../ReUsable/dropdownwidget.dart';
 import '../../ReUsable/smart_scroll_behavior.dart';
 import '../../service/personal_details_api.dart';
 import '../../service/updatepage.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class PersonalDetailsPage extends StatefulWidget {
   const PersonalDetailsPage({super.key});
@@ -176,7 +177,7 @@ class _PersonalDetailsPageState extends State<PersonalDetailsPage>
       }
 
       final service = UserPersonalDetailService(
-        baseUrl: 'https://digitallami.com/Api2/save_personal_detail.php',
+        baseUrl: '${kApiBaseUrl}/Api2/save_personal_detail.php',
       );
 
       final result = await service.saveUserPersonalDetail(

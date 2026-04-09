@@ -8,6 +8,7 @@ import '../../ReUsable/registration_progress.dart';
 import '../../ReUsable/enhanced_form_fields.dart';
 import '../../constant/app_colors.dart';
 import '../../service/updatepage.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class CommunityDetailsPage extends StatefulWidget {
   const CommunityDetailsPage({super.key});
@@ -388,7 +389,7 @@ class _CommunityDetailsPageState extends State<CommunityDetailsPage> {
     required int subCommunityId,
     required String castLanguage,
   }) async {
-    final url = Uri.parse("https://digitallami.com/Api2/update_religion.php");
+    final url = Uri.parse("${kApiBaseUrl}/Api2/update_religion.php");
 
     try {
       final response = await http.post(

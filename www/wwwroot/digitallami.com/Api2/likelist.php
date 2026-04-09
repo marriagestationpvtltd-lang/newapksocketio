@@ -14,7 +14,7 @@ if ($conn->connect_error) {
 }
 
 // Base URL for profile pictures
-$imageurl = 'https://digitallami.com/Api2/';
+$imageurl = APP_API2_BASE_URL;
 
 // Logged-in user
 $user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : 0;

@@ -118,8 +118,12 @@ class _CallScreenState extends State<CallScreen>
     _ringtonePlayer.setReleaseMode(ReleaseMode.stop);
     _ringtonePlayer.onPlayerStateChanged.listen((state) {
       if (!mounted) return;
-      // Schedule repeat when tone completes — state tracking is not needed here
-      if (state == PlayerState.completed && widget.isOutgoingCall && !_ending) {
+      // Schedule repeat on both .completed (normal end) and .stopped (audio
+      // focus lost, e.g. when Agora initializes) so the admin always hears
+      // the ringing tone while waiting for the recipient.
+      if ((state == PlayerState.completed || state == PlayerState.stopped) &&
+          widget.isOutgoingCall &&
+          !_ending) {
         _scheduleRepeat();
       }
     });

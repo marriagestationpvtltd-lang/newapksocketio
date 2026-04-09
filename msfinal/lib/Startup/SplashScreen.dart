@@ -27,7 +27,6 @@ import '../service/pagenocheck.dart';
 import '../webrtc/webrtc.dart';
 import '../constant/app_colors.dart';
 import '../constant/app_dimensions.dart';
-import '../service/connectivity_service.dart';
 import 'MainControllere.dart';
 import 'onboarding.dart';
 
@@ -190,51 +189,53 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   Future<void> _checkAppVersion() async {
     try {
-      // Check internet connectivity first
-      final connectivityService = Provider.of<ConnectivityService>(context, listen: false);
-      final hasInternet = await connectivityService.checkConnectivity();
-
-      if (!hasInternet) {
-        setState(() {
-          _errorMessage = 'Please check your internet connection';
-          _isCheckingVersion = false;
-        });
-        return;
-      }
-
+      // Attempt the version-check request directly – it acts as its own
+      // connectivity probe, avoiding a redundant round of HTTP HEAD checks.
+      // Timeout is kept short so we never block navigation for long.
       final response = await http.get(
         Uri.parse('${kApiBaseUrl}/app.php'),
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
-          setState(() {
-            _versionData = data['data'];
-            _isCheckingVersion = false;
-          });
+          if (mounted) {
+            setState(() {
+              _versionData = data['data'];
+              _isCheckingVersion = false;
+            });
+          }
 
           // Check if update is needed
           await _checkUpdateNeeded();
         } else {
-          setState(() {
-            _errorMessage = 'Invalid response from server';
-            _isCheckingVersion = false;
-          });
+          if (mounted) {
+            setState(() {
+              _errorMessage = 'Invalid response from server';
+              _isCheckingVersion = false;
+            });
+          }
           _proceedWithNavigation();
         }
       } else {
-        setState(() {
-          _errorMessage = 'Failed to load version info';
-          _isCheckingVersion = false;
-        });
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Failed to load version info';
+            _isCheckingVersion = false;
+          });
+        }
         _proceedWithNavigation();
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Network error: $e';
-        _isCheckingVersion = false;
-      });
+      // Network unavailable or timeout – proceed so returning users are
+      // not blocked from reaching the main app.
+      debugPrint('⚠️ Version check failed: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'No internet connection';
+          _isCheckingVersion = false;
+        });
+      }
       _proceedWithNavigation();
     }
   }
@@ -581,12 +582,11 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
           ? "Push permission granted"
           : "Push permission not granted - banners won't show, but token will still be registered");
 
-      await Future.delayed(const Duration(seconds: 1));
-
       String? fcmToken = await FirebaseMessaging.instance.getToken();
 
       if (fcmToken == null) {
-        await Future.delayed(const Duration(seconds: 1));
+        // Brief pause before retry to allow the FCM registration to complete.
+        await Future.delayed(const Duration(milliseconds: 300));
         fcmToken = await FirebaseMessaging.instance.getToken();
       }
 

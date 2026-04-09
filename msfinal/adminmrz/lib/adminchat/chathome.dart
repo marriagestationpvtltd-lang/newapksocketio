@@ -32,6 +32,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:adminmrz/config/app_endpoints.dart';
 import 'package:adminmrz/users/userdetails/detailscreen.dart';
+import 'package:adminmrz/users/userdetails/userdetailprovider.dart';
 
 class ChatWindow extends StatefulWidget {
   final String name;
@@ -2417,6 +2418,22 @@ class _ChatWindowState extends State<ChatWindow> {
 
   void openUrl(String url) {
     html.window.open(url, '_blank');
+  }
+
+  void _openProfileInNewTab(BuildContext context, int userId) {
+    // Navigate to the user profile screen with proper provider setup
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChangeNotifierProvider(
+          create: (_) => UserDetailsProvider(),
+          child: UserDetailsScreen(
+            userId: userId,
+            myId: 1,
+          ),
+        ),
+      ),
+    );
   }
 
   DateTime _dateOnly(DateTime dateTime) =>
@@ -5756,15 +5773,8 @@ class _AdminUserProfileSheet extends StatelessWidget {
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => UserDetailsScreen(
-                          userId: userId,
-                          myId: 1,
-                        ),
-                      ),
-                    );
+                    // Open profile in new tab
+                    _openProfileInNewTab(context, userId);
                   },
                   icon: const Icon(Icons.person_outline),
                   label: const Text('View Profile'),

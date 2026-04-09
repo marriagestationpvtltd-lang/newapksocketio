@@ -93,31 +93,35 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   @override
   void initState() {
     super.initState();
-    _initializeApp();
-  }
 
-  Future<void> _initializeApp() async {
-    // Check first launch status before doing anything else
-    await _checkFirstLaunch();
-
-    // Always setup animations for a premium "wow" experience on every launch.
-    // Subsequent launches use a slightly shorter entrance so power users aren't
-    // slowed down, but still get the full branded feel.
+    // Set up and start animations synchronously so the very first frame is
+    // already animated. Controllers must be non-null before build() runs;
+    // otherwise the AnimatedBuilder widgets use the else-branch (plain GIF)
+    // and never register themselves as listeners, causing the entrance
+    // animations to run in memory without driving the UI.
     _setupAnimations();
-    // TickerCanceled is expected when the widget disposes while the animation
-    // is still running (e.g. user leaves the app); swallow it intentionally.
     _animationCompleted = _entranceController!.forward().orCancel
         .catchError((Object e) {
-          if (e is! TickerCanceled) debugPrint('Splash animation error: $e');
+          if (e is! TickerCanceled) debugPrint('Splash entrance animation failed: $e');
         });
 
-    // Rings start 80 ms after the logo so they feel like a response to it
+    // Rings start 80 ms after the logo so they feel like a ripple response.
     Future.delayed(const Duration(milliseconds: 80), () {
       if (mounted) _ringController?.forward();
     });
 
-    // Proceed to navigation immediately — version check runs in the background
-    // so a slow or unreachable server never blocks the user from opening the app.
+    // Kick off background work: first-launch tracking, navigation, and the
+    // optional version check. None of these block the animation or the UI.
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    // Record first-launch flag. This is fire-and-forget w.r.t. the animation;
+    // the entrance animations are already playing by the time we get here.
+    await _checkFirstLaunch();
+
+    // Proceed to navigation immediately — waits only for the entrance animation
+    // (via _animationCompleted), never for a server response.
     _proceedWithNavigation();
 
     // Check for app updates in background. The result never delays navigation;

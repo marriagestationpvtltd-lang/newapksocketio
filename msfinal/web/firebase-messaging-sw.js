@@ -15,13 +15,13 @@ importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-comp
 // TODO: Replace with your Firebase web app configuration
 // (Firebase Console → Project Settings → Your apps → Web app → SDK setup and config)
 firebase.initializeApp({
-  apiKey: 'REPLACE_WITH_WEB_API_KEY',
+  apiKey: 'AIzaSyA6BqEPNDcAZORqSrKcMUEpxRagJbZci9w',
   authDomain: 'digitallamicomnp.firebaseapp.com',
   databaseURL: 'https://digitallamicomnp-default-rtdb.firebaseio.com',
   projectId: 'digitallamicomnp',
   storageBucket: 'digitallamicomnp.firebasestorage.app',
   messagingSenderId: '477405059891',
-  appId: 'REPLACE_WITH_WEB_APP_ID',
+  appId: '1:477405059891:web:86dc05c92a2406b84d7c46',
 });
 
 const messaging = firebase.messaging();

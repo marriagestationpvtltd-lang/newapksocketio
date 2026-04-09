@@ -205,12 +205,14 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   /// • HTTP error / timeout           → saves a shortened cache time (30 min) so
   ///   we retry later but don't hammer the server on every launch.
   Future<void> _checkAppVersionInBackground() async {
+    const sixHoursMs = 6 * 60 * 60 * 1000;
+    const thirtyMinutesMs = 30 * 60 * 1000;
+
     try {
       final prefs = await SharedPreferences.getInstance();
       // 0 means "never checked" → always proceeds on fresh install.
       final lastCheck = prefs.getInt('last_version_check_ok') ?? 0;
       final msElapsed = DateTime.now().millisecondsSinceEpoch - lastCheck;
-      const sixHoursMs = 6 * 60 * 60 * 1000;
       if (msElapsed < sixHoursMs) return; // Checked recently — nothing to do.
 
       final response = await http.get(
@@ -237,8 +239,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       // that we retry in ~30 min rather than on every single launch.
       try {
         final prefs = await SharedPreferences.getInstance();
+        // Back-date the timestamp by (sixHours - thirtyMinutes) so the next
+        // cache check fires after ~30 minutes instead of another 6 hours.
         final retryAfter30Min = DateTime.now().millisecondsSinceEpoch -
-            (6 * 60 * 60 * 1000 - 30 * 60 * 1000);
+            (sixHoursMs - thirtyMinutesMs);
         await prefs.setInt('last_version_check_ok', retryAfter30Min);
       } catch (_) {}
     }
@@ -277,9 +281,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
     if (!updateNeeded) return;
 
-    // Use the global navigator key so the dialog works even after the splash
-    // screen has been replaced by the destination screen.
-    final ctx = mounted ? context : navigatorKey.currentContext;
+    // Prefer the global navigator's context (always points to the currently
+    // active screen) over the splash screen's own context, which becomes
+    // invalid once pushReplacement has disposed the widget.
+    final ctx = navigatorKey.currentContext ?? (mounted ? context : null);
     if (ctx == null) return;
 
     _showUpdateDialog(

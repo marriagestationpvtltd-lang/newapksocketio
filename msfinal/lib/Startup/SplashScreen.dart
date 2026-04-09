@@ -27,7 +27,6 @@ import '../service/pagenocheck.dart';
 import '../webrtc/webrtc.dart';
 import '../constant/app_colors.dart';
 import '../constant/app_dimensions.dart';
-import '../service/connectivity_service.dart';
 import 'MainControllere.dart';
 import 'onboarding.dart';
 
@@ -189,52 +188,60 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   }
 
   Future<void> _checkAppVersion() async {
+    // Skip the version check if it succeeded recently (within the last 6 hours)
+    // and no update was pending. This avoids a network round-trip on every
+    // subsequent launch and lets users reach the home screen immediately.
     try {
-      // Check internet connectivity first
-      final connectivityService = Provider.of<ConnectivityService>(context, listen: false);
-      final hasInternet = await connectivityService.checkConnectivity();
-
-      if (!hasInternet) {
-        setState(() {
-          _errorMessage = 'Please check your internet connection';
-          _isCheckingVersion = false;
-        });
+      final prefs = await SharedPreferences.getInstance();
+      // 0 means "never checked" → the subtraction yields a large positive number
+      // that is guaranteed to exceed sixHoursMs, so the API call proceeds.
+      final lastCheck = prefs.getInt('last_version_check_ok') ?? 0;
+      final msElapsed = DateTime.now().millisecondsSinceEpoch - lastCheck;
+      const sixHoursMs = 6 * 60 * 60 * 1000;
+      if (msElapsed < sixHoursMs) {
+        if (mounted) setState(() => _isCheckingVersion = false);
+        _proceedWithNavigation();
         return;
       }
+    } catch (_) {}
 
+    try {
+      // Attempt the version check directly — no separate connectivity
+      // pre-check (that would fire two more HTTP requests to google.com /
+      // cloudflare.com and add up to 5 s on a slow connection).
+      // A 5 s timeout is enough; on failure we proceed without blocking.
       final response = await http.get(
         Uri.parse('${kApiBaseUrl}/app.php'),
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
-          setState(() {
-            _versionData = data['data'];
-            _isCheckingVersion = false;
-          });
-
+          // Cache the timestamp so we can skip this check for the next 6 hours.
+          SharedPreferences.getInstance()
+              .then((p) => p.setInt('last_version_check_ok',
+                  DateTime.now().millisecondsSinceEpoch))
+              .catchError((_) {});
+          if (mounted) {
+            setState(() {
+              _versionData = data['data'];
+              _isCheckingVersion = false;
+            });
+          }
           // Check if update is needed
           await _checkUpdateNeeded();
         } else {
-          setState(() {
-            _errorMessage = 'Invalid response from server';
-            _isCheckingVersion = false;
-          });
+          if (mounted) setState(() => _isCheckingVersion = false);
           _proceedWithNavigation();
         }
       } else {
-        setState(() {
-          _errorMessage = 'Failed to load version info';
-          _isCheckingVersion = false;
-        });
+        if (mounted) setState(() => _isCheckingVersion = false);
         _proceedWithNavigation();
       }
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Network error: $e';
-        _isCheckingVersion = false;
-      });
+    } catch (_) {
+      // Network unavailable or timeout — proceed so logged-in users are not
+      // stuck on the splash screen just because of a failed version check.
+      if (mounted) setState(() => _isCheckingVersion = false);
       _proceedWithNavigation();
     }
   }
@@ -581,12 +588,12 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
           ? "Push permission granted"
           : "Push permission not granted - banners won't show, but token will still be registered");
 
-      await Future.delayed(const Duration(seconds: 1));
+      await Future.delayed(const Duration(milliseconds: 300));
 
       String? fcmToken = await FirebaseMessaging.instance.getToken();
 
       if (fcmToken == null) {
-        await Future.delayed(const Duration(seconds: 1));
+        await Future.delayed(const Duration(milliseconds: 500));
         fcmToken = await FirebaseMessaging.instance.getToken();
       }
 

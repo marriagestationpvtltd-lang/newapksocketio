@@ -1015,20 +1015,18 @@ void main() async {
     debugPrint('⚠️ Firebase initialization failed: $e');
   }
 
-  // Sign in anonymously so Firestore security rules that require
-  // request.auth != null are satisfied for chat and presence operations.
-  // signInAnonymously() returns the existing anonymous user when already signed in.
-  try {
-    await FirebaseAuth.instance.signInAnonymously();
-  } catch (e) {
+  // Fire-and-forget: sign in anonymously so Firestore security rules that
+  // require request.auth != null are satisfied. Firebase Auth caches the
+  // anonymous credential after the first call, so this is only slow on a
+  // brand-new install. Deferring it keeps it off the critical startup path.
+  FirebaseAuth.instance.signInAnonymously().catchError((Object e) {
     debugPrint('⚠️ Firebase anonymous sign-in failed: $e');
-  }
+  });
 
-  await initLocalNotifications();
-
-  // Initialize connectivity service
+  // Connectivity service: create now, but start the background HTTP reachability
+  // checks (to google.com / cloudflare.com) after the first frame — they can
+  // each take up to 5 s and must not block runApp().
   final connectivityService = ConnectivityService();
-  await connectivityService.initialize();
 
   // Initialize call state recovery manager
   final callRecoveryManager = CallStateRecoveryManager();
@@ -1047,7 +1045,19 @@ void main() async {
     ),
   );
 
-  WidgetsBinding.instance.addPostFrameCallback((_) {
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
+    // Initialise connectivity monitoring after the first frame — this fires
+    // two HTTP HEAD requests (google.com + cloudflare.com) with 5 s timeouts
+    // each and must not run before the UI is shown.
+    // ConnectivityService defaults to _hasInternet = true so downstream code
+    // works correctly before initialize() completes; the service updates its
+    // state and notifies listeners once the HTTP checks finish.
+    connectivityService.initialize();
+
+    // Initialise local notifications after the first frame so channel creation
+    // and plugin setup don't add to the cold-start time.
+    await initLocalNotifications();
+
     setupFirebaseMessaging();
     // Initialize call recovery after first frame
     callRecoveryManager.initialize();

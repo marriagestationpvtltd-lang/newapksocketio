@@ -5763,17 +5763,25 @@ class _AdminPhotoViewerPage extends StatefulWidget {
 class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
   late final PageController _pageController;
   late int _current;
+  final Map<int, TransformationController> _transformControllers = {};
 
   @override
   void initState() {
     super.initState();
     _current = widget.initialIndex;
     _pageController = PageController(initialPage: widget.initialIndex);
+    // Pre-initialize transformation controllers for better performance
+    for (int i = 0; i < widget.urls.length; i++) {
+      _transformControllers[i] = TransformationController();
+    }
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    for (final controller in _transformControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
@@ -5786,20 +5794,47 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
           PageView.builder(
             controller: _pageController,
             itemCount: widget.urls.length,
-            onPageChanged: (i) => setState(() => _current = i),
-            itemBuilder: (ctx, i) => InteractiveViewer(
-              child: Center(
-                child: Image.network(
-                  widget.urls[i],
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Icon(
-                    Icons.broken_image,
-                    color: Colors.white54,
-                    size: 64,
+            onPageChanged: (i) {
+              setState(() => _current = i);
+              // Reset zoom on any non-current images when switching pages
+              for (final entry in _transformControllers.entries) {
+                if (entry.key != i) {
+                  entry.value.value = Matrix4.identity();
+                }
+              }
+            },
+            itemBuilder: (ctx, i) {
+              final transformController = _transformControllers[i]!;
+              return GestureDetector(
+                onDoubleTap: () {
+                  // Double-tap to reset zoom
+                  setState(() {
+                    if (transformController.value != Matrix4.identity()) {
+                      transformController.value = Matrix4.identity();
+                    }
+                  });
+                },
+                child: InteractiveViewer(
+                  transformationController: transformController,
+                  minScale: 1.0,
+                  maxScale: 4.0,
+                  panEnabled: true,
+                  scaleEnabled: true,
+                  boundaryMargin: const EdgeInsets.all(double.infinity),
+                  child: Center(
+                    child: Image.network(
+                      widget.urls[i],
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.broken_image,
+                        color: Colors.white54,
+                        size: 64,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
           // Close button
           Positioned(

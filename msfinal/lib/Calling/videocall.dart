@@ -504,6 +504,13 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
             // Enable microphone only after call connects to avoid interrupting ringtone
             if (_engineInitialized) {
               await _engine.enableAudio();
+              // Now enable microphone publishing
+              await _engine.updateChannelMediaOptions(const ChannelMediaOptions(
+                publishCameraTrack: true,
+                publishMicrophoneTrack: true,
+                autoSubscribeAudio: true,
+                autoSubscribeVideo: true,
+              ));
             }
             _startCallTimer();
             _syncOverlayState();
@@ -571,7 +578,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
         uid: _localUid,
         options: const ChannelMediaOptions(
           publishCameraTrack: true,
-          publishMicrophoneTrack: true,
+          publishMicrophoneTrack: false, // Keep mic OFF during IVR/ringtone
           autoSubscribeAudio: true,
           autoSubscribeVideo: true,
         ),

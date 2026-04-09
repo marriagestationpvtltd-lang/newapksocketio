@@ -308,6 +308,12 @@ class _CallScreenState extends State<CallScreen>
             await _stopRingtone();
             // Enable microphone only after call connects to avoid interrupting ringtone
             await _engine.enableAudio();
+            // Now enable microphone publishing
+            await _engine.updateChannelMediaOptions(const ChannelMediaOptions(
+              publishMicrophoneTrack: true,
+              autoSubscribeAudio: true,
+              autoSubscribeVideo: true,
+            ));
             _startTimer();
           },
 
@@ -326,7 +332,7 @@ class _CallScreenState extends State<CallScreen>
         channelId: _channel,
         uid: _localUid,
         options: const ChannelMediaOptions(
-          publishMicrophoneTrack: true,
+          publishMicrophoneTrack: false, // Keep mic OFF during IVR/ringtone
           autoSubscribeAudio: true,
           autoSubscribeVideo: true,
         ),

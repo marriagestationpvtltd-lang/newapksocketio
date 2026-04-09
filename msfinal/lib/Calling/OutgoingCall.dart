@@ -499,6 +499,11 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
             // Enable microphone only after call connects to avoid interrupting ringtone
             if (_engineInitialized) {
               await _engine.enableAudio();
+              // Now enable microphone publishing
+              await _engine.updateChannelMediaOptions(const ChannelMediaOptions(
+                publishMicrophoneTrack: true,
+                autoSubscribeAudio: true,
+              ));
             }
             _startCallTimer(); // Start call duration timer
             _syncOverlayState();
@@ -519,7 +524,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
         channelId: _channel,
         uid: _localUid,
         options: const ChannelMediaOptions(
-          publishMicrophoneTrack: true,
+          publishMicrophoneTrack: false, // Keep mic OFF during IVR/ringtone
           autoSubscribeAudio: true,
         ),
       );

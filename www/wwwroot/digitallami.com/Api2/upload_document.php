@@ -30,13 +30,33 @@ $photoPath = null;
 
 if (isset($_FILES['photo']) && $_FILES['photo']['error'] === UPLOAD_ERR_OK) {
 
-    $folder = "uploads/user_documents/";
-    if (!is_dir($folder)) {
-        mkdir($folder, 0777, true);
+    // Validate MIME type by inspecting actual file content
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mimeType = $finfo->file($_FILES['photo']['tmp_name']);
+    $allowedMimes = [
+        'image/jpeg' => 'jpg',
+        'image/png'  => 'png',
+        'image/gif'  => 'gif',
+        'image/webp' => 'webp',
+        'application/pdf' => 'pdf',
+    ];
+    if (!array_key_exists($mimeType, $allowedMimes)) {
+        echo json_encode(["status" => "error", "message" => "Invalid file type"]);
+        exit;
     }
 
-    $ext = pathinfo($_FILES['photo']['name'], PATHINFO_EXTENSION);
-    $filename = "doc_" . $userid . "_" . time() . "." . $ext;
+    if ($_FILES['photo']['size'] > 10 * 1024 * 1024) {
+        echo json_encode(["status" => "error", "message" => "File too large (max 10MB)"]);
+        exit;
+    }
+
+    $folder = "uploads/user_documents/";
+    if (!is_dir($folder)) {
+        mkdir($folder, 0755, true);
+    }
+
+    $ext = $allowedMimes[$mimeType];
+    $filename = "doc_" . $userid . "_" . bin2hex(random_bytes(8)) . "." . $ext;
     $filepath = $folder . $filename;
 
     if (move_uploaded_file($_FILES['photo']['tmp_name'], $filepath)) {

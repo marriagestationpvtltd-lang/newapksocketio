@@ -27,7 +27,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $type   = isset($_POST['type'])   ? $_POST['type']   : 'image';
-$userId = isset($_POST['userId']) ? $_POST['userId'] : 'unknown';
+$userId = isset($_POST['userId']) ? preg_replace('/[^a-zA-Z0-9_\-]/', '', $_POST['userId']) : 'unknown';
+if ($userId === '') $userId = 'unknown';
 
 if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
     http_response_code(400);

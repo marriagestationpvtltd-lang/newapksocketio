@@ -212,9 +212,10 @@ try {
     ], JSON_PRETTY_PRINT);
 
 } catch (Exception $e) {
+    error_log("search_opposite_gender.php error: " . $e->getMessage());
     echo json_encode([
         "success" => false,
-        "message" => "Server error: " . $e->getMessage()
+        "message" => "Server error. Please try again."
     ]);
 }
 ?>

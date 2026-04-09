@@ -28,9 +28,11 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '*').split(',').map(s =>
 // MySQL connection pool
 // ──────────────────────────────────────────────────────────────────────────────
 const pool = mysql.createPool({
+  // TODO: Move to environment variable - SECURITY RISK: fallback credentials below must not be used in production
   host:               process.env.DB_HOST     || 'localhost',
   port:               parseInt(process.env.DB_PORT || '3306'),
   user:               process.env.DB_USER     || 'root',
+  // TODO: Move to environment variable - SECURITY RISK: hardcoded password fallback
   password:           process.env.DB_PASSWORD || '',
   database:           process.env.DB_NAME     || 'marriagestation',
   waitForConnections: true,
@@ -302,7 +304,7 @@ app.post('/api/calls', async (req, res) => {
     res.json({ success: true, callId });
   } catch (err) {
     console.error('POST /api/calls error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: \'Internal server error\' });
   }
 });
 
@@ -322,7 +324,7 @@ app.put('/api/calls/:callId', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('PUT /api/calls/:callId error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: \'Internal server error\' });
   }
 });
 
@@ -361,7 +363,7 @@ app.get('/api/calls', async (req, res) => {
     res.json({ success: true, calls });
   } catch (err) {
     console.error('GET /api/calls error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: \'Internal server error\' });
   }
 });
 
@@ -372,7 +374,7 @@ app.delete('/api/calls/:callId', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('DELETE /api/calls/:callId error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: \'Internal server error\' });
   }
 });
 
@@ -387,7 +389,7 @@ app.delete('/api/calls/user/:userId', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('DELETE /api/calls/user/:userId error:', err.message);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: \'Internal server error\' });
   }
 });
 
@@ -736,14 +738,22 @@ io.on('connection', (socket) => {
 
     if (!chatRoomId || !senderId || !receiverId) return;
 
+    // Validate messageType against whitelist
+    const ALLOWED_MESSAGE_TYPES = ['text', 'image', 'voice', 'video', 'file'];
+    const safeMessageType = ALLOWED_MESSAGE_TYPES.includes(messageType) ? messageType : 'text';
+
+    // Enforce message length limit (64 KB)
+    const MAX_MESSAGE_LENGTH = 65536;
+    const safeMessage = typeof message === 'string' ? message.slice(0, MAX_MESSAGE_LENGTH) : '';
+
     const timestamp = new Date().toISOString();
     const isReceiverCurrentlyViewing = isReceiverViewing ||
       userActiveChatRoom.get(receiverId.toString()) === chatRoomId;
 
     const msgDoc = {
       messageId, chatRoomId, senderId, receiverId,
-      message:    message || '',
-      messageType,
+      message:    safeMessage,
+      messageType: safeMessageType,
       timestamp,
       isRead:               isReceiverCurrentlyViewing,
       isDelivered:          isReceiverCurrentlyViewing,
@@ -828,9 +838,20 @@ io.on('connection', (socket) => {
   socket.on('edit_message', async ({ chatRoomId, messageId, newMessage }) => {
     try {
       if (!chatRoomId || !messageId || !newMessage) return;
-      await editMessage({ chatRoomId, messageId, newMessage });
+      if (!authenticatedUserId) return; // require authentication
+
+      // Only allow the original sender to edit their own message
+      const [[msg]] = await pool.query(
+        'SELECT sender_id FROM chat_messages WHERE message_id = ? AND chat_room_id = ? LIMIT 1',
+        [messageId, chatRoomId],
+      );
+      if (!msg || msg.sender_id?.toString() !== authenticatedUserId) return;
+
+      // Enforce edited message length limit
+      const safeNewMessage = typeof newMessage === 'string' ? newMessage.slice(0, 65536) : '';
+      await editMessage({ chatRoomId, messageId, newMessage: safeNewMessage });
       const editedAt = new Date().toISOString();
-      io.to(chatRoomId).emit('message_edited', { chatRoomId, messageId, newMessage, editedAt });
+      io.to(chatRoomId).emit('message_edited', { chatRoomId, messageId, newMessage: safeNewMessage, editedAt });
     } catch (err) {
       console.error('edit_message error:', err.message);
       socket.emit('error', { message: 'Failed to edit message' });
@@ -841,8 +862,20 @@ io.on('connection', (socket) => {
   socket.on('delete_message', async ({ chatRoomId, messageId, userId, deleteForEveryone }) => {
     try {
       if (!chatRoomId || !messageId) return;
-      await deleteMessage({ chatRoomId, messageId, userId, deleteForEveryone });
-      io.to(chatRoomId).emit('message_deleted', { chatRoomId, messageId, deleteForEveryone, userId });
+      if (!authenticatedUserId) return; // require authentication
+      const uid = authenticatedUserId;
+
+      // For "delete for everyone", only the sender may do so
+      if (deleteForEveryone) {
+        const [[msg]] = await pool.query(
+          'SELECT sender_id FROM chat_messages WHERE message_id = ? AND chat_room_id = ? LIMIT 1',
+          [messageId, chatRoomId],
+        );
+        if (!msg || msg.sender_id?.toString() !== uid) return;
+      }
+
+      await deleteMessage({ chatRoomId, messageId, userId: uid, deleteForEveryone });
+      io.to(chatRoomId).emit('message_deleted', { chatRoomId, messageId, deleteForEveryone, userId: uid });
     } catch (err) {
       console.error('delete_message error:', err.message);
       socket.emit('error', { message: 'Failed to delete message' });

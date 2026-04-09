@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:adminmrz/config/app_endpoints.dart';
 
 class AuthProvider with ChangeNotifier {
   String? _token;
@@ -36,7 +37,7 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final url = Uri.parse('https://digitallami.com/api9/login.php');
+      final url = Uri.parse('${kAdminApiBaseUrl}/api9/login.php');
 
       // Try with mode: 'cors' for web
       final response = await http.post(
@@ -89,7 +90,7 @@ class AuthProvider with ChangeNotifier {
   Future<bool> _loginWithAlternativeMethod(String email, String password) async {
     try {
       // Try using a different approach
-      final url = Uri.parse('https://digitallami.com/api9/login.php');
+      final url = Uri.parse('${kAdminApiBaseUrl}/api9/login.php');
 
       // Create a more compatible request
       final request = http.Request('POST', url);
@@ -135,7 +136,7 @@ class AuthProvider with ChangeNotifier {
   Future<bool> _loginWithProxy(String email, String password) async {
     try {
       // If you have a proxy server, use it here
-      final proxyUrl = Uri.parse('https://cors-anywhere.herokuapp.com/https://digitallami.com/api9/login.php');
+      final proxyUrl = Uri.parse('https://cors-anywhere.herokuapp.com/${kAdminApiBaseUrl}/api9/login.php');
 
       final response = await http.post(
         proxyUrl,

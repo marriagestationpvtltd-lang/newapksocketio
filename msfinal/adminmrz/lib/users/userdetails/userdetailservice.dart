@@ -3,10 +3,11 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'detailmodel.dart';
+import 'package:adminmrz/config/app_endpoints.dart';
 
 class UserDetailsService {
-  static const String _baseUrl = 'https://digitallami.com/Api2';
-  static const String _adminBaseUrl = 'https://digitallami.com/api9';
+  static const String _baseUrl = '${kAdminApiBaseUrl}/Api2';
+  static const String _adminBaseUrl = '${kAdminApiBaseUrl}/api9';
 
   Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();

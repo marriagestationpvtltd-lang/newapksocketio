@@ -1,46 +1,54 @@
 <?php
-/**
- * profile.php – My Profile – View own profile details
- */
-$title = 'My Profile';
-require_once __DIR__ . '/includes/user_header.php';
+require_once __DIR__ . '/config/db.php';
+header('Content-Type: application/json');
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET");
+header("Access-Control-Allow-Headers: Content-Type");
 
-// --- Helpers ---
-function msProfileImg(?string $pic): string {
-    if (empty($pic)) return '';
-    if (!preg_match('/^https?:\/\//', $pic)) {
-        return 'https://digitallami.com/Api2/' . $pic;
-    }
-    return $pic;
+// Database connection
+$host = DB_HOST;
+$user = DB_USER;
+$pass = DB_PASS;
+$db = DB_NAME;
+$conn = new mysqli($host, $user, $pass, $db);
+
+if ($conn->connect_error) {
+    echo json_encode(["success" => false, "message" => "Database connection failed"]);
+    exit;
 }
 
-function msVal($val, string $default = 'Not specified'): string {
-    return (!empty($val) && $val !== 'null' && $val !== 'N/A')
-        ? htmlspecialchars((string)$val)
-        : $default;
+// Get and validate userId
+if (!isset($_GET['userId']) || !is_numeric($_GET['userId']) || intval($_GET['userId']) <= 0) {
+    echo json_encode(["success" => false, "message" => "Invalid or missing userId"]);
+    exit;
+}
+$userId = intval($_GET['userId']);
+
+// Complete SQL query with placeholder
+$sql = "SELECT * FROM users WHERE id = ?";
+$stmt = $conn->prepare($sql);
+if (!$stmt) {
+    echo json_encode(["success" => false, "message" => "Prepare failed: " . $conn->error]);
+    $conn->close();
+    exit;
 }
 
-// --- Fetch own profile via API ---
-$apiUrl = 'https://digitallami.com/Api2/myprofile.php?userid='
-        . urlencode($currentUser['user_id']);
+$stmt->bind_param("i", $userId);
+if (!$stmt->execute()) {
+    echo json_encode(["success" => false, "message" => "Execute failed: " . $stmt->error]);
+    $stmt->close();
+    $conn->close();
+    exit;
+}
 
-$profile  = [];
-$apiError = '';
-
-$ch = curl_init($apiUrl);
-curl_setopt_array($ch, [
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT        => 15,
-    CURLOPT_FOLLOWLOCATION => true,
-    CURLOPT_SSL_VERIFYPEER => false,
-]);
-$response = curl_exec($ch);
-$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-$curlErr  = curl_error($ch);
-curl_close($ch);
-
-if ($response === false || $httpCode !== 200) {
-    $apiError = 'Unable to load your profile. Please try again later.';
+$result = $stmt->get_result();
+if ($result->num_rows > 0) {
+    $data = $result->fetch_assoc();
+    echo json_encode([
+        "success" => true,
+        "data" => $data,
+        "message" => "Lifestyle details fetched successfully"
+    ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 } else {
     $json = json_decode($response, true);
     if (!empty($json['success'])) {

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class CallTonePlaybackSource {
   final String value;
@@ -65,7 +66,7 @@ class CallToneSettingsService {
 
   static final CallToneSettingsService instance = CallToneSettingsService._();
 
-  static const _settingsUrl = 'https://digitallami.com/Api2/app_settings.php';
+  static const _settingsUrl = '${kApiBaseUrl}/Api2/app_settings.php';
   static const _cachedToneIdKey = 'cached_call_tone_id';
   static const _cachedCustomToneUrlKey = 'cached_custom_call_tone_url';
 

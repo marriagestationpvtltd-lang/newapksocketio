@@ -1,12 +1,12 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 header("Content-Type: application/json");
 
 // Database connection
-$host = "localhost";
-$user = "ms";
-$pass = "ms";
-$db   = "ms";
-
+$host = DB_HOST;
+$user = DB_USER;
+$pass = DB_PASS;
+$db = DB_NAME;
 $conn = new mysqli($host, $user, $pass, $db);
 
 // Check connection

@@ -8,6 +8,7 @@ import '../constant/app_colors.dart';
 import '../constant/app_text_styles.dart';
 import 'Paymentscreen.dart';
 import 'historypage.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class SubscriptionPage extends StatefulWidget {
   const SubscriptionPage({super.key});
@@ -61,7 +62,7 @@ class _SubscriptionPageState extends State<SubscriptionPage>
       final userId = userData["id"].toString();
 
       final response = await http.get(
-        Uri.parse('http://digitallami.com/Api2/user_package.php?userid=$userId'),
+        Uri.parse('${kApiBaseUrl}/Api2/user_package.php?userid=$userId'),
       );
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -84,7 +85,7 @@ class _SubscriptionPageState extends State<SubscriptionPage>
   Future<void> fetchPackages() async {
     try {
       final response = await http.get(
-        Uri.parse('https://digitallami.com/Api2/packagelist.php'),
+        Uri.parse('${kApiBaseUrl}/Api2/packagelist.php'),
       );
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

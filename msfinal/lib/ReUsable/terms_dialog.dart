@@ -2,6 +2,7 @@
 // Shows full T&C content; Accept button is enabled only after user scrolls to bottom.
 import 'package:flutter/material.dart';
 import '../constant/app_colors.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 /// Call [TermsConditionsBottomSheet.show] to present the dialog.
 /// Returns `true` if the user accepted, `false` or `null` otherwise.
@@ -462,7 +463,7 @@ class _TermsContent extends StatelessWidget {
           'If you have questions about these Terms or our Privacy Policy, please contact us:\n\n'
           'Marriage Station (Digitallami Pvt. Ltd.)\n'
           'Email: support@digitallami.com\n'
-          'Website: https://digitallami.com\n\n'
+          'Website: ${kApiBaseUrl}\n\n'
           'By scrolling to the bottom and pressing "I Accept & Continue", you confirm that you '
           'have read, understood, and agree to these Terms of Service and Privacy Policy.',
         ),

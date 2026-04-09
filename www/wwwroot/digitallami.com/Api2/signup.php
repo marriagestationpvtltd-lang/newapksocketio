@@ -1,14 +1,13 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 // signup.php
 header('Content-Type: application/json; charset=utf-8');
 
 // ==== CONFIG - update these ====
-$dbHost = 'localhost';
-$dbUser = 'ms';
-$dbPass = 'ms';
-$dbName = 'ms';
-// ================================
-
+$dbHost = DB_HOST;
+$dbUser = DB_USER;
+$dbPass = DB_PASS;
+$dbName = DB_NAME;
 $uploadDir = __DIR__ . '/uploads/profile_pictures/';
 if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
 

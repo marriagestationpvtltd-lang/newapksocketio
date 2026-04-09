@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:ms2026/config/app_endpoints.dart';
 
 class Webrtc {
   final int ide;
@@ -17,7 +18,7 @@ class Webrtc {
 
 
 Future<Webrtc?> fetchWebrtc() async {
-  final String apiUrl = "https://digitallami.com/Api2/webrtc.php";
+  final String apiUrl = "${kApiBaseUrl}/Api2/webrtc.php";
 
   final response = await http.get(Uri.parse(apiUrl));
 

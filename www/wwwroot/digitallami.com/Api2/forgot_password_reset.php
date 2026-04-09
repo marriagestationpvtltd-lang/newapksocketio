@@ -1,11 +1,11 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 header('Content-Type: application/json; charset=utf-8');
 
-$dbHost = 'localhost';
-$dbUser = 'ms';
-$dbPass = 'ms';
-$dbName = 'ms';
-
+$dbHost = DB_HOST;
+$dbUser = DB_USER;
+$dbPass = DB_PASS;
+$dbName = DB_NAME;
 function respond($code, $msg) {
     http_response_code($code);
     echo json_encode($msg);

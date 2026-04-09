@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 // ================= CORS =================
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, OPTIONS");
@@ -11,13 +12,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // ================= CONFIG =================
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'ms');
-define('DB_USER', 'ms');
-define('DB_PASS', 'ms');
-
 // ✅ BASE URL FOR PHOTOS
-define('PHOTO_BASE_URL', 'https://digitallami.com/Api2/');
+define('PHOTO_BASE_URL', APP_API2_BASE_URL);
 
 try {
     $pdo = new PDO(

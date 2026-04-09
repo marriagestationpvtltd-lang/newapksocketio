@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
@@ -11,11 +12,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     echo json_encode(['success' => true]);
     exit;
 }
-
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'ms');
-define('DB_USER', 'ms');
-define('DB_PASS', 'ms');
 
 function response($success, $message, $data = [], $code = 200) {
     http_response_code($code);

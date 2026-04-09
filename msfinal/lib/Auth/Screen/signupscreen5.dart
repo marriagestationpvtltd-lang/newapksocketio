@@ -11,6 +11,7 @@ import '../../ReUsable/registration_progress.dart';
 import '../../ReUsable/enhanced_form_fields.dart';
 import '../../constant/app_colors.dart';
 import '../../service/updatepage.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class FamilyDetailsPage extends StatefulWidget {
   const FamilyDetailsPage({super.key});
@@ -1126,7 +1127,7 @@ class _FamilyDetailsPageState extends State<FamilyDetailsPage>
 
       var response = await http
           .post(
-            Uri.parse("https://digitallami.com/Api2/updatefamily.php"),
+            Uri.parse("${kApiBaseUrl}/Api2/updatefamily.php"),
             body: requestBody,
           )
           .timeout(const Duration(seconds: 30));

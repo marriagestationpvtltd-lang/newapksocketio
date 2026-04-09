@@ -1,14 +1,14 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 header('Content-Type: application/json');
 
 require_once __DIR__ . '/../shared/activity_logger.php';
 
 // Database configuration
-$host = "localhost";
-$db_name = "ms";
-$username = "ms";
-$password = "ms";
-
+$host = DB_HOST;
+$db_name = DB_NAME;
+$username = DB_USER;
+$password = DB_PASS;
 // Create connection
 $conn = new mysqli($host, $username, $password, $db_name);
 

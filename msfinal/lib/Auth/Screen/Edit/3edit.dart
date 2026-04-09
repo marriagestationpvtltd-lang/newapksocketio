@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../ReUsable/dropdownwidget.dart';
 import '../../../service/personal_details_api.dart'; // Your existing service
+import 'package:ms2026/config/app_endpoints.dart';
 
 class PersonalDetailsPagee extends StatefulWidget {
   const PersonalDetailsPagee({
@@ -105,7 +106,7 @@ class _PersonalDetailsPageeState extends State<PersonalDetailsPagee> {
   void initState() {
     super.initState();
     _detailService = UserPersonalDetailService(
-      baseUrl: 'https://digitallami.com/Api2/get_personal_detail.php', // Use same endpoint
+      baseUrl: '${kApiBaseUrl}/Api2/get_personal_detail.php', // Use same endpoint
     );
     if (widget.initialData != null && widget.initialData!.isNotEmpty) {
       _populateFormWithData(widget.initialData!);
@@ -1204,7 +1205,7 @@ class _PersonalDetailsPageeState extends State<PersonalDetailsPagee> {
 
       // Create save service instance (different URL for save)
       final saveService = UserPersonalDetailService(
-        baseUrl: 'https://digitallami.com/Api2/save_personal_detail.php',
+        baseUrl: '${kApiBaseUrl}/Api2/save_personal_detail.php',
       );
 
       final result = await saveService.saveUserPersonalDetail(

@@ -1,12 +1,12 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 header('Content-Type: application/json');
 
 // Database connection
-$host = "localhost";
-$db_name = "ms";
-$username = "ms";
-$password = "ms";
-
+$host = DB_HOST;
+$db_name = DB_NAME;
+$username = DB_USER;
+$password = DB_PASS;
 $conn = new mysqli($host, $username, $password, $db_name);
 if ($conn->connect_error) {
     echo json_encode(['status' => 'error', 'message' => 'Database connection failed']);
@@ -14,7 +14,7 @@ if ($conn->connect_error) {
 }
 
 // Base URL for profile pictures
-$imageurl = 'https://digitallami.com/Api2/';
+$imageurl = APP_API2_BASE_URL;
 
 // Logged-in user
 $user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : 0;

@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../service/socket_service.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class OnlineStatusService {
   static final OnlineStatusService _instance = OnlineStatusService._internal();
@@ -15,7 +16,7 @@ class OnlineStatusService {
   String? _currentUserId;
 
   final String _apiUrl =
-      "https://digitallami.com/request/update_last_login.php";
+      "${kApiBaseUrl}/request/update_last_login.php";
 
   /// 🔥 Start tracking (call on app start / app resume)
   void start() {

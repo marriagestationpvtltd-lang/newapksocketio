@@ -1,9 +1,10 @@
 <?php
+require_once __DIR__ . '/../../config/db.php';
 class Database {
-    private $host = "localhost";
-    private $db_name = "adminchat";
-    private $username = "adminchat";
-    private $password = "adminchat";
+    private $host = ADMINCHAT_DB_HOST;
+    private $db_name = ADMINCHAT_DB_NAME;
+    private $username = ADMINCHAT_DB_USER;
+    private $password = ADMINCHAT_DB_PASS;
     private $conn;
 
     public function connect() {

@@ -2,10 +2,11 @@ import 'dart:convert';
 import 'package:adminmrz/package/packagemodel.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:http/http.dart' as http;
+import 'package:adminmrz/config/app_endpoints.dart';
 
 
 class PackageService {
-  static const String _baseUrl = 'https://digitallami.com/api9';
+  static const String _baseUrl = '${kAdminApiBaseUrl}/api9';
 
   // Get all packages
   Future<PackageListResponse> getPackages() async {

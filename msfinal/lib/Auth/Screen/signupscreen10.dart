@@ -12,6 +12,7 @@ import '../../constant/app_colors.dart';
 import '../../service/updatepage.dart';
 import '../../service/ocr_service.dart';
 import '../../service/document_scanner_service.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class IDVerificationScreen extends StatefulWidget {
   const IDVerificationScreen({super.key});
@@ -113,7 +114,7 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
         return;
       }
       final response = await http.post(
-        Uri.parse('https://digitallami.com/Api2/check_document_status.php'),
+        Uri.parse('${kApiBaseUrl}/Api2/check_document_status.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'user_id': userId}),
       );
@@ -165,7 +166,7 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
       final userId = int.tryParse(userData['id'].toString());
 
       final uri =
-          Uri.parse('https://digitallami.com/Api2/upload_document.php');
+          Uri.parse('${kApiBaseUrl}/Api2/upload_document.php');
       final request = http.MultipartRequest('POST', uri);
       request.fields['userid'] = userId.toString();
       request.fields['documenttype'] = _selectedDocumentType!;

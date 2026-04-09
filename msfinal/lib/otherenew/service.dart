@@ -6,9 +6,10 @@ import 'package:http/http.dart' as http;
 import '../Notification/notification_inbox_service.dart';
 import '../pushnotification/pushservice.dart';
 import '../otherenew/modelfile.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class ProfileService {
-  static const String baseUrl = 'https://digitallami.com/Api2';
+  static const String baseUrl = '${kApiBaseUrl}/Api2';
 
   /// Fetch profile data from API
   Future<ProfileResponse> fetchProfile({

@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:ms2026/config/app_endpoints.dart';
 
 class LocationService {
-  static const String baseUrl = "https://digitallami.com/Api3";
+  static const String baseUrl = "${kApiBaseUrl}/Api3";
 
   /// Generic GET request
   static Future<List<Map<String, dynamic>>> _getList(

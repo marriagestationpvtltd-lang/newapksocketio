@@ -28,6 +28,7 @@ import 'dart:html' as html;
 import 'dart:js' as js;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:adminmrz/config/app_endpoints.dart';
 
 class ChatWindow extends StatefulWidget {
   final String name;
@@ -840,7 +841,7 @@ class _ChatWindowState extends State<ChatWindow> {
 
     try {
       final response = await http.get(
-          Uri.parse('https://digitallami.com/get_match_details.php?user_id=${chatProvider.id}')
+          Uri.parse('${kAdminApiBaseUrl}/get_match_details.php?user_id=${chatProvider.id}')
       );
 
       if (response.statusCode == 200) {
@@ -3097,7 +3098,7 @@ class _ChatWindowState extends State<ChatWindow> {
                           children: [
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => openUrl("https://digitallami.com/profile.php?id=${profileData['id']}"),
+                                onTap: () => openUrl("${kAdminApiBaseUrl}/profile.php?id=${profileData['id']}"),
                                 child: Container(
                                   height: 32,
                                   decoration: BoxDecoration(

@@ -1,9 +1,6 @@
 <?php
+require_once __DIR__ . '/../../config/db.php';
 // Database configuration
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'ms');
-define('DB_USER', 'ms');
-define('DB_PASS', 'ms');
 define('SECRET_KEY', 'CHANGE_THIS_SECRET_KEY');
 
 // Base URL configuration - UPDATE THIS

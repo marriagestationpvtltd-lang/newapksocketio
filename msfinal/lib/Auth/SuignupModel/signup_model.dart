@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart' show XFile;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class SignupModel extends ChangeNotifier {
   // Fields matching your payload keys
@@ -104,7 +105,7 @@ class SignupModel extends ChangeNotifier {
 
 
   /// Submit multipart/form-data to signup endpoint
-  Future<bool> submitSignup({String url = 'https://digitallami.com/Api2/signup.php'}) async {
+  Future<bool> submitSignup({String url = '${kApiBaseUrl}/Api2/signup.php'}) async {
     isSubmitting = true;
     error = null;
     notifyListeners();

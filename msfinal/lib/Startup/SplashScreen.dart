@@ -32,6 +32,8 @@ import 'MainControllere.dart';
 import 'onboarding.dart';
 
 import 'dart:convert';
+import 'dart:io' show Platform;
+import 'package:ms2026/config/app_endpoints.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -170,7 +172,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       }
 
       final response = await http.get(
-        Uri.parse('https://digitallami.com/app.php'),
+        Uri.parse('${kApiBaseUrl}/app.php'),
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
@@ -574,7 +576,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   Future<void> updateFcmToken(String userId, String token) async {
     final response = await http.post(
-      Uri.parse("https://digitallami.com/Api2/update_token.php"),
+      Uri.parse("${kApiBaseUrl}/Api2/update_token.php"),
       body: {
         "user_id": userId,
         "fcm_token": token,

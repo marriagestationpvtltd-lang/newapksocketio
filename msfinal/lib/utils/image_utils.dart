@@ -1,4 +1,5 @@
-const String _apiBaseUrl = 'https://digitallami.com/Api2';
+import 'package:ms2026/config/app_endpoints.dart';
+const String _apiBaseUrl = '${kApiBaseUrl}/Api2';
 
 /// Resolves a raw image path returned by the PHP API into a full URL.
 ///

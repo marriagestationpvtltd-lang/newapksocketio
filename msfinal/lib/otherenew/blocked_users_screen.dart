@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class BlockedUsersScreen extends StatefulWidget {
   const BlockedUsersScreen({super.key});
@@ -30,7 +31,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('https://digitallami.com/Api2/get_blocked_users.php'),
+        Uri.parse('${kApiBaseUrl}/Api2/get_blocked_users.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'my_id': myId}),
       );
@@ -59,7 +60,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('https://digitallami.com/Api2/unblock_user.php'),
+        Uri.parse('${kApiBaseUrl}/Api2/unblock_user.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'my_id': myId,

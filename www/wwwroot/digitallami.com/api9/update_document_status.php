@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 // ================= CORS =================
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
@@ -11,11 +12,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // ================= DB CONFIG =================
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'ms');
-define('DB_USER', 'ms');
-define('DB_PASS', 'ms');
-
 $input = json_decode(file_get_contents("php://input"), true);
 
 $userId = $input['user_id'] ?? null;

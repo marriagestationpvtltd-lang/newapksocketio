@@ -1,14 +1,14 @@
 <?php
 
+require_once __DIR__ . '/../config/db.php';
 header("Content-Type: application/json");
 header("Access-Control-Allow-Origin: *");
 
 // DB Config
-$host = "localhost";
-$db_name = "ms";
-$username = "ms";
-$password = "ms";
-
+$host = DB_HOST;
+$db_name = DB_NAME;
+$username = DB_USER;
+$password = DB_PASS;
 try {
     $conn = new PDO(
         "mysql:host=$host;dbname=$db_name;charset=utf8",

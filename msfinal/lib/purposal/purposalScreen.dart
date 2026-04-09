@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../Chat/ChatdetailsScreen.dart';
 import '../Models/masterdata.dart';
 import 'Purposalmodel.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class ProposalsPage extends StatefulWidget {
   const ProposalsPage({super.key});
@@ -97,7 +98,7 @@ class _ProposalsPageState extends State<ProposalsPage> {
 
   Future<UserMasterData> fetchUserMasterData(String userId) async {
     final url = Uri.parse(
-      "https://digitallami.com/Api2/masterdata.php?userid=$userId",
+      "${kApiBaseUrl}/Api2/masterdata.php?userid=$userId",
     );
 
     final response = await http.get(url);

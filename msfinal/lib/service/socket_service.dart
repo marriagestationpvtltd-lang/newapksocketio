@@ -7,11 +7,12 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import '../Calling/callmanager.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 /// URL of the Node.js Socket.IO server.
 /// ⚠️  IMPORTANT: Replace this with your actual deployed server URL before
 /// building for production. Example: 'https://socket.yourserver.com:3001'
-const String kSocketServerUrl = 'https://adminnew.marriagestation.com.np';
+const String kSocketServerUrl = kSocketServerBaseUrl;
 
 /// ---------------------------------------------------------------------------
 /// SocketService — singleton that manages the Socket.IO connection and

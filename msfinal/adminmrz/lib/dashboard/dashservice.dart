@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'dashmodel.dart';
+import 'package:adminmrz/config/app_endpoints.dart';
 
 class DashboardService {
-  static const String _baseUrl = 'https://digitallami.com/api9';
+  static const String _baseUrl = '${kAdminApiBaseUrl}/api9';
 
   Future<DashboardResponse> getDashboardData() async {
     try {

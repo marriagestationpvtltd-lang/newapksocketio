@@ -1,16 +1,16 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 header('Content-Type: application/json');
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: GET, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
 
-$base_url = "https://digitallami.com/Api2/";
+$base_url = APP_API2_BASE_URL;
 
-$host = "localhost"; 
-$db_name = "ms";
-$username = "ms";
-$password = "ms";
-
+$host = DB_HOST;
+$db_name = DB_NAME;
+$username = DB_USER;
+$password = DB_PASS;
 $conn = new mysqli($host, $username, $password, $db_name);
 
 if ($conn->connect_error) {

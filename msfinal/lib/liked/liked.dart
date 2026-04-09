@@ -16,6 +16,7 @@ import 'package:ms2026/utils/image_utils.dart';
 import '../Models/masterdata.dart';
 import '../main.dart';
 import '../pushnotification/pushservice.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class FavoritePeoplePage extends StatefulWidget {
   const FavoritePeoplePage({super.key});
@@ -83,7 +84,7 @@ class _FavoritePeoplePageState extends State<FavoritePeoplePage> {
 
     try {
       final response = await http.post(
-        Uri.parse("https://digitallami.com/Api2/check_document_status.php"),
+        Uri.parse("${kApiBaseUrl}/Api2/check_document_status.php"),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'user_id': userId}),
       );
@@ -126,7 +127,7 @@ class _FavoritePeoplePageState extends State<FavoritePeoplePage> {
 
     try {
       final url = Uri.parse(
-          'http://digitallami.com/Api2/likelist.php?user_id=$userId');
+          '${kApiBaseUrl}/Api2/likelist.php?user_id=$userId');
 
       final response = await http.get(url);
 
@@ -166,7 +167,7 @@ class _FavoritePeoplePageState extends State<FavoritePeoplePage> {
 
     try {
       final url = Uri.parse(
-          'https://digitallami.com/Api2/likelist.php?user_id=$userId&action=delete&receiver_id=$receiverId');
+          '${kApiBaseUrl}/Api2/likelist.php?user_id=$userId&action=delete&receiver_id=$receiverId');
 
       final response = await http.get(url);
 
@@ -210,7 +211,7 @@ class _FavoritePeoplePageState extends State<FavoritePeoplePage> {
       print('Request data (JSON): $requestData');
 
       final response = await http.post(
-        Uri.parse('https://digitallami.com/Api2/send_request.php'),
+        Uri.parse('${kApiBaseUrl}/Api2/send_request.php'),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -956,7 +957,7 @@ class _FavoritePeoplePageState extends State<FavoritePeoplePage> {
 
   Future<UserMasterData> fetchUserMasterData(String userId) async {
     final url = Uri.parse(
-      "https://digitallami.com/Api2/masterdata.php?userid=$userId",
+      "${kApiBaseUrl}/Api2/masterdata.php?userid=$userId",
     );
 
     final response = await http.get(url);

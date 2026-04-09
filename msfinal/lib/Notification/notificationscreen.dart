@@ -11,6 +11,7 @@ import '../Chat/ChatdetailsScreen.dart';
 import '../pushnotification/pushservice.dart';
 import '../ReUsable/loading_widgets.dart';
 import 'notification_inbox_service.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class MatrimonyNotificationPage extends StatefulWidget {
   const MatrimonyNotificationPage({Key? key}) : super(key: key);
@@ -30,8 +31,8 @@ class _MatrimonyNotificationPageState
   List<Map<String, dynamic>> _notifications = [];
   bool _isLoading = true;
   bool _isRefreshing = false;
-  final String _baseUrl = "https://digitallami.com/Api2";
-  final String _requestUrl = "https://digitallami.com/request/request_list.php";
+  final String _baseUrl = "${kApiBaseUrl}/Api2";
+  final String _requestUrl = "${kApiBaseUrl}/request/request_list.php";
 
   @override
   void initState() {

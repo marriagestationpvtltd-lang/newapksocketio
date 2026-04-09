@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'docmodel.dart';
+import 'package:adminmrz/config/app_endpoints.dart';
 
 
 class DocumentsProvider with ChangeNotifier {
@@ -53,7 +54,7 @@ class DocumentsProvider with ChangeNotifier {
         return false;
       }
 
-      final url = Uri.parse('https://digitallami.com/api9/get_documents.php');
+      final url = Uri.parse('${kAdminApiBaseUrl}/api9/get_documents.php');
 
       final response = await http.get(
         url,
@@ -113,7 +114,7 @@ class DocumentsProvider with ChangeNotifier {
         return false;
       }
 
-      final url = Uri.parse('https://digitallami.com/api9/update_document_status.php');
+      final url = Uri.parse('${kAdminApiBaseUrl}/api9/update_document_status.php');
 
       final Map<String, dynamic> body = {
         'user_id': userId,

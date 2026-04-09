@@ -1,12 +1,8 @@
 <?php
+require_once __DIR__ . '/config/db.php';
 header('Content-Type: application/json');
 
 // Database configuration
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'ms');
-define('DB_USER', 'ms');
-define('DB_PASS', 'ms');
-
 try {
     // Create PDO connection
     $pdo = new PDO(

@@ -38,6 +38,7 @@ import '../utils/image_utils.dart';
 import '../utils/privacy_utils.dart';
 import '../utils/time_utils.dart';
 import 'widgets/typing_indicator.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class AdminChatScreen extends StatefulWidget {
   final String senderID;
@@ -261,7 +262,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       if (userId.isEmpty) return;
 
       final url = Uri.parse(
-        'https://digitallami.com/Api2/masterdata.php?userid=$userId',
+        '${kApiBaseUrl}/Api2/masterdata.php?userid=$userId',
       );
       final response = await http.get(url);
       if (response.statusCode == 200) {
@@ -2864,7 +2865,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                             }
                             final response = await http.post(
                               Uri.parse(
-                                  'https://digitallami.com/Api2/send_request.php'),
+                                  '${kApiBaseUrl}/Api2/send_request.php'),
                               headers: {
                                 'Content-Type': 'application/json'
                               },

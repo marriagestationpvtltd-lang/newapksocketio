@@ -1,8 +1,9 @@
 <?php
 
+require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/../Api2/database.php';
 
-const APP_SETTINGS_PUBLIC_BASE_URL = 'https://digitallami.com';
+const APP_SETTINGS_PUBLIC_BASE_URL = APP_PUBLIC_BASE_URL;
 
 function app_settings_response(bool $success, string $message, array $data = [], int $statusCode = 200): void
 {

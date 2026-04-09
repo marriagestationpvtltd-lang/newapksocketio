@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'model/usermodel.dart';
 import 'userdetails/detailmodel.dart';
+import 'package:adminmrz/config/app_endpoints.dart';
 
 const _kPrimary = Color(0xFF6366F1);
 const _kPrimaryDark = Color(0xFF4F46E5);
@@ -88,9 +89,9 @@ class _UsersPageState extends State<UsersPage> {
 
   /// Normalises a profile-picture path that may be either a full URL or a
   /// server-relative path (e.g. "/uploads/photo.jpg").  The chat section uses
-  /// https://digitallami.com/get.php which returns full URLs; the admin API
+  /// ${kAdminApiBaseUrl}/get.php which returns full URLs; the admin API
   /// may return relative paths – we handle both here.
-  static const _kImgBase = 'https://digitallami.com';
+  static const _kImgBase = '${kAdminApiBaseUrl}';
 
   String? _normaliseImageUrl(String? raw) {
     if (raw == null || raw.isEmpty || raw == 'null') return null;

@@ -8,6 +8,7 @@ import 'chat_theme.dart';
 import 'chatprovider.dart';
 import 'dart:html' as html;
 import 'dart:math' as math;
+import 'package:adminmrz/config/app_endpoints.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Static design tokens (same in both modes)
@@ -1572,7 +1573,7 @@ class _ProfileCard extends StatelessWidget {
                       Expanded(
                         child: GestureDetector(
                           onTap: () => html.window.open(
-                            'https://digitallami.com/profile.php?id=$profileId',
+                            '${kAdminApiBaseUrl}/profile.php?id=$profileId',
                             '_blank',
                           ),
                           child: Container(

@@ -1,14 +1,12 @@
 // lib/constants/agora_constants.dart
 class AgoraConstants {
-  // Replace these with your actual Agora credentials
-  static const String appId = '1:477405059891:android:d38bc46dcbeb60b54d7c46';
-  static const String appCertificate = 'f58800495f554da89fcf50f604d82deb';
+  // Agora App ID — used client-side to join channels.
+  // The Agora Certificate must NEVER be stored on the client; token
+  // generation happens server-side in Api2/test_token.php.
+  static const String appId = '7750d283e6794eebba06e7d021e8a01c';
 
   // Token expiration time (1 hour)
   static const int tokenExpirationTime = 3600;
-
-  // Firebase Server Key
-  static const String firebaseServerKey = 'YOUR_FIREBASE_SERVER_KEY';
 }
 
 class AppConstants {

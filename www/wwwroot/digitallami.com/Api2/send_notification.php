@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 header("Content-Type: application/json");
 require 'common_fcm.php';
 header("Access-Control-Allow-Origin: *");
@@ -7,11 +8,10 @@ header("Access-Control-Allow-Headers: Content-Type, Authorization");
 header("Content-Type: application/json");
 
 // Database connection
-$host = "localhost";
-$db   = "ms";
-$user = "ms";
-$pass = "ms";
-
+$host = DB_HOST;
+$user = DB_USER;
+$pass = DB_PASS;
+$db = DB_NAME;
 $conn = new mysqli($host, $user, $pass, $db);
 if ($conn->connect_error) {
     echo json_encode(["status"=>false,"message"=>"DB connection failed"]);

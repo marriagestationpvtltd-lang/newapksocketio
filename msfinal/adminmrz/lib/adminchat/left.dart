@@ -12,6 +12,7 @@ import 'chatscreen.dart';
 import 'constant.dart';
 import 'services/admin_socket_service.dart';
 import 'services/web_notification_service.dart';
+import 'package:adminmrz/config/app_endpoints.dart';
 
 class ChatSidebar extends StatefulWidget {
   /// Called on mobile when the user taps a conversation so the parent can
@@ -135,7 +136,7 @@ class _ChatSidebarState extends State<ChatSidebar> {
         queryParams['search'] = _searchQuery;
       }
 
-      final uri = Uri.parse('https://digitallami.com/get.php')
+      final uri = Uri.parse('${kAdminApiBaseUrl}/get.php')
           .replace(queryParameters: queryParams);
       final response = await http.get(uri);
 
@@ -279,7 +280,7 @@ class _ChatSidebarState extends State<ChatSidebar> {
   Future<void> _refreshOnlineStatus() async {
     if (_users.isEmpty || !mounted) return;
     try {
-      final uri = Uri.parse('https://digitallami.com/get.php').replace(
+      final uri = Uri.parse('${kAdminApiBaseUrl}/get.php').replace(
         queryParameters: {
           'page': '1',
           'limit': _users.length.toString(),

@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:ms2026/config/app_endpoints.dart';
 
 class PageService {
-  static const String apiUrl = "https://digitallami.com/Api2/get_page.php";
+  static const String apiUrl = "${kApiBaseUrl}/Api2/get_page.php";
 
   static Future<int?> getPageNo(int userId) async {
     try {

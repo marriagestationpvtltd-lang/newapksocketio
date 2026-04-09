@@ -1,13 +1,14 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:ms2026/config/app_endpoints.dart';
 
 class UserPartnerPreferenceService {
   final String saveUrl;
   final String fetchUrl;
 
   UserPartnerPreferenceService({
-    this.saveUrl = 'https://digitallami.com/Api2/user_partner.php',
-    this.fetchUrl = 'https://digitallami.com/Api2/get_partner_preferences.php',
+    this.saveUrl = '${kApiBaseUrl}/Api2/user_partner.php',
+    this.fetchUrl = '${kApiBaseUrl}/Api2/get_partner_preferences.php',
   });
 
   Future<Map<String, dynamic>?> fetchPartnerPreference({

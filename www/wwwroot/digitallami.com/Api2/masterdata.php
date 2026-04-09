@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../config/db.php';
 // get_master_data.php
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
@@ -12,10 +13,10 @@ $resp = [
 ];
 
 try {
-    $dbHost = 'localhost';
-    $dbName = 'ms';
-    $dbUser = 'ms';
-    $dbPass = 'ms';
+    $dbHost = DB_HOST;
+    $dbName = DB_NAME;
+    $dbUser = DB_USER;
+    $dbPass = DB_PASS;
     $dbCharset = 'utf8mb4';
 
     if ($_SERVER['REQUEST_METHOD'] !== 'GET') {

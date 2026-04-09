@@ -4,9 +4,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../Home/Screen/profilecard.dart';
 import 'modelprofile.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 
 class ProfileService {
-  static const String _baseUrl = "https://digitallami.com/Api2";
+  static const String _baseUrl = "${kApiBaseUrl}/Api2";
 
   Future<Map<String, dynamic>> fetchProfileData(int userId, int myid) async {
     try {

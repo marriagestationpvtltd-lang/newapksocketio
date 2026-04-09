@@ -3761,9 +3761,41 @@ class _ChatWindowState extends State<ChatWindow> {
   }
 
   void _openAdminGalleryViewer(List<String> urls, int initialIndex) {
-    showDialog(
-      context: context,
-      builder: (ctx) => _AdminGalleryViewerDialog(urls: urls, initialIndex: initialIndex),
+    if (urls.isEmpty) return;
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final String userName = chatProvider.namee ?? 'User';
+    final int userId = chatProvider.id ?? 0;
+
+    // Start with all shared photos from this chat so navigation mirrors the profile sheet.
+    final List<_AdminSharedPhoto> sharedPhotos = _getAdminSharedPhotos();
+    final List<_AdminSharedPhoto> viewerPhotos = List<_AdminSharedPhoto>.from(sharedPhotos);
+    final Set<String> seenUrls = viewerPhotos.map((p) => p.url).toSet();
+
+    // Ensure tapped message photos are included even if not part of sharedPhotos (e.g., admin-sent).
+    for (final url in urls) {
+      if (url.isEmpty || seenUrls.contains(url)) continue;
+      viewerPhotos.add(_AdminSharedPhoto(url: url));
+      seenUrls.add(url);
+    }
+
+    if (viewerPhotos.isEmpty) return;
+
+    final int safeIndex = initialIndex.clamp(0, urls.length - 1).toInt();
+    final String targetUrl = urls[safeIndex];
+    int startIndex = viewerPhotos.indexWhere((p) => p.url == targetUrl);
+    if (startIndex == -1) startIndex = 0;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _AdminPhotoViewerPage(
+          photos: viewerPhotos,
+          initialIndex: startIndex,
+          userName: userName,
+          userId: userId,
+          onDeleteMessage: _deleteMessage,
+        ),
+      ),
     );
   }
 

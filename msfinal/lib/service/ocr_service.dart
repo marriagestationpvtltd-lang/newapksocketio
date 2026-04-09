@@ -1,4 +1,4 @@
-import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
+import 'dart:io' show File;
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart'
     if (dart.library.html) 'package:ms2026/utils/web_mlkit_stub.dart';
 

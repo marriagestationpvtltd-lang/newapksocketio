@@ -1,5 +1,5 @@
 // Professional Redesigned Your Details Page - Step 2
-import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
+import 'dart:io' show File;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/material.dart';

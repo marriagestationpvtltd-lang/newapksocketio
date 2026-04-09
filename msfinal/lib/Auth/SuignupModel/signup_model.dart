@@ -1,6 +1,6 @@
 // lib/models/signup_model.dart
 import 'dart:convert';
-import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
+import 'dart:io' show File;
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;

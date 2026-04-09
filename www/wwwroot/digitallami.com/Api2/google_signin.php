@@ -85,7 +85,7 @@ try {
         $stmt->close();
 
         $nameParts = explode(' ', $displayName, 2);
-        $firstName = $nameParts[0] ?: 'User';
+        $firstName = ($nameParts[0] ?? '') ?: 'User';
         $lastName  = $nameParts[1] ?? '';
 
         $randomPw     = bin2hex(random_bytes(16));

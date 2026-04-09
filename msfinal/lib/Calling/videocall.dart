@@ -92,8 +92,10 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   // Ringtone state
   final AudioPlayer _ringtonePlayer = AudioPlayer();
   bool _isPlayingRingtone = false;
+  bool _isRestartingRingtone = false;
   CallToneSettings _callToneSettings = const CallToneSettings();
   bool _callToneSettingsLoaded = false;
+  StreamSubscription<PlayerState>? _playerStateSub;
 
   // PiP (local video preview) draggable offset (from top-right)
   Offset _pipOffset = const Offset(20, 40);
@@ -133,6 +135,21 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
       await _ensureCallToneSettingsLoaded();
       await _stopRingtone();
 
+      // Fallback: restart playback when the player completes, in case
+      // ReleaseMode.loop is not honoured on some Android devices.
+      _playerStateSub?.cancel();
+      _playerStateSub = _ringtonePlayer.onPlayerStateChanged.listen((state) {
+        if (state == PlayerState.completed &&
+            _isPlayingRingtone &&
+            !_isRestartingRingtone &&
+            !_ending &&
+            mounted) {
+          _isRestartingRingtone = true;
+          debugPrint('Ringtone completed unexpectedly – restarting (loop fallback)');
+          _playConfiguredTone().whenComplete(() => _isRestartingRingtone = false);
+        }
+      });
+
       await _ringtonePlayer.setReleaseMode(ReleaseMode.loop);
       await _playConfiguredTone();
 
@@ -168,6 +185,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
 
   Future<void> _stopRingtone() async {
     try {
+      _playerStateSub?.cancel();
+      _playerStateSub = null;
       await _ringtonePlayer.stop();
 
       if (!mounted) return;
@@ -1161,6 +1180,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     _socketRingingSub?.cancel();
     _connectivitySubscription?.cancel();
     _controlsHideTimer?.cancel();
+    _playerStateSub?.cancel();
     // Release Agora engine if not already released by _endCall
     if (_engineInitialized) {
       unawaited(_releaseEngineAsync());

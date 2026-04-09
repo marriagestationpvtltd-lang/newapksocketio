@@ -1469,7 +1469,7 @@ class _ChatWindowState extends State<ChatWindow> {
       final token = prefs.getString('access_token') ?? '';
 
       final response = await http.post(
-        Uri.parse('$kAdminBaseUrl/Api2/getusers.php'),
+        Uri.parse('$kAdminApi2BaseUrl/getusers.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'access_token': token}),
       );

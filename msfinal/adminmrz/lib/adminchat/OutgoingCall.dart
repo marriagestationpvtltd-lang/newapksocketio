@@ -306,6 +306,8 @@ class _CallScreenState extends State<CallScreen>
             _signalController.stop();
             _signalController.reset();
             await _stopRingtone();
+            // Enable microphone only after call connects to avoid interrupting ringtone
+            await _engine.enableAudio();
             _startTimer();
           },
 
@@ -318,8 +320,6 @@ class _CallScreenState extends State<CallScreen>
           onError: (code, msg) {},
         ),
       );
-
-      await _engine.enableAudio();
 
       await _engine.joinChannel(
         token: _token,

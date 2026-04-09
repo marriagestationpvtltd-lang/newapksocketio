@@ -1,9 +1,16 @@
 <?php
 /**
- * profile.php – My Profile – View own profile details
+ * profile-view.php – View another user's profile
  */
-$title = 'My Profile';
+$title = 'View Profile';
 require_once __DIR__ . '/includes/user_header.php';
+
+// --- Require profile ID ---
+$profileId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+if ($profileId <= 0) {
+    header('Location: home.php');
+    exit;
+}
 
 // --- Helpers ---
 function msProfileImg(?string $pic): string {
@@ -20,9 +27,10 @@ function msVal($val, string $default = 'Not specified'): string {
         : $default;
 }
 
-// --- Fetch own profile via API ---
-$apiUrl = 'https://digitallami.com/Api2/myprofile.php?userid='
-        . urlencode($currentUser['user_id']);
+// --- Fetch profile via API ---
+$apiUrl = 'https://digitallami.com/Api2/other_profile.php?userId='
+        . urlencode($profileId)
+        . '&loggedInUserId=' . urlencode($currentUser['user_id']);
 
 $profile  = [];
 $apiError = '';
@@ -40,13 +48,13 @@ $curlErr  = curl_error($ch);
 curl_close($ch);
 
 if ($response === false || $httpCode !== 200) {
-    $apiError = 'Unable to load your profile. Please try again later.';
+    $apiError = 'Unable to load this profile. Please try again later.';
 } else {
     $json = json_decode($response, true);
     if (!empty($json['success'])) {
         $profile = $json['data'] ?? [];
     } else {
-        $apiError = $json['message'] ?? 'Failed to load profile.';
+        $apiError = $json['message'] ?? 'Profile not found or unavailable.';
     }
 }
 
@@ -55,12 +63,18 @@ $fullName   = trim(($profile['firstName'] ?? '') . ' ' . ($profile['lastName'] ?
 $imgUrl     = msProfileImg($profile['profile_picture'] ?? '');
 $age        = isset($profile['age']) ? (int)$profile['age'] : '';
 $verified   = !empty($profile['isVerified']) && (int)$profile['isVerified'] === 1;
-$memberId   = $profile['memberID'] ?? $profile['id'] ?? $currentUser['user_id'];
+$memberId   = $profile['memberID'] ?? $profile['id'] ?? $profileId;
 $city       = $profile['city'] ?? '';
 $state      = $profile['state'] ?? '';
 $country    = $profile['country'] ?? '';
 $locationParts = array_filter([$city, $state, $country], function($v){ return !empty($v) && $v !== 'null'; });
 $location   = implode(', ', $locationParts);
+
+// Privacy check
+$isPrivatePhoto = isset($profile['privacy']) && (int)$profile['privacy'] === 1
+    && (!isset($profile['photo_request']) || $profile['photo_request'] !== 'accepted');
+
+$currentUserId = (int)$currentUser['user_id'];
 ?>
 
 <style>
@@ -83,13 +97,20 @@ $location   = implode(', ', $locationParts);
     background: radial-gradient(circle, rgba(255,255,255,0.07) 0%, transparent 70%);
     pointer-events: none;
 }
+.ms-profile-photo-wrap {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 14px;
+}
 .ms-profile-photo {
     width: 150px; height: 150px;
     border-radius: 50%;
     object-fit: cover;
     border: 4px solid rgba(255,255,255,0.8);
-    margin-bottom: 14px;
-    position: relative;
+}
+.ms-profile-photo.blurred {
+    filter: blur(20px);
+    transform: scale(1.1);
 }
 .ms-profile-photo-placeholder {
     width: 150px; height: 150px;
@@ -98,8 +119,21 @@ $location   = implode(', ', $locationParts);
     display: flex; align-items: center; justify-content: center;
     background: linear-gradient(135deg, #ffe0e1 0%, #f5f5f5 100%);
     color: #ccc; font-size: 3.5rem;
-    margin: 0 auto 14px;
 }
+.ms-photo-private-overlay {
+    position: absolute; top: 0; left: 0;
+    width: 100%; height: 100%;
+    border-radius: 50%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #fff; text-align: center;
+    cursor: pointer;
+}
+.ms-photo-private-overlay i { font-size: 1.8rem; margin-bottom: 4px; }
+.ms-photo-private-overlay span { font-size: 0.72rem; opacity: 0.9; }
 .ms-profile-header h2 { font-weight: 800; font-size: 1.5rem; margin-bottom: 4px; position: relative; }
 .ms-profile-header .ms-meta { opacity: 0.9; font-size: 0.92rem; position: relative; }
 .ms-profile-header .ms-badge-verified {
@@ -107,11 +141,24 @@ $location   = implode(', ', $locationParts);
     background: #28a745; color: #fff; font-size: 0.75rem; font-weight: 700;
     padding: 3px 10px; border-radius: 20px;
 }
-.ms-profile-header .ms-badge-unverified {
-    display: inline-flex; align-items: center; gap: 4px;
-    background: rgba(255,255,255,0.2); color: #fff; font-size: 0.75rem; font-weight: 600;
-    padding: 3px 10px; border-radius: 20px;
+
+/* ---------- Action Buttons ---------- */
+.ms-profile-actions {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    justify-content: center; margin-top: 18px; position: relative;
 }
+.ms-profile-actions .btn {
+    font-size: 0.85rem; font-weight: 600;
+    padding: 8px 18px; border-radius: 10px;
+}
+.ms-action-like { background: #fff; color: var(--ms-primary, #F90E18); border: 2px solid #fff; }
+.ms-action-like:hover { background: #ffe0e1; color: var(--ms-primary-dark, #D00D15); }
+.ms-action-proposal { background: rgba(255,255,255,0.15); color: #fff; border: 2px solid rgba(255,255,255,0.5); }
+.ms-action-proposal:hover { background: rgba(255,255,255,0.3); }
+.ms-action-block { background: transparent; color: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.3); font-size: 0.8rem; }
+.ms-action-block:hover { color: #fff; border-color: rgba(255,255,255,0.6); }
+.ms-action-report { background: transparent; color: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.3); font-size: 0.8rem; }
+.ms-action-report:hover { color: #fff; border-color: rgba(255,255,255,0.6); }
 
 /* ---------- Detail Cards ---------- */
 .ms-detail-card {
@@ -125,17 +172,12 @@ $location   = implode(', ', $locationParts);
     background: transparent;
     border-bottom: 1px solid var(--ms-border, #e9ecef);
     padding: 16px 20px;
-    display: flex; align-items: center; justify-content: space-between;
+    display: flex; align-items: center;
     font-weight: 700; font-size: 1.05rem;
     color: var(--ms-text, #2d3436);
 }
 .ms-detail-card .card-header i { color: var(--ms-primary, #F90E18); margin-right: 8px; }
 .ms-detail-card .card-body { padding: 20px; }
-.ms-detail-card .ms-edit-btn {
-    font-size: 0.82rem; color: var(--ms-primary, #F90E18);
-    text-decoration: none; font-weight: 600;
-}
-.ms-detail-card .ms-edit-btn:hover { text-decoration: underline; }
 
 /* ---------- Detail Rows ---------- */
 .ms-detail-row {
@@ -158,14 +200,38 @@ $location   = implode(', ', $locationParts);
     color: var(--ms-text, #2d3436);
 }
 
+/* ---------- Error Card ---------- */
+.ms-error-card {
+    background: var(--ms-white, #fff);
+    border-radius: 14px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    padding: 60px 30px;
+    text-align: center;
+    color: var(--ms-text-muted, #636e72);
+}
+.ms-error-card i { font-size: 3rem; color: #ddd; margin-bottom: 16px; }
+.ms-error-card p { font-size: 1rem; margin-bottom: 20px; }
+
 @media (max-width: 575.98px) {
     .ms-profile-header { padding: 22px 16px; }
     .ms-profile-photo, .ms-profile-photo-placeholder { width: 120px; height: 120px; }
+    .ms-profile-actions .btn { padding: 7px 14px; font-size: 0.8rem; }
     .ms-detail-item { flex: 0 0 100%; }
     .ms-detail-card .card-header { font-size: 0.95rem; padding: 14px 16px; }
     .ms-detail-card .card-body { padding: 16px; }
 }
 </style>
+
+<?php if ($apiError && empty($profile)): ?>
+    <!-- ======== Error State ======== -->
+    <div class="ms-error-card">
+        <i class="fas fa-user-slash d-block"></i>
+        <p><?php echo htmlspecialchars($apiError); ?></p>
+        <a href="home.php" class="btn ms-btn-primary" style="background:var(--ms-primary);border-color:var(--ms-primary);color:#fff;border-radius:10px;padding:10px 28px;">
+            <i class="fas fa-arrow-left me-1"></i> Go Back
+        </a>
+    </div>
+<?php elseif (!empty($profile)): ?>
 
 <?php if ($apiError): ?>
     <div class="alert alert-warning">
@@ -174,15 +240,25 @@ $location   = implode(', ', $locationParts);
     </div>
 <?php endif; ?>
 
-<?php if (!empty($profile)): ?>
-
 <!-- ======== Profile Header ======== -->
 <div class="ms-profile-header">
-    <?php if ($imgUrl): ?>
-        <img src="<?php echo htmlspecialchars($imgUrl); ?>" alt="<?php echo htmlspecialchars($fullName); ?>" class="ms-profile-photo">
-    <?php else: ?>
-        <div class="ms-profile-photo-placeholder"><i class="fas fa-user"></i></div>
-    <?php endif; ?>
+    <div class="ms-profile-photo-wrap">
+        <?php if ($isPrivatePhoto): ?>
+            <?php if ($imgUrl): ?>
+                <img src="<?php echo htmlspecialchars($imgUrl); ?>" alt="Photo" class="ms-profile-photo blurred">
+            <?php else: ?>
+                <div class="ms-profile-photo-placeholder"><i class="fas fa-user"></i></div>
+            <?php endif; ?>
+            <div class="ms-photo-private-overlay" id="msRequestPhoto" title="Request Photo">
+                <i class="fas fa-lock"></i>
+                <span>Photo Private<br>Request Photo</span>
+            </div>
+        <?php elseif ($imgUrl): ?>
+            <img src="<?php echo htmlspecialchars($imgUrl); ?>" alt="<?php echo htmlspecialchars($fullName); ?>" class="ms-profile-photo">
+        <?php else: ?>
+            <div class="ms-profile-photo-placeholder"><i class="fas fa-user"></i></div>
+        <?php endif; ?>
+    </div>
     <h2><?php echo htmlspecialchars($fullName ?: 'User'); ?></h2>
     <div class="ms-meta">
         <?php if ($age): ?><?php echo (int)$age; ?> yrs<?php endif; ?>
@@ -192,12 +268,26 @@ $location   = implode(', ', $locationParts);
     <div class="mt-2">
         <span class="ms-meta">ID: <?php echo htmlspecialchars((string)$memberId); ?></span>
     </div>
-    <div class="mt-2">
-        <?php if ($verified): ?>
+    <?php if ($verified): ?>
+        <div class="mt-2">
             <span class="ms-badge-verified"><i class="fas fa-check-circle"></i> Verified</span>
-        <?php else: ?>
-            <span class="ms-badge-unverified"><i class="fas fa-info-circle"></i> Not Verified</span>
-        <?php endif; ?>
+        </div>
+    <?php endif; ?>
+
+    <!-- Action Buttons -->
+    <div class="ms-profile-actions">
+        <button class="btn ms-action-like" id="msLikeBtn" data-id="<?php echo $profileId; ?>">
+            <i class="fas fa-heart me-1"></i> Like
+        </button>
+        <button class="btn ms-action-proposal" id="msProposalBtn" data-id="<?php echo $profileId; ?>">
+            <i class="fas fa-paper-plane me-1"></i> Send Proposal
+        </button>
+        <button class="btn ms-action-block" id="msBlockBtn" data-id="<?php echo $profileId; ?>">
+            <i class="fas fa-ban me-1"></i> Block
+        </button>
+        <button class="btn ms-action-report" id="msReportBtn" data-id="<?php echo $profileId; ?>">
+            <i class="fas fa-flag me-1"></i> Report
+        </button>
     </div>
 </div>
 
@@ -206,7 +296,7 @@ $location   = implode(', ', $locationParts);
 <?php if (!empty($about) && $about !== 'null'): ?>
 <div class="ms-detail-card">
     <div class="card-header">
-        <span><i class="fas fa-quote-left"></i> About Me</span>
+        <span><i class="fas fa-quote-left"></i> About</span>
     </div>
     <div class="card-body">
         <p class="ms-about-text mb-0"><?php echo nl2br(htmlspecialchars($about)); ?></p>
@@ -218,7 +308,6 @@ $location   = implode(', ', $locationParts);
 <div class="ms-detail-card">
     <div class="card-header">
         <span><i class="fas fa-user-circle"></i> Personal Details</span>
-        <a href="edit-profile.php?section=personal" class="ms-edit-btn"><i class="fas fa-pen me-1"></i>Edit</a>
     </div>
     <div class="card-body">
         <div class="ms-detail-row">
@@ -274,7 +363,6 @@ $location   = implode(', ', $locationParts);
 <div class="ms-detail-card">
     <div class="card-header">
         <span><i class="fas fa-graduation-cap"></i> Education &amp; Career</span>
-        <a href="edit-profile.php?section=education" class="ms-edit-btn"><i class="fas fa-pen me-1"></i>Edit</a>
     </div>
     <div class="card-body">
         <div class="ms-detail-row">
@@ -322,7 +410,6 @@ $location   = implode(', ', $locationParts);
 <div class="ms-detail-card">
     <div class="card-header">
         <span><i class="fas fa-home"></i> Family Details</span>
-        <a href="edit-profile.php?section=family" class="ms-edit-btn"><i class="fas fa-pen me-1"></i>Edit</a>
     </div>
     <div class="card-body">
         <div class="ms-detail-row">
@@ -374,7 +461,6 @@ $location   = implode(', ', $locationParts);
 <div class="ms-detail-card">
     <div class="card-header">
         <span><i class="fas fa-utensils"></i> Lifestyle</span>
-        <a href="edit-profile.php?section=lifestyle" class="ms-edit-btn"><i class="fas fa-pen me-1"></i>Edit</a>
     </div>
     <div class="card-body">
         <div class="ms-detail-row">
@@ -398,7 +484,6 @@ $location   = implode(', ', $locationParts);
 <div class="ms-detail-card">
     <div class="card-header">
         <span><i class="fas fa-star-and-crescent"></i> Astrological Info</span>
-        <a href="edit-profile.php?section=personal" class="ms-edit-btn"><i class="fas fa-pen me-1"></i>Edit</a>
     </div>
     <div class="card-body">
         <div class="ms-detail-row">
@@ -426,7 +511,6 @@ $location   = implode(', ', $locationParts);
 <div class="ms-detail-card">
     <div class="card-header">
         <span><i class="fas fa-heart"></i> Partner Preferences</span>
-        <a href="edit-profile.php?section=partner" class="ms-edit-btn"><i class="fas fa-pen me-1"></i>Edit</a>
     </div>
     <div class="card-body">
         <div class="ms-detail-row">
@@ -490,13 +574,196 @@ $location   = implode(', ', $locationParts);
     </div>
 </div>
 
-<?php else: ?>
-    <?php if (empty($apiError)): ?>
-        <div class="alert alert-info">
-            <i class="fas fa-info-circle me-1"></i>
-            No profile data found. Please complete your profile.
-        </div>
-    <?php endif; ?>
+<!-- ======== JavaScript Actions ======== -->
+<script>
+(function() {
+    var currentUserId = <?php echo $currentUserId; ?>;
+    var profileId = <?php echo $profileId; ?>;
+
+    // Like
+    document.getElementById('msLikeBtn').addEventListener('click', function() {
+        var btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Liking...';
+
+        fetch('/Api2/like_action.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: currentUserId, liked_user_id: profileId, action: 'like' })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                Swal.fire({ icon: 'success', title: 'Liked!', text: data.message || 'Profile liked successfully.', timer: 2000, showConfirmButton: false });
+                btn.innerHTML = '<i class="fas fa-heart me-1"></i> Liked';
+            } else {
+                Swal.fire({ icon: 'info', title: 'Note', text: data.message || 'Could not like this profile.' });
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-heart me-1"></i> Like';
+            }
+        })
+        .catch(function() {
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Network error. Please try again.' });
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-heart me-1"></i> Like';
+        });
+    });
+
+    // Send Proposal
+    document.getElementById('msProposalBtn').addEventListener('click', function() {
+        var btn = this;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Sending...';
+
+        fetch('/Api2/proposals_api.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'send', sender_id: currentUserId, receiver_id: profileId })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                Swal.fire({ icon: 'success', title: 'Proposal Sent!', text: data.message || 'Your proposal has been sent.', timer: 2000, showConfirmButton: false });
+                btn.innerHTML = '<i class="fas fa-check me-1"></i> Sent';
+            } else {
+                Swal.fire({ icon: 'info', title: 'Note', text: data.message || 'Could not send proposal.' });
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i> Send Proposal';
+            }
+        })
+        .catch(function() {
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Network error. Please try again.' });
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-paper-plane me-1"></i> Send Proposal';
+        });
+    });
+
+    // Block
+    document.getElementById('msBlockBtn').addEventListener('click', function() {
+        var btn = this;
+        Swal.fire({
+            title: 'Block this user?',
+            text: 'They will no longer be able to see your profile or contact you.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#F90E18',
+            confirmButtonText: 'Yes, Block',
+            cancelButtonText: 'Cancel'
+        }).then(function(result) {
+            if (result.isConfirmed) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Blocking...';
+
+                fetch('/Api2/block_user.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: currentUserId, blocked_user_id: profileId, action: 'block' })
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        Swal.fire({ icon: 'success', title: 'Blocked', text: data.message || 'User has been blocked.', timer: 2000, showConfirmButton: false });
+                        btn.innerHTML = '<i class="fas fa-ban me-1"></i> Blocked';
+                    } else {
+                        Swal.fire({ icon: 'info', title: 'Note', text: data.message || 'Could not block this user.' });
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-ban me-1"></i> Block';
+                    }
+                })
+                .catch(function() {
+                    Swal.fire({ icon: 'error', title: 'Error', text: 'Network error. Please try again.' });
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-ban me-1"></i> Block';
+                });
+            }
+        });
+    });
+
+    // Report
+    document.getElementById('msReportBtn').addEventListener('click', function() {
+        var btn = this;
+        Swal.fire({
+            title: 'Report this profile',
+            input: 'textarea',
+            inputLabel: 'Please describe the reason for reporting',
+            inputPlaceholder: 'Enter your reason here...',
+            inputAttributes: { 'aria-label': 'Reason for reporting' },
+            showCancelButton: true,
+            confirmButtonColor: '#F90E18',
+            confirmButtonText: 'Submit Report',
+            cancelButtonText: 'Cancel',
+            inputValidator: function(value) {
+                if (!value || !value.trim()) {
+                    return 'Please provide a reason for reporting.';
+                }
+            }
+        }).then(function(result) {
+            if (result.isConfirmed && result.value) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Reporting...';
+
+                fetch('/Api2/report_user.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: currentUserId, reported_user_id: profileId, reason: result.value })
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        Swal.fire({ icon: 'success', title: 'Reported', text: data.message || 'Report submitted successfully.', timer: 2000, showConfirmButton: false });
+                        btn.innerHTML = '<i class="fas fa-flag me-1"></i> Reported';
+                    } else {
+                        Swal.fire({ icon: 'info', title: 'Note', text: data.message || 'Could not submit report.' });
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="fas fa-flag me-1"></i> Report';
+                    }
+                })
+                .catch(function() {
+                    Swal.fire({ icon: 'error', title: 'Error', text: 'Network error. Please try again.' });
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-flag me-1"></i> Report';
+                });
+            }
+        });
+    });
+
+    // Request Photo (if private)
+    var reqPhotoBtn = document.getElementById('msRequestPhoto');
+    if (reqPhotoBtn) {
+        reqPhotoBtn.addEventListener('click', function() {
+            Swal.fire({
+                title: 'Request Photo?',
+                text: 'Send a photo request to this user.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#F90E18',
+                confirmButtonText: 'Send Request',
+                cancelButtonText: 'Cancel'
+            }).then(function(result) {
+                if (result.isConfirmed) {
+                    fetch('/Api2/photo_request.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: currentUserId, requested_user_id: profileId, action: 'request' })
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.success) {
+                            Swal.fire({ icon: 'success', title: 'Request Sent!', text: data.message || 'Photo request sent.', timer: 2000, showConfirmButton: false });
+                        } else {
+                            Swal.fire({ icon: 'info', title: 'Note', text: data.message || 'Could not send photo request.' });
+                        }
+                    })
+                    .catch(function() {
+                        Swal.fire({ icon: 'error', title: 'Error', text: 'Network error. Please try again.' });
+                    });
+                }
+            });
+        });
+    }
+})();
+</script>
+
 <?php endif; ?>
 
 <?php require_once __DIR__ . '/includes/user_footer.php'; ?>

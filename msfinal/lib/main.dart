@@ -1006,8 +1006,6 @@ Future<void> setupFirebaseMessaging() async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -1031,6 +1029,7 @@ void main() async {
   // Initialize call state recovery manager
   final callRecoveryManager = CallStateRecoveryManager();
 
+  // Render the first frame as fast as possible.
   runApp(
     MultiProvider(
       providers: [

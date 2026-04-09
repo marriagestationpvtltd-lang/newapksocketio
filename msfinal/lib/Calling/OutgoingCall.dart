@@ -328,11 +328,13 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
         }
       });
 
-      await _playConfiguredTone();
-
+      // Set the flag BEFORE starting playback so the state listener can
+      // detect completion/stop events even if the tone finishes very quickly.
       if (mounted) {
         setState(() => _isPlayingRingtone = true);
       }
+
+      await _playConfiguredTone();
       debugPrint('🎵 Started playing calling tone');
     } catch (e) {
       debugPrint('❌ Error playing calling tone: $e');

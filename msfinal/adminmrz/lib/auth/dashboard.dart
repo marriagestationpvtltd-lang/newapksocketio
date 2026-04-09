@@ -3,6 +3,8 @@ import 'dart:html' as html;
 import 'package:adminmrz/auth/service.dart';
 import 'package:adminmrz/adminchat/services/admin_socket_service.dart';
 import 'package:adminmrz/core/theme_provider.dart';
+import 'package:adminmrz/users/userdetails/detailscreen.dart';
+import 'package:adminmrz/users/userdetails/userdetailprovider.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -79,6 +81,11 @@ class _DashboardPageState extends State<DashboardPage> {
     _startGlobalConversationListener();
     _onChatNotifEvent = _handleChatNotifJsEvent;
     html.window.addEventListener('chatNotification', _onChatNotifEvent);
+
+    // Check if there's a pending profile view from a new tab
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPendingProfileView();
+    });
   }
 
   @override
@@ -180,6 +187,29 @@ class _DashboardPageState extends State<DashboardPage> {
     chatProvider.updateidd(userId);
     // Switch to Chat tab (index 5)
     setState(() => _selectedIndex = 5);
+  }
+
+  void _checkPendingProfileView() {
+    // Check if this tab was opened to view a specific user profile
+    final pendingUserId = html.window.sessionStorage['pendingProfileView'];
+    if (pendingUserId != null && pendingUserId.isNotEmpty) {
+      html.window.sessionStorage.remove('pendingProfileView');
+      final userId = int.tryParse(pendingUserId);
+      if (userId != null && mounted) {
+        // Navigate to the user profile
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => ChangeNotifierProvider(
+              create: (_) => UserDetailsProvider(),
+              child: UserDetailsScreen(
+                userId: userId,
+                myId: 1,
+              ),
+            ),
+          ),
+        );
+      }
+    }
   }
 
   static const List<_NavItem> _navItems = [

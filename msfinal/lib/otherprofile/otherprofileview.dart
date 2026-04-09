@@ -4,6 +4,7 @@ import 'package:ms2026/otherprofile/profileheader.dart';
 import 'package:ms2026/otherprofile/profiletabs.dart';
 import 'package:ms2026/otherprofile/requestdiag.dart';
 import 'package:ms2026/otherprofile/service_profile.dart';
+import 'package:ms2026/purposal/purposalScreen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -35,6 +36,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   String _errorMessage = '';
   bool _showBlurredImage = true;
   bool _hasRequestedPhoto = false;
+  String? _chatRequestStatus;
   List<GalleryImage> _galleryImages = [];
   bool _showPopup = false;
   String _popupMessage = '';
@@ -142,6 +144,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
     final privacy = _profileData!.personalDetail['privacy']?.toString().toLowerCase();
     final photoRequest = _profileData!.personalDetail['photo_request']?.toString().toLowerCase();
+    final chatRequest = _profileData!.personalDetail['chat_request']?.toString().toLowerCase();
 
     // Use PrivacyUtils for consistent logic across the app
     final shouldShowClear = PrivacyUtils.shouldShowClearImage(
@@ -158,6 +161,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
     setState(() {
       _showBlurredImage = !shouldShowClear;
       _hasRequestedPhoto = hasRequested;
+      _chatRequestStatus = chatRequest;
     });
   }
 
@@ -198,12 +202,76 @@ class _UserProfilePageState extends State<UserProfilePage> {
   void _showSendRequestDialog() {
     if (_profileData == null) return;
 
+    final photoRequest = _profileData!.personalDetail['photo_request']?.toString().toLowerCase();
+    final chatRequest = _profileData!.personalDetail['chat_request']?.toString().toLowerCase();
+
     showDialog(
       context: context,
       builder: (context) => RequestDialog(
         receiverName: '${_profileData!.personalDetail['lastName']}',
         onSendRequest: _sendRequest,
+        existingPhotoRequest: photoRequest,
+        existingChatRequest: chatRequest,
+        onCancelRequest: _cancelRequest,
+        onSeeAllRequests: _navigateToAllRequests,
       ),
+    );
+  }
+
+  void _cancelRequest() async {
+    try {
+      final senderId = await ProfileService.getCurrentUserId();
+      if (senderId == null) {
+        _showRequestSentPopup('Please login to cancel request');
+        return;
+      }
+
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+
+      // Determine which request type to cancel based on what's pending
+      final photoRequest = _profileData!.personalDetail['photo_request']?.toString().toLowerCase();
+      final chatRequest = _profileData!.personalDetail['chat_request']?.toString().toLowerCase();
+
+      String requestType = 'Photo';
+      if (photoRequest == 'pending') {
+        requestType = 'Photo';
+      } else if (chatRequest == 'pending') {
+        requestType = 'Chat';
+      }
+
+      final response = await _profileService.cancelRequest(
+        senderId: senderId,
+        receiverId: _parsedUserId,
+        requestType: requestType,
+      );
+
+      // Close loading dialog
+      if (mounted) Navigator.pop(context);
+
+      if (response['success'] == true) {
+        _showRequestSentPopup('Request cancelled successfully');
+        // Reload profile to update request status
+        await _loadProfileData();
+      } else {
+        _showRequestSentPopup(response['message'] ?? 'Failed to cancel request');
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      _showRequestSentPopup('Error: $e');
+    }
+  }
+
+  void _navigateToAllRequests() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const ProposalsPage()),
     );
   }
 

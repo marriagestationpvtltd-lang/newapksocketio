@@ -76,6 +76,7 @@ class _CallScreenState extends State<CallScreen>
 
   late AudioPlayer _ringtonePlayer;
   Timer? _ringtoneRepeatTimer;
+  StreamSubscription<PlayerState>? _ringtonePlayerStateSubscription;
 
   final AdminSocketService _socketService = AdminSocketService();
   StreamSubscription<Map<String, dynamic>>? _callAcceptedSubscription;
@@ -116,14 +117,15 @@ class _CallScreenState extends State<CallScreen>
   // ================= AUDIO =================
   void _setupAudio() {
     _ringtonePlayer.setReleaseMode(ReleaseMode.stop);
-    _ringtonePlayer.onPlayerStateChanged.listen((state) {
+    _ringtonePlayerStateSubscription = _ringtonePlayer.onPlayerStateChanged.listen((state) {
       if (!mounted) return;
       // Schedule repeat on both .completed (normal end) and .stopped (audio
       // focus lost, e.g. when Agora initializes) so the admin always hears
       // the ringing tone while waiting for the recipient.
       if ((state == PlayerState.completed || state == PlayerState.stopped) &&
           widget.isOutgoingCall &&
-          !_ending) {
+          !_ending &&
+          !_callActive) {
         _scheduleRepeat();
       }
     });
@@ -177,6 +179,9 @@ class _CallScreenState extends State<CallScreen>
   Future<void> _stopRingtone() async {
     try {
       _ringtoneRepeatTimer?.cancel();
+      _ringtoneRepeatTimer = null;
+      _ringtonePlayerStateSubscription?.cancel();
+      _ringtonePlayerStateSubscription = null;
       await _ringtonePlayer.stop();
     } catch (_) {}
   }
@@ -783,6 +788,7 @@ class _CallScreenState extends State<CallScreen>
     _callTimer?.cancel();
     _timeoutTimer?.cancel();
     _ringtoneRepeatTimer?.cancel();
+    _ringtonePlayerStateSubscription?.cancel();
     _callAcceptedSubscription?.cancel();
     _callRejectedSubscription?.cancel();
     _callCancelledSubscription?.cancel();

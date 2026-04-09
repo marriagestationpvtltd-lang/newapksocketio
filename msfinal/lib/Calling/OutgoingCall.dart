@@ -487,7 +487,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
             _syncOverlayState();
             unawaited(_startForegroundService());
           },
-          onUserJoined: (_, uid, __) {
+          onUserJoined: (_, uid, __) async {
             if (mounted) {
               setState(() {
                 _remoteUid = uid;
@@ -495,7 +495,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
                 _callActive = true;
               });
             }
-            _stopRingtone(); // Stop ringtone when user joins
+            await _stopRingtone(); // Stop ringtone when user joins
             _startCallTimer(); // Start call duration timer
             _syncOverlayState();
           },

@@ -55,24 +55,39 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   // Guaranteed to be set in initState before any async callback can use it.
   late Future<void> _animationCompleted;
 
+  // Animation durations
+  static const int _firstLaunchEntranceMs = 1200;
+  static const int _repeatLaunchEntranceMs = 850;
+
   // Current app versions - Update these with your actual current versions
   final String currentAndroidVersion = '24.0.0'; // Your current Android version
   final String currentIOSVersion = '1.0.0';     // Your current iOS version
 
-  // Animation controllers - nullable to avoid initialization when not needed
+  // Animation controllers
   AnimationController? _entranceController;
   AnimationController? _pulseController;
   AnimationController? _dotsController;
+  AnimationController? _ringController;
 
   // Entrance animations
   Animation<double>? _logoScale;
   Animation<double>? _logoOpacity;
+  Animation<Offset>? _logoSlideIn;
+  Animation<double>? _glowOpacity;
   Animation<double>? _textOpacity;
   Animation<Offset>? _textSlide;
   Animation<double>? _taglineOpacity;
 
   // Pulse (breathing) scale while loading
   Animation<double>? _pulseScale;
+
+  // Decorative ring ripple animations (expand outward from logo center)
+  Animation<double>? _ring1Scale;
+  Animation<double>? _ring1Opacity;
+  Animation<double>? _ring2Scale;
+  Animation<double>? _ring2Opacity;
+  Animation<double>? _ring3Scale;
+  Animation<double>? _ring3Opacity;
 
   @override
   void initState() {
@@ -84,19 +99,21 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     // Check first launch status before doing anything else
     await _checkFirstLaunch();
 
-    // Only setup animations on first launch to save resources
-    if (_isFirstLaunch) {
-      _setupAnimations();
-      // TickerCanceled is expected when the widget disposes while the animation
-      // is still running (e.g. user leaves the app); swallow it intentionally.
-      _animationCompleted = _entranceController!.forward().orCancel
-          .catchError((Object e) {
-            if (e is! TickerCanceled) debugPrint('Splash animation error: $e');
-          });
-    } else {
-      // Skip animation entirely on subsequent launches
-      _animationCompleted = Future.value();
-    }
+    // Always setup animations for a premium "wow" experience on every launch.
+    // Subsequent launches use a slightly shorter entrance so power users aren't
+    // slowed down, but still get the full branded feel.
+    _setupAnimations();
+    // TickerCanceled is expected when the widget disposes while the animation
+    // is still running (e.g. user leaves the app); swallow it intentionally.
+    _animationCompleted = _entranceController!.forward().orCancel
+        .catchError((Object e) {
+          if (e is! TickerCanceled) debugPrint('Splash animation error: $e');
+        });
+
+    // Rings start 80 ms after the logo so they feel like a response to it
+    Future.delayed(const Duration(milliseconds: 80), () {
+      if (mounted) _ringController?.forward();
+    });
 
     // Proceed to navigation immediately — version check runs in the background
     // so a slow or unreachable server never blocks the user from opening the app.
@@ -124,50 +141,77 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   }
 
   void _setupAnimations() {
-    // Main entrance: 1100 ms
+    // First launch: 1200 ms (full cinematic entrance).
+    // Subsequent launches: 850 ms (snappy but still branded).
+    final entranceMs = _isFirstLaunch ? _firstLaunchEntranceMs : _repeatLaunchEntranceMs;
+
     _entranceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1100),
+      duration: Duration(milliseconds: entranceMs),
     );
 
-    // Slow pulse while loading: 1600 ms repeat
+    // Slow breathing pulse while navigation data loads
     _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1600),
+      duration: const Duration(milliseconds: 1800),
     )..repeat(reverse: true);
 
-    // 3-dot bounce loop: 900 ms repeat
+    // 3-dot bounce loop
     _dotsController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat();
 
-    // Logo zooms in from 0.3 → 1.0 with elastic spring (0 – 65%)
-    _logoScale = Tween<double>(begin: 0.3, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _entranceController!,
-        curve: const Interval(0.0, 0.65, curve: Curves.elasticOut),
-      ),
+    // Decorative rings: runs once, 1100 ms
+    _ringController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
     );
 
-    // Logo fades in quickly (0 – 35%)
+    // ── Logo ────────────────────────────────────────────────────────────────
+    // Fades in (0 – 35%)
     _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _entranceController!,
         curve: const Interval(0.0, 0.35, curve: Curves.easeIn),
       ),
     );
+    // Drops in from slightly above + elastic bounce (0 – 70%)
+    _logoSlideIn = Tween<Offset>(
+      begin: const Offset(0, -0.25),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _entranceController!,
+        curve: const Interval(0.0, 0.70, curve: Curves.elasticOut),
+      ),
+    );
+    // Scales in simultaneously (0 – 70%)
+    _logoScale = Tween<double>(begin: 0.45, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _entranceController!,
+        curve: const Interval(0.0, 0.70, curve: Curves.elasticOut),
+      ),
+    );
 
-    // Subtle breathing pulse while loading (1.0 → 1.04)
+    // ── Glow behind logo (fades in 0 – 55%) ─────────────────────────────────
+    _glowOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _entranceController!,
+        curve: const Interval(0.0, 0.55, curve: Curves.easeOut),
+      ),
+    );
+
+    // ── Breathing pulse while loading (1.0 → 1.04) ──────────────────────────
     _pulseScale = Tween<double>(begin: 1.0, end: 1.04).animate(
       CurvedAnimation(parent: _pulseController!, curve: Curves.easeInOut),
     );
 
-    // App-name slides up + fades in (50 – 82%)
+    // ── Title: slides up + fades in (52 – 84%) ──────────────────────────────
     _textOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _entranceController!,
-        curve: const Interval(0.50, 0.82, curve: Curves.easeOut),
+        curve: const Interval(0.52, 0.84, curve: Curves.easeOut),
       ),
     );
     _textSlide = Tween<Offset>(
@@ -176,15 +220,53 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     ).animate(
       CurvedAnimation(
         parent: _entranceController!,
-        curve: const Interval(0.50, 0.82, curve: Curves.easeOutCubic),
+        curve: const Interval(0.52, 0.84, curve: Curves.easeOutCubic),
       ),
     );
 
-    // Tagline fades in last (68 – 100%)
+    // ── Tagline: fades in last (72 – 100%) ──────────────────────────────────
     _taglineOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _entranceController!,
-        curve: const Interval(0.68, 1.0, curve: Curves.easeOut),
+        curve: const Interval(0.72, 1.0, curve: Curves.easeOut),
+      ),
+    );
+
+    // ── Decorative rings (3 staggered ripples from logo center) ─────────────
+    _ring1Scale = Tween<double>(begin: 0.3, end: 2.1).animate(
+      CurvedAnimation(
+        parent: _ringController!,
+        curve: const Interval(0.0, 0.72, curve: Curves.easeOut),
+      ),
+    );
+    _ring1Opacity = Tween<double>(begin: 0.75, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _ringController!,
+        curve: const Interval(0.0, 0.72, curve: Curves.easeOut),
+      ),
+    );
+    _ring2Scale = Tween<double>(begin: 0.3, end: 2.1).animate(
+      CurvedAnimation(
+        parent: _ringController!,
+        curve: const Interval(0.18, 0.85, curve: Curves.easeOut),
+      ),
+    );
+    _ring2Opacity = Tween<double>(begin: 0.55, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _ringController!,
+        curve: const Interval(0.18, 0.85, curve: Curves.easeOut),
+      ),
+    );
+    _ring3Scale = Tween<double>(begin: 0.3, end: 2.1).animate(
+      CurvedAnimation(
+        parent: _ringController!,
+        curve: const Interval(0.35, 1.0, curve: Curves.easeOut),
+      ),
+    );
+    _ring3Opacity = Tween<double>(begin: 0.40, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _ringController!,
+        curve: const Interval(0.35, 1.0, curve: Curves.easeOut),
       ),
     );
   }
@@ -194,6 +276,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     _entranceController?.dispose();
     _pulseController?.dispose();
     _dotsController?.dispose();
+    _ringController?.dispose();
     super.dispose();
   }
 
@@ -474,14 +557,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
     if (!mounted) return;
 
-    // On subsequent launches, proceed immediately without any delay
-    if (!_isFirstLaunch) {
-      await _navigateBasedOnUserState();
-      return;
-    }
-
-    // Wait for the entrance animation to finish so we never navigate
-    // mid-animation and the user always sees the full splash on first launch.
+    // Always wait for the entrance animation so every launch feels premium.
     await _animationCompleted;
 
     if (!mounted) return;
@@ -661,26 +737,35 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     );
   }
 
+  // ─── Single decorative ring ────────────────────────────────────────────────
+  Widget _buildRing(
+      Animation<double>? scale, Animation<double>? opacity, double baseSize) {
+    if (scale == null || opacity == null) return const SizedBox.shrink();
+    return AnimatedBuilder(
+      animation: Listenable.merge([scale, opacity]),
+      builder: (context, child) => Opacity(
+        opacity: opacity.value.clamp(0.0, 1.0),
+        child: Transform.scale(
+          scale: scale.value,
+          child: child,
+        ),
+      ),
+      child: Container(
+        width: baseSize,
+        height: baseSize,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: AppColors.primary,
+            width: 1.5,
+          ),
+        ),
+      ),
+    );
+  }
+
   // ─── 3 bouncing brand-red dots ───────────────────────────────────────────────
   Widget _buildLoadingDots() {
-    // If no animation controller (subsequent launches), show static dots
-    if (_dotsController == null) {
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: List.generate(3, (index) {
-          return Container(
-            margin: const EdgeInsets.symmetric(horizontal: 5),
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.7),
-              shape: BoxShape.circle,
-            ),
-          );
-        }),
-      );
-    }
-
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(3, (index) {
@@ -709,191 +794,124 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
-    // On subsequent launches, show a minimal splash screen
-    if (!_isFirstLaunch) {
-      return Scaffold(
-        backgroundColor: AppColors.white,
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Show logo without animation on subsequent launches
-              const Image(
-                image: AssetImage('assets/images/Mslogo.gif'),
-                height: 250,
-                width: 250,
-                fit: BoxFit.contain,
-              ),
-              const SizedBox(height: 28),
-              ShaderMask(
-                shaderCallback: (bounds) =>
-                    AppColors.primaryGradient.createShader(bounds),
-                child: const Text(
-                  'Marriage Station',
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.white,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                "Nepal's #1 Matrimony Platform",
-                style: TextStyle(
-                  fontSize: 16,
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              if (_isCheckingVersion) ...[
-                const SizedBox(height: 40),
-                const CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                ),
-              ],
-              if (_errorMessage != null) ...[
-                const SizedBox(height: 40),
-                Icon(Icons.wifi_off_rounded,
-                    color: AppColors.error.withOpacity(0.7), size: 36),
-                const SizedBox(height: 12),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Text(
-                    _errorMessage!,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      _isCheckingVersion = true;
-                      _errorMessage = null;
-                    });
-                    _checkAppVersion();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 28, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  icon: const Icon(Icons.refresh,
-                      color: AppColors.white),
-                  label: const Text(
-                    'Retry',
-                    style: TextStyle(
-                        color: AppColors.white,
-                        fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
-    }
-
-    // First launch: Show full animated splash screen
+    // Single unified animated build — every launch gets the premium experience.
     return Scaffold(
       backgroundColor: AppColors.white,
       body: Stack(
+        alignment: Alignment.center,
         children: [
           // ── Centred logo + text ──────────────────────────────────────────────
           Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Logo: elastic zoom-in + subtle pulse while loading
-                if (_entranceController != null && _pulseController != null)
-                  AnimatedBuilder(
-                    animation: Listenable.merge([_entranceController!, _pulseController!]),
-                    builder: (context, child) {
-                      final scale = _logoScale!.value *
-                          (_isCheckingVersion ? _pulseScale!.value : 1.0);
-                      return Opacity(
-                        opacity: _logoOpacity!.value,
-                        child: Transform.scale(scale: scale, child: child),
-                      );
-                    },
-                    child: const Image(
-                      image: AssetImage('assets/images/Mslogo.gif'),
-                      height: 250,
-                      width: 250,
-                      fit: BoxFit.contain,
-                    ),
-                  )
-                else
-                  // Fallback if animations not initialized
-                  const Image(
-                    image: AssetImage('assets/images/Mslogo.gif'),
-                    height: 250,
-                    width: 250,
-                    fit: BoxFit.contain,
-                  ),
-
-                const SizedBox(height: 28),
-
-                // App name: slide-up + fade
-                if (_textOpacity != null && _textSlide != null)
-                  FadeTransition(
-                    opacity: _textOpacity!,
-                    child: SlideTransition(
-                      position: _textSlide!,
-                      child: ShaderMask(
-                        shaderCallback: (bounds) =>
-                            AppColors.primaryGradient.createShader(bounds),
-                        child: const Text(
-                          'Marriage Station',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.white,
-                            letterSpacing: 0.5,
+                // ── Logo area: glow + rings + logo stacked ───────────────────
+                SizedBox(
+                  width: 280,
+                  height: 280,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Soft radial glow behind the logo
+                      if (_glowOpacity != null)
+                        AnimatedBuilder(
+                          animation: _glowOpacity!,
+                          builder: (context, child) => Opacity(
+                            opacity: (_glowOpacity!.value * 0.45).clamp(0.0, 1.0),
+                            child: child,
                           ),
+                          child: Container(
+                            width: 260,
+                            height: 260,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: RadialGradient(
+                                colors: [
+                                  AppColors.primary.withOpacity(0.22),
+                                  AppColors.primary.withOpacity(0.07),
+                                  Colors.transparent,
+                                ],
+                                stops: const [0.0, 0.55, 1.0],
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      // Decorative expanding rings (matrimony celebration)
+                      _buildRing(_ring1Scale, _ring1Opacity, 220),
+                      _buildRing(_ring2Scale, _ring2Opacity, 220),
+                      _buildRing(_ring3Scale, _ring3Opacity, 220),
+
+                      // Logo: drops in from above + elastic bounce + pulse
+                      if (_entranceController != null &&
+                          _pulseController != null)
+                        AnimatedBuilder(
+                          animation: Listenable.merge(
+                              [_entranceController!, _pulseController!]),
+                          builder: (context, child) {
+                            final pulse =
+                                _isCheckingVersion ? _pulseScale!.value : 1.0;
+                            return Opacity(
+                              opacity: _logoOpacity!.value,
+                              child: SlideTransition(
+                                position: _logoSlideIn!,
+                                child: Transform.scale(
+                                  scale: _logoScale!.value * pulse,
+                                  child: child,
+                                ),
+                              ),
+                            );
+                          },
+                          child: const Image(
+                            image: AssetImage('assets/images/Mslogo.gif'),
+                            height: 220,
+                            width: 220,
+                            fit: BoxFit.contain,
+                          ),
+                        )
+                      else
+                        const Image(
+                          image: AssetImage('assets/images/Mslogo.gif'),
+                          height: 220,
+                          width: 220,
+                          fit: BoxFit.contain,
+                        ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // ── App name: slide-up + fade ─────────────────────────────────
+                FadeTransition(
+                  opacity: _textOpacity ??
+                      const AlwaysStoppedAnimation(1.0),
+                  child: SlideTransition(
+                    position: _textSlide ??
+                        const AlwaysStoppedAnimation(Offset.zero),
+                    child: ShaderMask(
+                      shaderCallback: (bounds) =>
+                          AppColors.primaryGradient.createShader(bounds),
+                      child: const Text(
+                        'Marriage Station',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.white,
+                          letterSpacing: 0.5,
                         ),
                       ),
                     ),
-                  )
-                else
-                  ShaderMask(
-                    shaderCallback: (bounds) =>
-                        AppColors.primaryGradient.createShader(bounds),
-                    child: const Text(
-                      'Marriage Station',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.white,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
                   ),
+                ),
 
                 const SizedBox(height: 8),
 
-                // Tagline: fade in last
-                if (_taglineOpacity != null)
-                  FadeTransition(
-                    opacity: _taglineOpacity!,
-                    child: const Text(
-                      "Nepal's #1 Matrimony Platform",
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  )
-                else
-                  const Text(
+                // ── Tagline: fades in last ────────────────────────────────────
+                FadeTransition(
+                  opacity: _taglineOpacity ??
+                      const AlwaysStoppedAnimation(1.0),
+                  child: const Text(
                     "Nepal's #1 Matrimony Platform",
                     style: TextStyle(
                       fontSize: 16,
@@ -901,6 +919,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                       fontWeight: FontWeight.w500,
                     ),
                   ),
+                ),
               ],
             ),
           ),
@@ -919,7 +938,8 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(Icons.wifi_off_rounded,
-                                color: AppColors.error.withOpacity(0.7), size: 36),
+                                color: AppColors.error.withOpacity(0.7),
+                                size: 36),
                             const SizedBox(height: 12),
                             Text(
                               _errorMessage!,
@@ -936,7 +956,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                                   _isCheckingVersion = true;
                                   _errorMessage = null;
                                 });
-                                _checkAppVersion();
+                                _checkAppVersionInBackground();
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.primary,

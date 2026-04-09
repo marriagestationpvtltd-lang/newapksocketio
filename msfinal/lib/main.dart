@@ -1007,20 +1007,23 @@ Future<void> setupFirebaseMessaging() async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Run UI orientation/system-chrome setup and Firebase init in parallel to
-  // minimise the time before runApp() is called.
-  await Future.wait([
-    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]),
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge),
-    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
-        .catchError((Object e) {
-      debugPrint('⚠️ Firebase initialization failed: $e');
-    }),
-  ]);
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (e) {
+    debugPrint('⚠️ Firebase initialization failed: $e');
+  }
 
-  // Create the connectivity service instance now so the provider is
-  // available immediately after runApp().  Actual network probing is
-  // deferred to the post-frame callback below.
+  // Fire-and-forget: sign in anonymously so Firestore security rules that
+  // require request.auth != null are satisfied. Firebase Auth caches the
+  // anonymous credential after the first call, so this is only slow on a
+  // brand-new install. Deferring it keeps it off the critical startup path.
+  FirebaseAuth.instance.signInAnonymously().catchError((Object e) {
+    debugPrint('⚠️ Firebase anonymous sign-in failed: $e');
+  });
+
+  // Connectivity service: create now, but start the background HTTP reachability
+  // checks (to google.com / cloudflare.com) after the first frame — they can
+  // each take up to 5 s and must not block runApp().
   final connectivityService = ConnectivityService();
 
   // Initialize call state recovery manager
@@ -1041,21 +1044,18 @@ void main() async {
     ),
   );
 
-  // Defer all heavy / network-touching initialisation to after the first
-  // frame so the splash screen appears instantly.
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    // Run independently – none of these block navigation.
-    Future.wait([
-      // Sign in anonymously so Firestore security rules (request.auth != null)
-      // are satisfied for chat and presence operations.
-      FirebaseAuth.instance.signInAnonymously().catchError((Object e) {
-        debugPrint('⚠️ Firebase anonymous sign-in failed: $e');
-      }),
-      // Set up local notification channels.
-      initLocalNotifications(),
-      // Start connectivity monitoring (probes google.com + cloudflare.com).
-      connectivityService.initialize(),
-    ]);
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
+    // Initialise connectivity monitoring after the first frame — this fires
+    // two HTTP HEAD requests (google.com + cloudflare.com) with 5 s timeouts
+    // each and must not run before the UI is shown.
+    // ConnectivityService defaults to _hasInternet = true so downstream code
+    // works correctly before initialize() completes; the service updates its
+    // state and notifies listeners once the HTTP checks finish.
+    connectivityService.initialize();
+
+    // Initialise local notifications after the first frame so channel creation
+    // and plugin setup don't add to the cold-start time.
+    await initLocalNotifications();
 
     setupFirebaseMessaging();
     // Initialize call recovery after first frame

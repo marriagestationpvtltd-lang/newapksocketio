@@ -152,26 +152,32 @@ flutter build appbundle --release
 ## 📋 Project Structure
 
 ```
-maapk/
-├── msfinal/                    # Flutter app source
+newapksocketio/
+├── msfinal/                      # User Flutter app (frontend)
 │   ├── lib/
-│   │   ├── features/          # ← NEW: Feature modules
-│   │   ├── config/            # ← NEW: Configuration
-│   │   ├── core/              # ← NEW: Core utilities
-│   │   ├── constant/          # Theme and constants
-│   │   ├── ReUsable/          # UI components
-│   │   ├── Auth/              # Authentication
-│   │   ├── Home/              # Home screens
-│   │   ├── Chat/              # Chat system
+│   │   ├── features/            # ← NEW: Feature modules
+│   │   ├── config/              # ← NEW: Configuration
+│   │   ├── core/                # ← NEW: Core utilities
+│   │   ├── constant/            # Theme and constants
+│   │   ├── ReUsable/            # UI components
+│   │   ├── Auth/                # Authentication
+│   │   ├── Home/                # Home screens
+│   │   ├── Chat/                # Chat system
 │   │   └── ...
-│   ├── android/               # Android config
-│   ├── ios/                   # iOS config
-│   └── pubspec.yaml          # Dependencies
+│   ├── backend/                 # PHP backend (separated)
+│   ├── socket-server/           # Node Socket.IO server
+│   ├── android/                 # Android config
+│   ├── ios/                     # iOS config
+│   └── pubspec.yaml            # Dependencies
+├── adminmrz/                     # Admin Flutter app
+│   ├── lib/
+│   ├── web/                     # Admin web build
+│   └── pubspec.yaml
 ├── SAFE_FEATURE_IMPLEMENTATION_GUIDE.md
 ├── IMPLEMENTATION_COMPLETE.md
 ├── QUICK_REFERENCE.md
 ├── REDESIGN_SUMMARY.md
-└── README.md                  # This file
+└── README.md                    # This file
 ```
 
 ---

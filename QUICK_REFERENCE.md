@@ -4,6 +4,7 @@
 
 ### Step 1: Create Feature Folder
 ```bash
+cd msfinal
 mkdir -p lib/features/your_feature/{models,services,providers,screens,widgets}
 ```
 
@@ -13,6 +14,7 @@ Copy from `lib/features/example_feature/`:
 - `services/example_service.dart` → Update API endpoints
 - `providers/example_provider.dart` → Adapt state logic
 - Add your screens in `screens/`
+Note: The template currently includes models/services/providers/README; add screens/widgets as needed.
 
 ### Step 3: Add Feature Flag
 ```dart

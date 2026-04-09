@@ -70,7 +70,47 @@ class CallToneSettingsService {
   static const _cachedToneIdKey = 'cached_call_tone_id';
   static const _cachedCustomToneUrlKey = 'cached_custom_call_tone_url';
 
+  /// How long the in-memory cache is considered fresh. Within this window,
+  /// [load] returns instantly without any server call.
+  static const Duration cacheTtl = Duration(minutes: 5);
+
+  /// In-memory cached settings – survives across call screens because the
+  /// service is a singleton.
+  CallToneSettings? _cached;
+  DateTime? _cachedAt;
+
+  /// Whether a background refresh is already in flight so we don't fire
+  /// multiple concurrent HTTP requests.
+  bool _refreshing = false;
+
+  /// Pre-warm the cache (e.g. at app startup). Safe to call multiple times.
+  Future<void> preload() async => load();
+
+  /// Returns the admin-configured tone settings.
+  ///
+  /// **Fast path** – if the in-memory cache is still fresh (< [cacheTtl]),
+  /// the result is returned synchronously with zero network I/O.
+  ///
+  /// **Warm path** – if the cache exists but is stale, the stale value is
+  /// returned immediately and a background refresh is kicked off.
+  ///
+  /// **Cold path** – on the very first call (no in-memory cache), settings
+  /// are read from SharedPreferences (instant) and then a blocking server
+  /// fetch is attempted once.  The result is cached for subsequent calls.
   Future<CallToneSettings> load() async {
+    // ── Fast path: in-memory cache is fresh ──
+    if (_cached != null && _cachedAt != null) {
+      final age = DateTime.now().difference(_cachedAt!);
+      if (age < cacheTtl) {
+        return _cached!;
+      }
+      // Cache exists but is stale – return it immediately and refresh in the
+      // background so the next call gets an up-to-date value.
+      _backgroundRefresh();
+      return _cached!;
+    }
+
+    // ── Cold path: first load ever in this process ──
     final prefs = await SharedPreferences.getInstance();
     final cachedToneId = CallToneSettings.normalizeToneId(
       prefs.getString(_cachedToneIdKey),
@@ -79,6 +119,30 @@ class CallToneSettingsService {
       prefs.getString(_cachedCustomToneUrlKey),
     );
 
+    // Try fetching from the server once to prime the cache.
+    final remote = await _fetchFromServer(prefs);
+    if (remote != null) {
+      _cached = remote;
+      _cachedAt = DateTime.now();
+      return remote;
+    }
+
+    // Server unreachable – use the SharedPreferences fallback.
+    final fallback = CallToneSettings(
+      toneId: cachedToneId,
+      customToneUrl: cachedCustomToneUrl,
+    );
+    _cached = fallback;
+    _cachedAt = DateTime.now();
+    return fallback;
+  }
+
+  // ── Internal helpers ──────────────────────────────────────────────────
+
+  /// Performs the HTTP fetch and, on success, persists to SharedPreferences.
+  /// Returns `null` when the server is unreachable or the response is
+  /// malformed.
+  Future<CallToneSettings?> _fetchFromServer(SharedPreferences prefs) async {
     try {
       final response = await http
           .get(Uri.parse(_settingsUrl))
@@ -92,11 +156,13 @@ class CallToneSettingsService {
             final remoteToneId = CallToneSettings.normalizeToneId(
               data['call_tone_id']?.toString(),
             );
-            final remoteCustomToneUrl = CallToneSettings.normalizeCustomToneUrl(
+            final remoteCustomToneUrl =
+                CallToneSettings.normalizeCustomToneUrl(
               data['custom_call_tone_url']?.toString(),
             );
             await prefs.setString(_cachedToneIdKey, remoteToneId);
-            await prefs.setString(_cachedCustomToneUrlKey, remoteCustomToneUrl);
+            await prefs.setString(
+                _cachedCustomToneUrlKey, remoteCustomToneUrl);
             return CallToneSettings(
               toneId: remoteToneId,
               customToneUrl: remoteCustomToneUrl,
@@ -107,10 +173,25 @@ class CallToneSettingsService {
     } catch (e) {
       debugPrint('Error loading caller tone settings: $e');
     }
+    return null;
+  }
 
-    return CallToneSettings(
-      toneId: cachedToneId,
-      customToneUrl: cachedCustomToneUrl,
-    );
+  /// Kicks off a non-blocking server refresh.  At most one refresh runs at
+  /// a time; subsequent calls while one is in-flight are silently ignored.
+  void _backgroundRefresh() {
+    if (_refreshing) return;
+    _refreshing = true;
+    () async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final remote = await _fetchFromServer(prefs);
+        if (remote != null) {
+          _cached = remote;
+          _cachedAt = DateTime.now();
+        }
+      } finally {
+        _refreshing = false;
+      }
+    }();
   }
 }

@@ -146,7 +146,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
       _playerStateSub = _ringtonePlayer.onPlayerStateChanged.listen((state) {
         debugPrint('🔊 Ringtone player state changed: $state');
         // Restart on both .completed (normal end) and .stopped (audio focus
-        // lost, e.g. when Agora initialises) so the caller always hears the
+        // lost, e.g. when Agora initializes) so the caller always hears the
         // ringing tone while waiting for the recipient.
         if ((state == PlayerState.completed || state == PlayerState.stopped) &&
             _isPlayingRingtone &&
@@ -155,7 +155,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
             mounted) {
           _isRestartingRingtone = true;
           _ringtoneRestartTimer?.cancel();
-          // Small delay lets the audio session stabilise after Agora init
+          // Small delay lets the audio session stabilize after Agora init
           // and avoids rapid-fire restart loops.
           _ringtoneRestartTimer = Timer(const Duration(milliseconds: 500), () {
             if (!_ending && mounted && _isPlayingRingtone) {

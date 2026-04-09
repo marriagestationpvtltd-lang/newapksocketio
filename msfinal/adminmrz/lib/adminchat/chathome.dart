@@ -6039,9 +6039,13 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
   late int _current;
   late List<_AdminSharedPhoto> _photos;
   final Map<int, TransformationController> _transformControllers = {};
+  TapDownDetails? _lastTapDownDetails;
 
   static const double _thumbSize = 60.0;
   static const double _thumbSpacing = 6.0;
+  static const double _viewerHeaderHeight = 76.0;
+  static const double _thumbStripHeight = _thumbSize + 20.0;
+  static const double _tapZoomScale = 2.4;
 
   @override
   void initState() {
@@ -6172,6 +6176,8 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
   @override
   Widget build(BuildContext context) {
     final c = ChatColors.of(context);
+    final media = MediaQuery.of(context);
+    final double topInset = media.padding.top + _viewerHeaderHeight;
     if (_photos.isEmpty) {
       return Scaffold(
         backgroundColor: c.bg,
@@ -6183,7 +6189,8 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
       body: Stack(
         children: [
           Positioned.fill(
-            bottom: 80, // leave space for thumbnail strip
+            top: topInset,
+            bottom: _thumbStripHeight, // leave space for thumbnail strip
             child: PageView.builder(
             controller: _pageController,
             itemCount: _photos.length,
@@ -6203,13 +6210,20 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
             itemBuilder: (ctx, i) {
               final transformController = _transformControllers[i]!;
               return GestureDetector(
-                onDoubleTap: () {
-                  // Double-tap to reset zoom
-                  setState(() {
-                    if (transformController.value != Matrix4.identity()) {
-                      transformController.value = Matrix4.identity();
-                    }
-                  });
+                onTapDown: (details) => _lastTapDownDetails = details,
+                onTap: () {
+                  final double currentScale = transformController.value.getMaxScaleOnAxis();
+                  if (currentScale > 1.05) {
+                    setState(() => transformController.value = Matrix4.identity());
+                    return;
+                  }
+                  final Offset? pos = _lastTapDownDetails?.localPosition;
+                  final Matrix4 next = Matrix4.identity();
+                  if (pos != null) {
+                    next.translate(-pos.dx * (_tapZoomScale - 1), -pos.dy * (_tapZoomScale - 1));
+                  }
+                  next.scale(_tapZoomScale);
+                  setState(() => transformController.value = next);
                 },
                 child: InteractiveViewer(
                   transformationController: transformController,
@@ -6301,7 +6315,7 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
           ),
           // Page counter
           Positioned(
-            top: 94,
+            top: topInset + 6,
             left: 0,
             right: 0,
             child: Center(

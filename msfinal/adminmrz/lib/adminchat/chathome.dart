@@ -5590,6 +5590,21 @@ class _AdminUserProfileSheet extends StatelessWidget {
     );
   }
 
+  void _openGalleryGrid(BuildContext context) {
+    if (sharedPhotos.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _AdminGalleryGridPage(
+          photos: sharedPhotos,
+          userName: name,
+          userId: userId,
+          onDeleteMessage: onDeleteMessage,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -5723,7 +5738,7 @@ class _AdminUserProfileSheet extends StatelessWidget {
                       ),
                     ),
                     GestureDetector(
-                      onTap: () => _openPhotoViewer(context, 0),
+                      onTap: () => _openGalleryGrid(context),
                       child: const Text(
                         'View All',
                         style: TextStyle(
@@ -6123,6 +6138,118 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
             ),
         ],
       ),
+    );
+  }
+}
+
+// ─── Grid gallery view page for Admin Chat ───────────────────────────────────
+
+class _AdminGalleryGridPage extends StatefulWidget {
+  final List<_AdminSharedPhoto> photos;
+  final String userName;
+  final int userId;
+  final ValueChanged<String> onDeleteMessage;
+
+  const _AdminGalleryGridPage({
+    required this.photos,
+    required this.userName,
+    required this.userId,
+    required this.onDeleteMessage,
+  });
+
+  @override
+  State<_AdminGalleryGridPage> createState() => _AdminGalleryGridPageState();
+}
+
+class _AdminGalleryGridPageState extends State<_AdminGalleryGridPage> {
+  void _openFullScreenViewer(int index) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _AdminPhotoViewerPage(
+          photos: widget.photos,
+          initialIndex: index,
+          userName: widget.userName,
+          userId: widget.userId,
+          onDeleteMessage: widget.onDeleteMessage,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = ChatColors.of(context);
+
+    return Scaffold(
+      backgroundColor: c.bg,
+      appBar: AppBar(
+        backgroundColor: c.header,
+        elevation: 1,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: c.text),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.userName,
+              style: TextStyle(
+                color: c.text,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            Text(
+              '${widget.photos.length} photos',
+              style: TextStyle(
+                color: c.muted,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+      body: widget.photos.isEmpty
+          ? Center(
+              child: Text(
+                'No photos',
+                style: TextStyle(color: c.muted),
+              ),
+            )
+          : GridView.builder(
+              padding: const EdgeInsets.all(4),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 4,
+                mainAxisSpacing: 4,
+              ),
+              itemCount: widget.photos.length,
+              itemBuilder: (ctx, i) {
+                return GestureDetector(
+                  onTap: () => _openFullScreenViewer(i),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: Image.network(
+                        widget.photos[i].url,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Icon(
+                          Icons.broken_image,
+                          color: Colors.grey[400],
+                          size: 40,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 }

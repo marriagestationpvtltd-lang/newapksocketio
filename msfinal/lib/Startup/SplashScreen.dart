@@ -169,8 +169,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     );
 
     // ── Logo ────────────────────────────────────────────────────────────────
-    // Fades in (0 – 35%)
-    _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+    // Start semi-visible (0.7) so the logo is immediately visible on the very
+    // first Flutter frame — seamless continuity from the native splash logo.
+    // Then polishes up to full opacity in the first 35% of the entrance.
+    _logoOpacity = Tween<double>(begin: 0.7, end: 1.0).animate(
       CurvedAnimation(
         parent: _entranceController!,
         curve: const Interval(0.0, 0.35, curve: Curves.easeIn),
@@ -178,7 +180,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     );
     // Drops in from slightly above + elastic bounce (0 – 70%)
     _logoSlideIn = Tween<Offset>(
-      begin: const Offset(0, -0.25),
+      begin: const Offset(0, -0.12),
       end: Offset.zero,
     ).animate(
       CurvedAnimation(
@@ -186,8 +188,9 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
         curve: const Interval(0.0, 0.70, curve: Curves.elasticOut),
       ),
     );
-    // Scales in simultaneously (0 – 70%)
-    _logoScale = Tween<double>(begin: 0.45, end: 1.0).animate(
+    // Scales from 0.7 → 1.0 so the logo is already clearly visible on the
+    // first frame (brand continuity with the native splash ic_launcher).
+    _logoScale = Tween<double>(begin: 0.7, end: 1.0).animate(
       CurvedAnimation(
         parent: _entranceController!,
         curve: const Interval(0.0, 0.70, curve: Curves.elasticOut),

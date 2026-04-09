@@ -300,9 +300,11 @@ class _ChatListScreenState extends State<ChatListScreen>
         totalUnread += unread;
         if (unread > 0) unreadConvs++;
       }
+      final nonAdminRooms =
+          parsedRooms.where((r) => !_isAdminRoom(r)).toList();
       setState(() {
         _socketChatRooms = parsedRooms;
-        _cachedTotalRooms = _socketChatRooms.length;
+        _cachedTotalRooms = nonAdminRooms.length;
         _chatRoomsInitialized = true;
         _totalUnreadCount = totalUnread;
         _totalUnreadConversations = unreadConvs;
@@ -327,9 +329,11 @@ class _ChatListScreenState extends State<ChatListScreen>
         totalUnread += unread;
         if (unread > 0) unreadConvs++;
       }
+      final nonAdminRooms =
+          parsedRooms.where((r) => !_isAdminRoom(r)).toList();
       setState(() {
         _socketChatRooms = parsedRooms;
-        _cachedTotalRooms = _socketChatRooms.length;
+        _cachedTotalRooms = nonAdminRooms.length;
         _totalUnreadCount = totalUnread;
         _totalUnreadConversations = unreadConvs;
       });
@@ -488,6 +492,22 @@ class _ChatListScreenState extends State<ChatListScreen>
 
   /// Format a lastSeen timestamp into a human-readable "last active" string.
   String _formatLastSeen(DateTime lastSeen) => formatLastSeen(lastSeen);
+
+  bool _isAdminRoom(Map<String, dynamic> room) {
+    if (userId.isEmpty) return false;
+    final participantsRaw = room['participants'];
+    if (participantsRaw is List) {
+      final participants = participantsRaw.map((p) => p.toString()).toList();
+      if (participants.contains(_adminUserId) &&
+          participants.contains(userId)) {
+        return true;
+      }
+    }
+    final chatRoomId = room['chatRoomId']?.toString() ?? '';
+    if (chatRoomId.isEmpty) return false;
+    final ids = [userId, _adminUserId]..sort();
+    return chatRoomId == ids.join('_');
+  }
 
   Widget _buildPinnedAdminCard() {
     final String subtitle = _adminLoading
@@ -1394,7 +1414,9 @@ class _ChatListScreenState extends State<ChatListScreen>
     }
 
     // Sort client-side by lastMessageTime descending.
-    final chatRooms = List<Map<String, dynamic>>.from(_socketChatRooms)
+    final chatRooms = List<Map<String, dynamic>>.from(
+      _socketChatRooms.where((room) => !_isAdminRoom(room)),
+    )
       ..sort((a, b) {
         final aTime = SocketService.parseTimestamp(a['lastMessageTime']);
         final bTime = SocketService.parseTimestamp(b['lastMessageTime']);
@@ -1522,6 +1544,20 @@ class _ChatListScreenState extends State<ChatListScreen>
 
           return InkWell(
             onTap: () {
+              if (_isAdminRoom(data)) {
+                _markAdminChatSeen();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AdminChatScreen(
+                      senderID: userId,
+                      userName: _adminDisplayName,
+                      isAdmin: false,
+                    ),
+                  ),
+                ).then((_) => _markAdminChatSeen());
+                return;
+              }
               if (docstatus == "approved" && usertye == "paid") {
                 final chatData = {
                   'chatRoomId': data['chatRoomId']?.toString() ?? '',

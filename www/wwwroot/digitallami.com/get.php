@@ -16,12 +16,66 @@ $conn->query("SET time_zone = '+05:45'");
 // ✅ Base URL for images
 $base_url = APP_API2_BASE_URL;
 
+// ✅ Pagination parameters
+$page = isset($_GET['page']) ? max(1, intval($_GET['page'])) : 1;
+$limit = isset($_GET['limit']) ? max(1, min(100, intval($_GET['limit']))) : 30;
+$offset = ($page - 1) * $limit;
+
+// ✅ Search parameter
+$search = isset($_GET['search']) ? trim($_GET['search']) : '';
+
 /* ----------------------------------------------------------
-   STEP 1: Get all users
+   STEP 1: Get total count of users
 ---------------------------------------------------------- */
-$userQuery = $conn->prepare("SELECT * FROM users WHERE id != 1");
-$userQuery->execute();
-$userResult = $userQuery->get_result();
+$countQuery = "SELECT COUNT(*) as total FROM users WHERE id != 1";
+$countParams = [];
+$countTypes = "";
+
+if (!empty($search)) {
+    $countQuery .= " AND (firstName LIKE ? OR lastName LIKE ? OR CONCAT(firstName, ' ', lastName) LIKE ?)";
+    $searchParam = "%{$search}%";
+    $countParams = [$searchParam, $searchParam, $searchParam];
+    $countTypes = "sss";
+}
+
+$countStmt = $conn->prepare($countQuery);
+if (!empty($countParams)) {
+    $countStmt->bind_param($countTypes, ...$countParams);
+}
+$countStmt->execute();
+$countResult = $countStmt->get_result();
+$totalUsers = $countResult->fetch_assoc()['total'];
+
+/* ----------------------------------------------------------
+   STEP 2: Get paginated users with optional search
+---------------------------------------------------------- */
+$userQuery = "SELECT u.*,
+    (SELECT MAX(created_at) FROM chats WHERE sender_id = u.id OR receiver_id = u.id) as last_chat_time
+    FROM users u
+    WHERE u.id != 1";
+
+$userParams = [];
+$userTypes = "";
+
+if (!empty($search)) {
+    $userQuery .= " AND (u.firstName LIKE ? OR u.lastName LIKE ? OR CONCAT(u.firstName, ' ', u.lastName) LIKE ?)";
+    $searchParam = "%{$search}%";
+    $userParams = [$searchParam, $searchParam, $searchParam];
+    $userTypes = "sss";
+}
+
+// Order by: recent chats first, then by last login
+$userQuery .= " ORDER BY last_chat_time DESC, u.lastLogin DESC LIMIT ? OFFSET ?";
+$userParams[] = $limit;
+$userParams[] = $offset;
+$userTypes .= "ii";
+
+$userStmt = $conn->prepare($userQuery);
+if (!empty($userParams)) {
+    $userStmt->bind_param($userTypes, ...$userParams);
+}
+$userStmt->execute();
+$userResult = $userStmt->get_result();
 
 $responseData = [];
 
@@ -48,11 +102,12 @@ while ($user = $userResult->fetch_assoc()) {
     // 💬 LATEST CHAT MESSAGE
     // ===============================
     $chat_message = "";
+    $chat_message_type = "text";
     $chatQuery = $conn->prepare("
-        SELECT message 
-        FROM chats 
-        WHERE sender_id = ? OR receiver_id = ? 
-        ORDER BY created_at DESC 
+        SELECT message, messageType
+        FROM chats
+        WHERE sender_id = ? OR receiver_id = ?
+        ORDER BY created_at DESC
         LIMIT 1
     ");
     $chatQuery->bind_param("ii", $userId, $userId);
@@ -61,6 +116,7 @@ while ($user = $userResult->fetch_assoc()) {
     if ($chatRes->num_rows > 0) {
         $chatRow = $chatRes->fetch_assoc();
         $chat_message = $chatRow['message'];
+        $chat_message_type = $chatRow['messageType'] ?? 'text';
     }
 
     // ===============================
@@ -155,6 +211,7 @@ while ($user = $userResult->fetch_assoc()) {
         "usertype" => $user['usertype'] ?? '', // Adding usertype for debugging
         "profile_picture" => $profile_picture,
         "chat_message" => $chat_message,
+        "chat_message_type" => $chat_message_type,
         "matches" => $matchesCount,
         "last_seen" => $last_seen,
         "last_seen_text" => $last_seen_text,
@@ -164,11 +221,15 @@ while ($user = $userResult->fetch_assoc()) {
 }
 
 /* ----------------------------------------------------------
-   STEP 2: Return response
+   STEP 3: Return paginated response
 ---------------------------------------------------------- */
 echo json_encode([
-    "status" => "success",
-    "data" => $responseData
+    "status" => true,
+    "data" => $responseData,
+    "totalRecords" => $totalUsers,
+    "page" => $page,
+    "limit" => $limit,
+    "totalPages" => ceil($totalUsers / $limit)
 ], JSON_PRETTY_PRINT);
 
 $conn->close();

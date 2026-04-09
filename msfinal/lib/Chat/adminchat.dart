@@ -1203,6 +1203,11 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     // Check if message is read
     final bool isRead = data['isRead'] == true || data['read'] == true;
 
+    // Determine if message is from admin
+    bool isFromAdmin = senderId == _adminUserId;
+    String senderName =
+        isFromAdmin ? "Admin Support" : (isMe ? "You" : widget.userName);
+
     // Render call events inline (WhatsApp-style)
     if (data['messageType'] == 'call' || data['type'] == 'call') {
       return _buildInlineCallBubble(data, tsDate);
@@ -1216,13 +1221,8 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         final decoded = jsonDecode(data['message'] ?? '{}') as Map<String, dynamic>;
         if (decoded.containsKey('reportReason')) reportData = {...data, ...decoded};
       } catch (_) {}
-      return _buildReportMessageCard(reportData, isMe, formattedTime);
+      return _buildReportMessageCard(reportData, isFromAdmin, formattedTime);
     }
-
-    // Determine if message is from admin
-    bool isFromAdmin = senderId == _adminUserId;
-    String senderName =
-        isFromAdmin ? "Admin Support" : (isMe ? "You" : widget.userName);
 
     double swipeOffset = _swipeOffsets[msgID] ?? 0.0;
 
@@ -1254,8 +1254,8 @@ class _AdminChatScreenState extends State<AdminChatScreen>
             children: [
               if (swipeOffset > 10)
                 Positioned(
-                  left: isMe ? null : 16,
-                  right: isMe ? 16 : null,
+                  left: isFromAdmin ? null : 16,
+                  right: isFromAdmin ? 16 : null,
                   top: 0, bottom: 0,
                   child: Center(
                     child: AnimatedOpacity(
@@ -1267,16 +1267,16 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                   ),
                 ),
               Transform.translate(
-                offset: Offset(isMe ? -swipeOffset : swipeOffset, 0),
+                offset: Offset(isFromAdmin ? -swipeOffset : swipeOffset, 0),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
                   child: Row(
                     mainAxisAlignment:
-                        isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                        isFromAdmin ? MainAxisAlignment.end : MainAxisAlignment.start,
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-            if (!isMe)
+            if (!isFromAdmin)
               CircleAvatar(
                 backgroundColor: Colors.transparent,
                 child: Container(
@@ -1295,9 +1295,9 @@ class _AdminChatScreenState extends State<AdminChatScreen>
             Flexible(
               child: Column(
                 crossAxisAlignment:
-                    isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                    isFromAdmin ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                 children: [
-                  if (!isMe)
+                  if (!isFromAdmin)
                     Padding(
                       padding: const EdgeInsets.only(left: 12, bottom: 6),
                       child: Text(
@@ -1317,7 +1317,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                       child: Row(
                         mainAxisAlignment:
-                            isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+                            isFromAdmin ? MainAxisAlignment.end : MainAxisAlignment.start,
                         children: [
                           Text(
                             formattedTime,
@@ -1341,7 +1341,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                         maxWidth: MediaQuery.of(context).size.width * 0.75),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      gradient: isMe
+                      gradient: isFromAdmin
                           ? _primaryGradient
                           : (isRead
                               // Read messages: lighter, faded gradient
@@ -1359,10 +1359,10 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                       borderRadius: BorderRadius.only(
                         topLeft: const Radius.circular(20),
                         topRight: const Radius.circular(20),
-                        bottomLeft: isMe
+                        bottomLeft: isFromAdmin
                             ? const Radius.circular(20)
                             : const Radius.circular(4),
-                        bottomRight: isMe
+                        bottomRight: isFromAdmin
                             ? const Radius.circular(4)
                             : const Radius.circular(20),
                       ),
@@ -1396,23 +1396,23 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                           Text(
                             data['message'] ?? '',
                             style: TextStyle(
-                              color: isMe
+                              color: isFromAdmin
                                   ? Colors.white
                                   : (isRead
                                       ? _textColor.withOpacity(0.7)
                                       : _textColor),
                               fontSize: 17,
-                              fontWeight: isMe || !isRead
+                              fontWeight: isFromAdmin || !isRead
                                   ? FontWeight.w500
                                   : FontWeight.w400,
                             ),
                           ),
                         if ((data['messageType'] ?? data['type']) == 'voice')
-                          _buildVoiceMessage(data['message'] ?? '', isMe),
+                          _buildVoiceMessage(data['message'] ?? '', isFromAdmin),
                         if ((data['messageType'] ?? data['type']) == 'doc')
-                          _buildDocumentMessage(data['message'] ?? '', isMe),
+                          _buildDocumentMessage(data['message'] ?? '', isFromAdmin),
                         if ((data['messageType'] ?? data['type']) == 'image')
-                          _buildImageMessage(data['message'] ?? data['imageUrl'], isMe),
+                          _buildImageMessage(data['message'] ?? data['imageUrl'], isFromAdmin),
                         const SizedBox(height: 6),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1422,12 +1422,12 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                               formattedTime,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: isMe
+                                color: isFromAdmin
                                     ? Colors.white70
                                     : (isRead
                                         ? _lightTextColor.withOpacity(0.7)
                                         : _lightTextColor),
-                                fontWeight: !isMe && !isRead ? FontWeight.w500 : FontWeight.normal,
+                                fontWeight: !isFromAdmin && !isRead ? FontWeight.w500 : FontWeight.normal,
                               ),
                             ),
                             if (data['liked'] == true)
@@ -1435,7 +1435,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                                 padding: const EdgeInsets.only(left: 8),
                                 child: Icon(Icons.favorite,
                                     size: 16,
-                                    color: isMe ? Colors.white : _accentColor),
+                                    color: isFromAdmin ? Colors.white : _accentColor),
                               ),
                           ],
                         ),
@@ -1445,8 +1445,8 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                 ],
               ),
             ),
-            if (isMe) const SizedBox(width: 8),
-            if (isMe)
+            if (isFromAdmin) const SizedBox(width: 8),
+            if (isFromAdmin)
               CircleAvatar(
                 backgroundColor: Colors.transparent,
                 child: Container(
@@ -1516,7 +1516,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   }
 
   Widget _buildReportMessageCard(
-      Map<String, dynamic> data, bool isMe, String formattedTime) {
+      Map<String, dynamic> data, bool isFromAdmin, String formattedTime) {
     final reportReason = data['reportReason'] ?? '';
     final reportedUserName = data['reportedUserName'] ?? '';
     final reportedUserId = data['reportedUserId'] ?? '';
@@ -1524,7 +1524,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
       child: Align(
-        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        alignment: isFromAdmin ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
           constraints: BoxConstraints(
               maxWidth: MediaQuery.of(context).size.width * 0.80),
@@ -1535,9 +1535,9 @@ class _AdminChatScreenState extends State<AdminChatScreen>
               topLeft: const Radius.circular(16),
               topRight: const Radius.circular(16),
               bottomLeft:
-                  isMe ? const Radius.circular(16) : const Radius.circular(4),
+                  isFromAdmin ? const Radius.circular(16) : const Radius.circular(4),
               bottomRight:
-                  isMe ? const Radius.circular(4) : const Radius.circular(16),
+                  isFromAdmin ? const Radius.circular(4) : const Radius.circular(16),
             ),
             boxShadow: [
               BoxShadow(

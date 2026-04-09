@@ -178,11 +178,21 @@ class _NoInternetScreenState extends State<NoInternetScreen>
         statusBarBrightness: Brightness.light,
         systemStatusBarContrastEnforced: false,
       ),
-      child: PopScope(
-        canPop: false,
-        child: Scaffold(
-          backgroundColor: AppColors.white,
-          body: SafeArea(
+      child: Scaffold(
+        backgroundColor: AppColors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+            onPressed: () {
+              if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              }
+            },
+          ),
+        ),
+        body: SafeArea(
           child: FadeTransition(
             opacity: _fadeAnimation,
             child: Padding(
@@ -301,32 +311,31 @@ class _NoInternetScreenState extends State<NoInternetScreen>
                     ),
                   ),
                   AppSpacing.verticalMD,
-                  if (isDisconnected)
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _openWifiSettings,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.primary,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          side: const BorderSide(
-                            color: AppColors.primary,
-                            width: 1.5,
-                          ),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _openWifiSettings,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primary,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        icon: const Icon(Icons.settings_rounded),
-                        label: const Text(
-                          'Open Settings',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        side: const BorderSide(
+                          color: AppColors.primary,
+                          width: 1.5,
+                        ),
+                      ),
+                      icon: const Icon(Icons.settings_rounded),
+                      label: const Text(
+                        'Open Settings',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
+                  ),
                 ],
               ),
             ),
@@ -342,65 +351,53 @@ class _NoInternetScreenState extends State<NoInternetScreen>
     IconData icon,
     VoidCallback onTap,
   ) {
-    return InkWell(
-      onTap: isConnected ? null : onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: isConnected
-                    ? AppColors.success.withOpacity(0.1)
-                    : AppColors.error.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isConnected
+                  ? AppColors.success.withOpacity(0.1)
+                  : AppColors.error.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              icon,
+              color: isConnected ? AppColors.success : AppColors.error,
+              size: 24,
+            ),
+          ),
+          AppSpacing.horizontalMD,
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textPrimary,
               ),
-              child: Icon(
-                icon,
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: isConnected
+                  ? AppColors.success.withOpacity(0.1)
+                  : AppColors.error.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              isConnected ? 'Connected' : 'Disconnected',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
                 color: isConnected ? AppColors.success : AppColors.error,
-                size: 24,
               ),
             ),
-            AppSpacing.horizontalMD,
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: isConnected
-                    ? AppColors.success.withOpacity(0.1)
-                    : AppColors.error.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                isConnected ? 'Connected' : 'Disconnected',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: isConnected ? AppColors.success : AppColors.error,
-                ),
-              ),
-            ),
-            if (!isConnected) ...[
-              AppSpacing.horizontalSM,
-              const Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 16,
-                color: AppColors.textSecondary,
-              ),
-            ],
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

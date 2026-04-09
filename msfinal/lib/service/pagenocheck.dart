@@ -8,7 +8,7 @@ class PageService {
   static Future<int?> getPageNo(int userId) async {
     try {
       final url = Uri.parse("$apiUrl?user_id=$userId");
-      final res = await http.get(url);
+      final res = await http.get(url).timeout(const Duration(seconds: 5));
 
       if (res.statusCode == 200) {
         final json = jsonDecode(res.body);

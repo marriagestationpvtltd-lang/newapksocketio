@@ -2421,6 +2421,35 @@ class _ChatWindowState extends State<ChatWindow> {
   }
 
   void _openProfileInNewTab(BuildContext context, int userId) {
+    try {
+      // Store userId in session storage for the new tab to read
+      html.window.sessionStorage['pendingProfileView'] = userId.toString();
+
+      // Open current URL in new tab - the app will check session storage on load
+      final currentUrl = html.window.location.href.split('#')[0];
+      final newWindow = html.window.open('$currentUrl#profile/$userId', '_blank');
+
+      if (newWindow == null) {
+        // Popup was blocked, fall back to same window navigation
+        html.window.sessionStorage.remove('pendingProfileView');
+        _navigateToProfile(context, userId);
+      } else {
+        // Successfully opened in new tab
+        // Also show a brief message that profile opened in new tab
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile opened in new tab'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      // If there's any error, fall back to same window navigation
+      _navigateToProfile(context, userId);
+    }
+  }
+
+  void _navigateToProfile(BuildContext context, int userId) {
     // Navigate to the user profile screen with proper provider setup
     Navigator.push(
       context,

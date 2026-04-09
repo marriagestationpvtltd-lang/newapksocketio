@@ -1,4 +1,7 @@
 <?php
+// Set CORS headers for Flutter Web and all browser-based API consumers.
+require_once __DIR__ . '/../shared/cors.php';
+
 /**
  * Central database configuration.
  *

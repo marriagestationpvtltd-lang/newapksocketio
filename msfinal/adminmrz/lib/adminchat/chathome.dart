@@ -34,6 +34,7 @@ import 'package:flutter/services.dart';
 import 'package:adminmrz/config/app_endpoints.dart';
 import 'package:adminmrz/users/userdetails/detailscreen.dart';
 import 'package:adminmrz/users/userdetails/userdetailprovider.dart';
+import 'package:uuid/uuid.dart';
 
 class ChatWindow extends StatefulWidget {
   final String name;
@@ -3927,14 +3928,35 @@ class _ChatWindowState extends State<ChatWindow> {
   Future<void> _toggleVoicePlayback(String messageId, String voiceUrl) async {
     if (_playingVoiceMessageId == messageId && _voiceIsPlaying) {
       await _voiceAudioPlayer.pause();
-    } else if (_playingVoiceMessageId == messageId && !_voiceIsPlaying) {
+      return;
+    }
+
+    if (_playingVoiceMessageId == messageId && !_voiceIsPlaying) {
       await _voiceAudioPlayer.play();
-    } else {
-      _voicePlaybackPosition = Duration.zero;
-      _voicePlaybackDuration = Duration.zero;
-      if (mounted) setState(() => _playingVoiceMessageId = messageId);
+      return;
+    }
+
+    _voicePlaybackPosition = Duration.zero;
+    _voicePlaybackDuration = Duration.zero;
+
+    try {
+      await _voiceAudioPlayer.stop();
       await _voiceAudioPlayer.setUrl(voiceUrl);
+      if (mounted) setState(() => _playingVoiceMessageId = messageId);
       await _voiceAudioPlayer.play();
+    } catch (e) {
+      debugPrint('Voice playback failed: $e');
+      await _voiceAudioPlayer.stop();
+      if (mounted) {
+        setState(() {
+          _playingVoiceMessageId = null;
+          _voicePlaybackPosition = Duration.zero;
+          _voicePlaybackDuration = Duration.zero;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Unable to play voice message')),
+        );
+      }
     }
   }
 
@@ -3984,13 +4006,14 @@ class _ChatWindowState extends State<ChatWindow> {
       if (receiverId == null) return;
 
       final voiceUrl = await _uploadVoiceMessage(path);
+      final String messageId = const Uuid().v4();
 
       _socketService.sendMessage(
         chatRoomId: AdminSocketService.chatRoomId(receiverId),
         receiverId: receiverId,
         message: voiceUrl,
         messageType: 'voice',
-        messageId: 'voice_${DateTime.now().millisecondsSinceEpoch}_$senderId',
+        messageId: messageId,
         receiverName: chatProvider.namee,
         receiverImage: chatProvider.profilePicture,
       );

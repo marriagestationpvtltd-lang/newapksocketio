@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
@@ -475,13 +476,17 @@ class SocketService {
   // ── Media upload ──────────────────────────────────────────────────────────
 
   /// Upload a chat image via PHP REST API and return the public URL.
+  /// [bytes] is the raw file data (use XFile.readAsBytes() to get it).
+  /// [filename] is used to set a sensible filename in the multipart request.
   Future<String> uploadChatImage({
-    required File imageFile,
+    required Uint8List bytes,
+    required String filename,
     required String userId,
     required String chatRoomId,
   }) async {
-    return _uploadFile(
-      file: imageFile,
+    return _uploadBytes(
+      bytes: bytes,
+      filename: filename,
       userId: userId,
       type: 'image',
       mimeType: MediaType('image', 'jpeg'),
@@ -490,20 +495,23 @@ class SocketService {
 
   /// Upload a voice message via PHP REST API and return the public URL.
   Future<String> uploadVoiceMessage({
-    required File voiceFile,
+    required Uint8List bytes,
+    required String filename,
     required String userId,
     required String chatRoomId,
   }) async {
-    return _uploadFile(
-      file: voiceFile,
+    return _uploadBytes(
+      bytes: bytes,
+      filename: filename,
       userId: userId,
       type: 'voice',
       mimeType: MediaType('audio', 'mpeg'),
     );
   }
 
-  Future<String> _uploadFile({
-    required File file,
+  Future<String> _uploadBytes({
+    required Uint8List bytes,
+    required String filename,
     required String userId,
     required String type,
     required MediaType mimeType,
@@ -515,9 +523,10 @@ class SocketService {
       queryParameters: {'type': safeType},
     );
     final request = http.MultipartRequest('POST', uri)
-      ..files.add(await http.MultipartFile.fromPath(
+      ..files.add(http.MultipartFile.fromBytes(
         'file',
-        file.path,
+        bytes,
+        filename: filename,
         contentType: mimeType,
       ));
 

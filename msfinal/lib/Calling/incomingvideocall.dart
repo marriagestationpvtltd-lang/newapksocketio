@@ -1,13 +1,17 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
-import 'package:flutter_ringtone_player/flutter_ringtone_player.dart';
+import 'package:flutter_ringtone_player/flutter_ringtone_player.dart'
+    if (dart.library.html) 'package:ms2026/utils/web_ringtone_player_stub.dart';
 import 'package:http/http.dart' as http;
-import 'package:permission_handler/permission_handler.dart';
+import 'package:permission_handler/permission_handler.dart'
+    if (dart.library.html) 'package:ms2026/utils/web_permission_stub.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart'
+    if (dart.library.html) 'package:ms2026/utils/web_local_notifications_stub.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../Chat/ChatlistScreen.dart';
 import '../Chat/call_overlay_manager.dart';

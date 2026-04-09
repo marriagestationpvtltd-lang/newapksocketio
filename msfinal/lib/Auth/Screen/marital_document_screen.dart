@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -675,12 +676,22 @@ class _MaritalDocumentUploadScreenState
             child: Stack(
               children: [
                 if (_scannedImagePath != null)
-                  Image.file(
-                    File(_scannedImagePath!),
-                    width: double.infinity,
-                    height: double.infinity,
-                    fit: BoxFit.cover,
-                  )
+                  kIsWeb
+                      ? FutureBuilder(
+                          future: XFile(_scannedImagePath!).readAsBytes(),
+                          builder: (context, snap) => snap.hasData
+                              ? Image.memory(snap.data!,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                  fit: BoxFit.cover)
+                              : const SizedBox(),
+                        )
+                      : Image.file(
+                          File(_scannedImagePath!),
+                          width: double.infinity,
+                          height: double.infinity,
+                          fit: BoxFit.cover,
+                        )
                 else if (_selectedImage != null)
                   FutureBuilder(
                     future: _selectedImage!.readAsBytes(),
@@ -1704,14 +1715,27 @@ class _MaritalDocumentUploadScreenState
     if (_selectedImage == null && _scannedImagePath == null) return;
     setState(() => _isScanning = true);
     try {
-      final File imageFile = _scannedImagePath != null
-          ? File(_scannedImagePath!)
-          : File(_selectedImage!.path);
-      final String? extractedText =
-          await _ocrService.extractDocumentId(imageFile);
-      setState(() => _isScanning = false);
-      if (extractedText != null && extractedText.isNotEmpty) {
-        _showScanResultDialog(extractedText);
+      // OCR only works on native (not web)
+      if (!kIsWeb) {
+        final File imageFile = _scannedImagePath != null
+            ? File(_scannedImagePath!)
+            : File(_selectedImage!.path);
+        final String? extractedText =
+            await _ocrService.extractDocumentId(imageFile);
+        setState(() => _isScanning = false);
+        if (extractedText != null && extractedText.isNotEmpty) {
+          _showScanResultDialog(extractedText);
+        }
+      } else {
+        setState(() => _isScanning = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('OCR scanning is not available on web. Please enter the document number manually.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
       }
     } catch (e) {
       setState(() => _isScanning = false);

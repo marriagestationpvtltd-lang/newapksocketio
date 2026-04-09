@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
@@ -2965,7 +2966,7 @@ class _MatrimonyProfilePageState extends State<MatrimonyProfilePage> {
                   Navigator.pop(context);
                   await _uploadProfilePictureBackground(
                     context,
-                    File(image.path),
+                    image,
                     userId,
                   );
                 }
@@ -2986,7 +2987,7 @@ class _MatrimonyProfilePageState extends State<MatrimonyProfilePage> {
                   Navigator.pop(context);
                   await _uploadProfilePictureBackground(
                     context,
-                    File(image.path),
+                    image,
                     userId,
                   );
                 }
@@ -3009,7 +3010,7 @@ class _MatrimonyProfilePageState extends State<MatrimonyProfilePage> {
   }
 
   Future<void> _uploadProfilePictureBackground(
-      BuildContext context, File imageFile, int userId) async {
+      BuildContext context, XFile imageFile, int userId) async {
     try {
       // Show loading
       ScaffoldMessenger.of(context).showSnackBar(
@@ -3029,13 +3030,22 @@ class _MatrimonyProfilePageState extends State<MatrimonyProfilePage> {
       final uri = Uri.parse('https://digitallami.com/Api2/profile_picture.php');
 
       final request = http.MultipartRequest('POST', uri)
-        ..fields['userid'] = userId.toString()
-        ..files.add(
-          await http.MultipartFile.fromPath(
-            'profile_picture',
-            imageFile.path,
-          ),
-        );
+        ..fields['userid'] = userId.toString();
+
+      // Use bytes-based upload on web; path-based on native
+      if (kIsWeb) {
+        final bytes = await imageFile.readAsBytes();
+        request.files.add(http.MultipartFile.fromBytes(
+          'profile_picture',
+          bytes,
+          filename: imageFile.name,
+        ));
+      } else {
+        request.files.add(await http.MultipartFile.fromPath(
+          'profile_picture',
+          imageFile.path,
+        ));
+      }
 
       final response = await request.send();
       final responseBody = await response.stream.bytesToString();

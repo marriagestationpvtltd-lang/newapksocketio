@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -16,6 +17,7 @@ import '../online/onlineservice.dart';
 import '../utils/time_utils.dart';
 import '../utils/image_utils.dart';
 import '../utils/privacy_utils.dart';
+import '../utils/responsive_layout.dart';
 import '../purposal/Purposalmodel.dart';
 import '../purposal/purposalservice.dart';
 import '../pushnotification/pushservice.dart';
@@ -71,6 +73,9 @@ class _ChatListScreenState extends State<ChatListScreen>
   // Admin online status
   bool _adminOnline = false;
   StreamSubscription? _adminStatusSubscription;
+
+  // Web two-panel: tracks the currently selected chat room on wide screens
+  Map<String, dynamic>? _webSelectedChatData;
 
   @override
   void initState() {
@@ -1167,6 +1172,23 @@ class _ChatListScreenState extends State<ChatListScreen>
       );
     }
 
+    // Web wide-screen: two-panel layout (like WhatsApp Web)
+    if (kIsWeb && ResponsiveLayout.isWideLayout(context)) {
+      return Scaffold(
+        body: Row(
+          children: [
+            SizedBox(
+              width: 360,
+              child: _buildChatListScaffold(),
+            ),
+            const VerticalDivider(width: 1, thickness: 1),
+            Expanded(child: _buildWebDetailPanel()),
+          ],
+        ),
+      );
+    }
+
+    // Mobile / narrow layout: original full-screen Scaffold
     return Scaffold(
       appBar: AppBar(
         flexibleSpace: Container(
@@ -1256,6 +1278,111 @@ class _ChatListScreenState extends State<ChatListScreen>
           ),
         ),
         floatingActionButton: null,
+    );
+  }
+
+  /// Builds the main chat list scaffold (used as the left panel on web).
+  Widget _buildChatListScaffold() {
+    return Scaffold(
+      appBar: AppBar(
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFFF90E18), Color(0xFFD00D15)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        automaticallyImplyLeading: false,
+        title: Row(
+          children: [
+            const Text('Chats', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 12),
+            if (_totalUnreadConversations > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.25),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '$_totalUnreadConversations',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+      body: Container(
+        color: const Color(0xFFFAF0F0),
+        child: Column(
+          children: [
+            _buildChatRequestsSection(),
+            _buildPinnedAdminCard(),
+            if (_totalUnreadCount > 0)
+              Container(
+                color: const Color(0xFFF90E18).withOpacity(0.08),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.message, color: Color(0xFFF90E18), size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      '$_totalUnreadCount unread messages in $_totalUnreadConversations conversations',
+                      style: const TextStyle(
+                        color: Color(0xFFF90E18),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Expanded(
+              child: _buildChatListWithDebug(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Builds the right detail panel for web two-panel layout.
+  Widget _buildWebDetailPanel() {
+    final sel = _webSelectedChatData;
+    if (sel == null) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.chat_bubble_outline, size: 72, color: Colors.grey),
+            SizedBox(height: 16),
+            Text(
+              'Select a conversation to start chatting',
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+    return ChatDetailScreen(
+      key: ValueKey(sel['chatRoomId']),
+      chatRoomId: sel['chatRoomId']!,
+      receiverId: sel['receiverId']!,
+      receiverName: sel['receiverName']!,
+      receiverImage: sel['receiverImage']!,
+      receiverPrivacy: sel['receiverPrivacy']!,
+      receiverPhotoRequest: sel['receiverPhotoRequest']!,
+      currentUserId: userId,
+      currentUserName: name,
+      currentUserImage: resolveApiImageUrl(userimage),
     );
   }
 
@@ -1395,22 +1522,35 @@ class _ChatListScreenState extends State<ChatListScreen>
           return InkWell(
             onTap: () {
               if (docstatus == "approved" && usertye == "paid") {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ChatDetailScreen(
-                      chatRoomId: data['chatRoomId']?.toString() ?? '',
-                      receiverId: otherParticipantId,
-                      receiverName: otherPersonName,
-                      receiverImage: resolvedOtherImage,
-                      receiverPrivacy: otherParticipantPrivacy,
-                      receiverPhotoRequest: otherParticipantPhotoRequest,
-                      currentUserId: userId,
-                      currentUserName: name,
-                      currentUserImage: resolveApiImageUrl(userimage),
+                final chatData = {
+                  'chatRoomId': data['chatRoomId']?.toString() ?? '',
+                  'receiverId': otherParticipantId,
+                  'receiverName': otherPersonName,
+                  'receiverImage': resolvedOtherImage,
+                  'receiverPrivacy': otherParticipantPrivacy,
+                  'receiverPhotoRequest': otherParticipantPhotoRequest,
+                };
+                if (kIsWeb && ResponsiveLayout.isWideLayout(context)) {
+                  // Web two-panel: update the right panel instead of navigating
+                  setState(() => _webSelectedChatData = chatData);
+                } else {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ChatDetailScreen(
+                        chatRoomId: chatData['chatRoomId']!,
+                        receiverId: chatData['receiverId']!,
+                        receiverName: chatData['receiverName']!,
+                        receiverImage: chatData['receiverImage']!,
+                        receiverPrivacy: chatData['receiverPrivacy']!,
+                        receiverPhotoRequest: chatData['receiverPhotoRequest']!,
+                        currentUserId: userId,
+                        currentUserName: name,
+                        currentUserImage: resolveApiImageUrl(userimage),
+                      ),
                     ),
-                  ),
-                );
+                  );
+                }
               }
               if (docstatus == "not_uploaded" && usertye == 'free') {
                 Navigator.push(

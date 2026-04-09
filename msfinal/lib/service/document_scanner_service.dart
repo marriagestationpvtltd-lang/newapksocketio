@@ -1,5 +1,6 @@
-import 'dart:io';
-import 'package:cunning_document_scanner/cunning_document_scanner.dart';
+import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
+import 'package:cunning_document_scanner/cunning_document_scanner.dart'
+    if (dart.library.html) 'package:ms2026/utils/web_document_scanner_stub.dart';
 
 /// Service for scanning documents with automatic edge detection and cropping
 class DocumentScannerService {

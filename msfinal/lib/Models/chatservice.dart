@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
 import 'package:uuid/uuid.dart';
 
@@ -168,9 +170,14 @@ class FirebaseService {
       final messageId = _uuid.v4();
       final fileName = 'chat_images/$chatRoomId/$messageId.jpg';
 
-      // Upload image to Firebase Storage
+      // Upload image to Firebase Storage (cross-platform)
       final ref = _storage.ref().child(fileName);
-      await ref.putFile(imageFile);
+      if (kIsWeb) {
+        final bytes = await imageFile.readAsBytes();
+        await ref.putData(bytes);
+      } else {
+        await ref.putFile(imageFile);
+      }
       final imageUrl = await ref.getDownloadURL();
 
       // Create message document
@@ -218,9 +225,15 @@ class FirebaseService {
       final messageId = _uuid.v4();
       final fileName = 'voice_messages/$chatRoomId/$messageId.mp3';
 
-      // Upload audio to Firebase Storage
+      // Upload audio to Firebase Storage (cross-platform)
       final ref = _storage.ref().child(fileName);
-      await ref.putFile(File(audioPath));
+      if (kIsWeb) {
+        final xfile = XFile(audioPath);
+        final bytes = await xfile.readAsBytes();
+        await ref.putData(bytes);
+      } else {
+        await ref.putFile(File(audioPath));
+      }
       final audioUrl = await ref.getDownloadURL();
 
       // Create message document
@@ -392,7 +405,12 @@ class FirebaseService {
     try {
       final fileName = 'profile_images/$userId/${DateTime.now().millisecondsSinceEpoch}.jpg';
       final ref = _storage.ref().child(fileName);
-      await ref.putFile(imageFile);
+      if (kIsWeb) {
+        final bytes = await imageFile.readAsBytes();
+        await ref.putData(bytes);
+      } else {
+        await ref.putFile(imageFile);
+      }
       return await ref.getDownloadURL();
     } catch (e) {
       print('Error uploading profile image: $e');
@@ -401,16 +419,13 @@ class FirebaseService {
   }
 
   // Pick image from gallery
-  Future<File?> pickImage() async {
+  Future<XFile?> pickImage() async {
     try {
       final pickedFile = await ImagePicker().pickImage(
         source: ImageSource.gallery,
         imageQuality: 85,
       );
-      if (pickedFile != null) {
-        return File(pickedFile.path);
-      }
-      return null;
+      return pickedFile;
     } catch (e) {
       print('Error picking image: $e');
       return null;

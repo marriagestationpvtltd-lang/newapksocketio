@@ -5,7 +5,7 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
 import 'package:http/http.dart' as http;
 import '../../../core/api/api_response.dart';
 import '../models/example_model.dart';

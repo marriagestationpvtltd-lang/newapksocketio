@@ -46,8 +46,9 @@ class DefaultFirebaseOptions {
     }
   }
 
+  // API key from android/app/google-services.json → client[0].api_key[0].current_key
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'REPLACE_WITH_NEW_API_KEY_FROM_GOOGLE_SERVICES_JSON',
+    apiKey: 'AIzaSyDtihED7bReUPkjkhAOBFDp3zw3chUTmgU',
     appId: '1:477405059891:android:d38bc46dcbeb60b54d7c46',
     messagingSenderId: '477405059891',
     projectId: 'digitallamicomnp',
@@ -55,28 +56,30 @@ class DefaultFirebaseOptions {
     storageBucket: 'digitallamicomnp.firebasestorage.app',
   );
 
+  // API key from ios/Runner/GoogleService-Info.plist → API_KEY
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'REPLACE_WITH_NEW_API_KEY_FROM_GOOGLESERVICE_INFO_PLIST',
+    apiKey: 'AIzaSyBOygWduFPB-XheH1EnquxMLdhSE0kEyLc',
     appId: '1:477405059891:ios:bfc486eb584d03ed4d7c46',
     messagingSenderId: '477405059891',
     projectId: 'digitallamicomnp',
     databaseURL: 'https://digitallamicomnp-default-rtdb.firebaseio.com',
     storageBucket: 'digitallamicomnp.firebasestorage.app',
-    iosClientId: 'REPLACE_WITH_NEW_IOS_CLIENT_ID',
     iosBundleId: 'com.digitallami.appz',
   );
 
-  // TODO: Replace the placeholder values below with your Firebase web app
-  // configuration from Firebase Console → Project Settings → Your apps → Web app.
-  // Run `flutterfire configure` to auto-generate these values.
+  // Web app configuration.
+  // apiKey  → same Firebase project; browser-unrestricted key (same as Android).
+  // appId   → MUST be filled in after registering a Web app in Firebase Console:
+  //           console.firebase.google.com → digitallamicomnp → Project settings
+  //           → Your apps → Add app → Web → copy the appId (1:477405059891:web:…)
+  // measurementId → optional (Google Analytics). Leave empty or fill from Console.
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'REPLACE_WITH_WEB_API_KEY',
-    appId: 'REPLACE_WITH_WEB_APP_ID',
+    apiKey: 'AIzaSyDtihED7bReUPkjkhAOBFDp3zw3chUTmgU',
+    appId: 'REPLACE_WITH_WEB_APP_ID', // TODO: register Web app in Firebase Console
     messagingSenderId: '477405059891',
     projectId: 'digitallamicomnp',
     authDomain: 'digitallamicomnp.firebaseapp.com',
     databaseURL: 'https://digitallamicomnp-default-rtdb.firebaseio.com',
     storageBucket: 'digitallamicomnp.firebasestorage.app',
-    measurementId: 'REPLACE_WITH_MEASUREMENT_ID',
   );
 }

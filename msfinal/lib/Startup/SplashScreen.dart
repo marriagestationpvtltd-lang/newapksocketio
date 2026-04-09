@@ -55,11 +55,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   // Guaranteed to be set in initState before any async callback can use it.
   late Future<void> _animationCompleted;
 
-  // Animation durations — the logo GIF needs ~3 s to complete its cycle, so
+  // Animation duration – the logo GIF needs ~3s to complete its cycle, so
   // keep the entrance long enough that the full animation plays before
   // navigation fires.
-  static const int _firstLaunchEntranceMs = 3000;
-  static const int _repeatLaunchEntranceMs = 3000;
+  static const int _entranceDurationMs = 3000;
 
   // Current app versions - Update these with your actual current versions
   final String currentAndroidVersion = '24.0.0'; // Your current Android version
@@ -143,9 +142,9 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   }
 
   void _setupAnimations() {
-    // Both first launch and subsequent launches use 3 000 ms so the full logo
+    // Both first launch and subsequent launches use 3000ms so the full logo
     // GIF animation plays before navigation fires.
-    final entranceMs = _isFirstLaunch ? _firstLaunchEntranceMs : _repeatLaunchEntranceMs;
+    final entranceMs = _entranceDurationMs;
 
     _entranceController = AnimationController(
       vsync: this,

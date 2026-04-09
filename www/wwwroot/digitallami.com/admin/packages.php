@@ -141,9 +141,9 @@ if ($response) {
                                 onclick="editPackage(
                                     <?php echo intval($pkg['id']); ?>,
                                     <?php echo json_encode($pkg['name']); ?>,
-                                    <?php echo json_encode(preg_replace('/[^0-9.]/', '', $pkg['duration'])); ?>,
+                                    <?php echo intval($pkg['duration']); ?>,
                                     <?php echo json_encode($pkg['description'] ?? ''); ?>,
-                                    <?php echo json_encode(preg_replace('/[^0-9.]/', '', $pkg['price'])); ?>
+                                    <?php echo floatval($pkg['price']); ?>
                                 )">
                                 <i class="fas fa-edit"></i>
                             </button>

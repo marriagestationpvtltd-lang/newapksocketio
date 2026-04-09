@@ -34,6 +34,7 @@ import 'constant/app_theme.dart';
 import 'navigation/app_navigation.dart';
 import 'online/onlineservice.dart';
 import 'service/connectivity_service.dart';
+import 'Calling/call_tone_settings.dart';
 import 'widgets/global_connectivity_handler.dart';
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
 FlutterLocalNotificationsPlugin();
@@ -1054,6 +1055,11 @@ void main() async {
     // works correctly before initialize() completes; the service updates its
     // state and notifies listeners once the HTTP checks finish.
     connectivityService.initialize();
+
+    // Pre-warm call tone settings cache so outgoing calls don't block on a
+    // server round-trip.  This is fire-and-forget; any failure is safe
+    // because load() falls back to SharedPreferences.
+    CallToneSettingsService.instance.preload();
 
     // Wait for Firebase before any Firebase-dependent setup so that
     // FCM token requests and local notification channel creation succeed.

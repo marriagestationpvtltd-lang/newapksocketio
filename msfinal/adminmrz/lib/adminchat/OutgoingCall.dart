@@ -77,6 +77,7 @@ class _CallScreenState extends State<CallScreen>
   late AudioPlayer _ringtonePlayer;
   Timer? _ringtoneRepeatTimer;
   StreamSubscription<PlayerState>? _ringtonePlayerStateSubscription;
+  bool _isPlayingRingtone = false;
 
   final AdminSocketService _socketService = AdminSocketService();
   StreamSubscription<Map<String, dynamic>>? _callAcceptedSubscription;
@@ -124,6 +125,7 @@ class _CallScreenState extends State<CallScreen>
       // the ringing tone while waiting for the recipient.
       if ((state == PlayerState.completed || state == PlayerState.stopped) &&
           widget.isOutgoingCall &&
+          _isPlayingRingtone &&
           !_ending &&
           !_callActive) {
         _scheduleRepeat();
@@ -136,13 +138,13 @@ class _CallScreenState extends State<CallScreen>
     final settings = context.read<CallSettingsProvider>();
     final interval = settings.repeatIntervalSeconds;
     _ringtoneRepeatTimer = Timer(Duration(seconds: interval), () {
-      if (!mounted || _ending) return;
+      if (!mounted || _ending || _callActive) return;
       _playRingtoneSingle();
     });
   }
 
   Future<void> _playRingtoneSingle() async {
-    if (!widget.isOutgoingCall || _ending) return;
+    if (!widget.isOutgoingCall || _ending || _callActive) return;
     try {
       final settings = context.read<CallSettingsProvider>();
       await _ringtonePlayer.stop();
@@ -155,6 +157,7 @@ class _CallScreenState extends State<CallScreen>
     try {
       await _ringtonePlayer.stop();
       final settings = context.read<CallSettingsProvider>();
+      _isPlayingRingtone = true;
       await _playPreferredTone(settings);
     } catch (_) {}
   }
@@ -182,6 +185,7 @@ class _CallScreenState extends State<CallScreen>
       _ringtoneRepeatTimer = null;
       _ringtonePlayerStateSubscription?.cancel();
       _ringtonePlayerStateSubscription = null;
+      _isPlayingRingtone = false;
       await _ringtonePlayer.stop();
     } catch (_) {}
   }

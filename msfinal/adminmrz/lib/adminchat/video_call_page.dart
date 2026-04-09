@@ -100,8 +100,11 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
 
   late AudioPlayer _ringtonePlayer;
   Timer? _ringtoneRepeatTimer;
+  StreamSubscription<PlayerState>? _ringtonePlayerStateSub;
+  bool _isPlayingRingtone = false;
 
   final AdminSocketService _socketService = AdminSocketService();
+  StreamSubscription<Map<String, dynamic>>? _callAcceptedSubscription;
   StreamSubscription<Map<String, dynamic>>? _callRejectedSubscription;
   StreamSubscription<Map<String, dynamic>>? _callCancelledSubscription;
   StreamSubscription<Map<String, dynamic>>? _callEndedSubscription;
@@ -120,9 +123,13 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
 
   void _setupAudioPlayer() {
     _ringtonePlayer.setReleaseMode(ReleaseMode.stop);
-    _ringtonePlayer.onPlayerStateChanged.listen((PlayerState state) {
-      // Schedule repeat when tone completes — state tracking is not needed here
-      if (state == PlayerState.completed && widget.isOutgoingCall && !_ending) {
+    _ringtonePlayerStateSub = _ringtonePlayer.onPlayerStateChanged.listen((PlayerState state) {
+      // Schedule repeat when tone completes or stops (e.g. Agora audio-focus takeover)
+      if ((state == PlayerState.completed || state == PlayerState.stopped) &&
+          widget.isOutgoingCall &&
+          _isPlayingRingtone &&
+          !_ending &&
+          !_callActive) {
         _scheduleRepeat();
       }
     });
@@ -133,13 +140,13 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     final settings = context.read<CallSettingsProvider>();
     final interval = settings.repeatIntervalSeconds;
     _ringtoneRepeatTimer = Timer(Duration(seconds: interval), () {
-      if (!mounted || _ending) return;
+      if (!mounted || _ending || _callActive) return;
       _playRingtoneSingle();
     });
   }
 
   Future<void> _playRingtoneSingle() async {
-    if (!widget.isOutgoingCall || _ending) return;
+    if (!widget.isOutgoingCall || _ending || _callActive) return;
     try {
       final settings = context.read<CallSettingsProvider>();
       await _ringtonePlayer.stop();
@@ -151,9 +158,13 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   Future<void> _playRingtone() async {
     if (!widget.isOutgoingCall) return;
     try {
-      await _stopRingtone();
+      // Cancel any pending repeat timer without destroying the state subscription
+      _ringtoneRepeatTimer?.cancel();
+      _ringtoneRepeatTimer = null;
+      await _ringtonePlayer.stop();
       final settings = context.read<CallSettingsProvider>();
       await _ringtonePlayer.setVolume(_speakerOn ? 1.0 : 0.8);
+      _isPlayingRingtone = true;
       await _playPreferredTone(settings);
     } catch (e) {
     }
@@ -173,6 +184,10 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   Future<void> _stopRingtone() async {
     try {
       _ringtoneRepeatTimer?.cancel();
+      _ringtoneRepeatTimer = null;
+      _ringtonePlayerStateSub?.cancel();
+      _ringtonePlayerStateSub = null;
+      _isPlayingRingtone = false;
       await _ringtonePlayer.stop();
     } catch (_) {}
   }
@@ -243,6 +258,15 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
           if (!mounted || _ending) return;
           if (data['channelName']?.toString() == _channel) {
             await _endCall(notifyPeer: false);
+          }
+        });
+
+        _callAcceptedSubscription?.cancel();
+        _callAcceptedSubscription =
+            _socketService.onCallAccepted.listen((data) async {
+          if (!mounted || _ending) return;
+          if (data['channelName']?.toString() == _channel) {
+            await _stopRingtone();
           }
         });
 
@@ -399,9 +423,11 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     await _callRejectedSubscription?.cancel();
     await _callCancelledSubscription?.cancel();
     await _callEndedSubscription?.cancel();
+    await _callAcceptedSubscription?.cancel();
     _callRejectedSubscription = null;
     _callCancelledSubscription = null;
     _callEndedSubscription = null;
+    _callAcceptedSubscription = null;
 
     if (widget.isOutgoingCall && notifyPeer) {
       if (_callActive) {
@@ -930,6 +956,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
    // _callTimer?.cancel();
     _timeoutTimer?.cancel();
     _ringtoneRepeatTimer?.cancel();
+    _ringtonePlayerStateSub?.cancel();
+    _callAcceptedSubscription?.cancel();
     _callRejectedSubscription?.cancel();
     _callCancelledSubscription?.cancel();
     _callEndedSubscription?.cancel();

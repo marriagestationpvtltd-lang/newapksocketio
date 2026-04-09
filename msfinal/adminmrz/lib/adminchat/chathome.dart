@@ -5827,8 +5827,15 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
     if (_photos.isEmpty) return;
     final url = _photos[_current].url;
     if (kIsWeb) {
+      final uri = Uri.tryParse(url);
+      final lastSegment = (uri != null && uri.pathSegments.isNotEmpty)
+          ? uri.pathSegments.last
+          : '';
+      final hasKnownExt = RegExp(r'\.(png|jpe?g|webp|gif|bmp|heic|heif)$', caseSensitive: false)
+          .hasMatch(lastSegment);
+      final ext = hasKnownExt ? lastSegment.split('.').last : 'img';
       final anchor = html.AnchorElement(href: url)
-        ..setAttribute('download', 'photo_${DateTime.now().millisecondsSinceEpoch}.jpg')
+        ..setAttribute('download', 'photo_${DateTime.now().millisecondsSinceEpoch}.$ext')
         ..target = '_blank';
       anchor.click();
       if (!mounted) return;
@@ -5874,13 +5881,13 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
       controller.dispose();
     }
     _transformControllers.clear();
-    final updated = _photos.where((p) => p.messageId != messageId).toList();
+    final updated = List<_AdminSharedPhoto>.from(_photos)..removeAt(_current);
     if (updated.isEmpty) {
       if (!mounted) return;
       Navigator.pop(context);
       return;
     }
-    final int nextIndex = _current.clamp(0, updated.length - 1).toInt();
+    final int nextIndex = _current.clamp(0, updated.length - 1);
     for (int i = 0; i < updated.length; i++) {
       _transformControllers[i] = TransformationController();
     }

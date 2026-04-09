@@ -3431,6 +3431,51 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     );
   }
 
+  /// Returns all image URLs that the other user has sent in this chat.
+  List<String> _getSharedPhotoUrls() {
+    final List<String> urls = [];
+    for (final msg in _cachedMessages) {
+      if (msg['senderId'] == widget.currentUserId) continue;
+      final type = msg['messageType']?.toString() ?? 'text';
+      final text = msg['message']?.toString() ?? '';
+      if (type == 'image' && text.isNotEmpty) {
+        urls.add(resolveApiImageUrl(text));
+      } else if (type == 'image_gallery') {
+        try {
+          final decoded = jsonDecode(text);
+          if (decoded is List) {
+            for (final u in decoded) {
+              if (u is String && u.isNotEmpty) urls.add(resolveApiImageUrl(u));
+            }
+          }
+        } catch (_) {}
+      }
+    }
+    return urls;
+  }
+
+  /// Shows a mini-profile bottom sheet for the person we are chatting with.
+  void _showChatUserProfileSheet(BuildContext context) {
+    final String resolvedImage = resolveApiImageUrl(widget.receiverImage);
+    final List<String> sharedPhotos = _getSharedPhotoUrls();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _ChatUserProfileSheet(
+        receiverId: widget.receiverId,
+        receiverName: widget.receiverName,
+        receiverImage: resolvedImage,
+        receiverPrivacy: widget.receiverPrivacy,
+        receiverPhotoRequest: widget.receiverPhotoRequest,
+        isOnline: _isOtherUserOnline,
+        lastSeen: _otherUserLastSeen,
+        sharedPhotoUrls: sharedPhotos,
+      ),
+    );
+  }
+
   Widget _buildHeader(BuildContext context) {
     final String resolvedReceiverImage =
         resolveApiImageUrl(widget.receiverImage);
@@ -3453,14 +3498,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             icon: const Icon(Icons.arrow_back, color: Colors.white, size: 26),
           ),
           GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ProfileScreen(userId: widget.receiverId),
-                ),
-              );
-            },
+            onTap: () => _showChatUserProfileSheet(context),
             child: PrivacyUtils.buildPrivacyAwareAvatar(
               imageUrl: resolvedReceiverImage,
               privacy: widget.receiverPrivacy,
@@ -3472,14 +3510,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           const SizedBox(width: 10),
           Expanded(
             child: GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ProfileScreen(userId: widget.receiverId),
-                  ),
-                );
-              },
+              onTap: () => _showChatUserProfileSheet(context),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -4061,6 +4092,283 @@ class _SwipeToReplyWrapperState extends State<_SwipeToReplyWrapper>
         ],
       ),
     );
+  }
+}
+
+// ─── Mini-profile bottom sheet shown when tapping avatar / name in chat ───────
+
+class _ChatUserProfileSheet extends StatelessWidget {
+  final String receiverId;
+  final String receiverName;
+  final String receiverImage;
+  final String? receiverPrivacy;
+  final String? receiverPhotoRequest;
+  final bool isOnline;
+  final DateTime? lastSeen;
+  final List<String> sharedPhotoUrls;
+
+  const _ChatUserProfileSheet({
+    required this.receiverId,
+    required this.receiverName,
+    required this.receiverImage,
+    this.receiverPrivacy,
+    this.receiverPhotoRequest,
+    required this.isOnline,
+    this.lastSeen,
+    required this.sharedPhotoUrls,
+  });
+
+  void _openPhotoViewer(BuildContext context, int index) {
+    if (sharedPhotoUrls.isEmpty) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => _GalleryViewerDialog(
+        urls: sharedPhotoUrls,
+        initialIndex: index,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool canShowPhotos = PrivacyUtils.shouldShowClearImage(
+      privacy: receiverPrivacy,
+      photoRequest: receiverPhotoRequest,
+    );
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // Avatar + name + status
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Row(
+                children: [
+                  PrivacyUtils.buildPrivacyAwareAvatar(
+                    imageUrl: receiverImage,
+                    privacy: receiverPrivacy,
+                    photoRequest: receiverPhotoRequest,
+                    radius: 32,
+                    backgroundColor: Colors.grey[300],
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          receiverName,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isOnline ? Colors.green : Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              isOnline
+                                  ? 'Online'
+                                  : (lastSeen != null
+                                      ? 'Last seen ${_formatLastSeen(lastSeen!)}'
+                                      : 'Offline'),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isOnline ? Colors.green : Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            // Shared photos section
+            if (sharedPhotoUrls.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Shared Photos',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => _openPhotoViewer(context, 0),
+                      child: const Text(
+                        'View All',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.red,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                height: 90,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: sharedPhotoUrls.length > 8
+                      ? 8
+                      : sharedPhotoUrls.length,
+                  itemBuilder: (ctx, i) {
+                    final isLastVisible = i == 7 &&
+                        sharedPhotoUrls.length > 8;
+                    return GestureDetector(
+                      onTap: () => _openPhotoViewer(context, i),
+                      child: Container(
+                        width: 80,
+                        height: 80,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          color: Colors.grey[200],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              canShowPhotos
+                                  ? Image.network(
+                                      sharedPhotoUrls[i],
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(
+                                        Icons.photo,
+                                        color: Colors.grey,
+                                        size: 30,
+                                      ),
+                                    )
+                                  : Stack(
+                                      fit: StackFit.expand,
+                                      children: [
+                                        Image.network(
+                                          sharedPhotoUrls[i],
+                                          fit: BoxFit.cover,
+                                        ),
+                                        BackdropFilter(
+                                          filter: ui.ImageFilter.blur(
+                                              sigmaX: 8, sigmaY: 8),
+                                          child: Container(
+                                            color:
+                                                Colors.black.withOpacity(0.3),
+                                          ),
+                                        ),
+                                        const Center(
+                                          child: Icon(Icons.lock_outline,
+                                              color: Colors.white, size: 24),
+                                        ),
+                                      ],
+                                    ),
+                              if (isLastVisible)
+                                Container(
+                                  color: Colors.black54,
+                                  child: Center(
+                                    child: Text(
+                                      '+${sharedPhotoUrls.length - 7}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+            ],
+            // View Profile button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            UserProfilePage(userId: receiverId),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.person_outline),
+                  label: const Text('View Profile'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _formatLastSeen(DateTime lastSeen) {
+    final diff = DateTime.now().difference(lastSeen);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 }
 

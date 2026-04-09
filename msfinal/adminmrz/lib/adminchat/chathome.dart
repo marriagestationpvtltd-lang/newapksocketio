@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
@@ -29,6 +30,7 @@ import 'dart:js' as js;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:adminmrz/config/app_endpoints.dart';
+import 'package:adminmrz/users/userdetails/detailscreen.dart';
 
 class ChatWindow extends StatefulWidget {
   final String name;
@@ -1605,6 +1607,56 @@ class _ChatWindowState extends State<ChatWindow> {
     );
   }
 
+  // ── PROFILE SHEET HELPERS ────────────────────────────────────────────
+
+  /// Returns image URLs from messages sent by the user (not admin) in this chat.
+  List<String> _getAdminSharedPhotoUrls() {
+    final List<String> urls = [];
+    for (final msg in _messages) {
+      if (msg['senderid'] == senderId.toString()) continue;
+      final type = msg['type']?.toString() ?? 'text';
+      if (type == 'image') {
+        final imageUrl = msg['imageUrl']?.toString() ?? '';
+        if (imageUrl.isNotEmpty) urls.add(imageUrl);
+      } else if (type == 'image_gallery') {
+        final raw = msg['message']?.toString() ?? '';
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is List) {
+            for (final u in decoded) {
+              if (u is String && u.isNotEmpty) urls.add(u);
+            }
+          }
+        } catch (_) {}
+      }
+    }
+    return urls;
+  }
+
+  /// Shows a mini-profile bottom sheet for the selected user.
+  void _showUserProfileSheet(BuildContext context, ChatProvider chatProvider) {
+    final int? userId = chatProvider.id;
+    if (userId == null) return;
+    final List<String> sharedPhotos = _getAdminSharedPhotoUrls();
+    final String name = chatProvider.namee ?? 'User';
+    final String? avatarUrl = chatProvider.profilePicture;
+    final bool isOnline = chatProvider.online;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _AdminUserProfileSheet(
+        userId: userId,
+        name: name,
+        avatarUrl: avatarUrl,
+        isOnline: isOnline,
+        isPaid: chatProvider.ispaid,
+        sharedPhotoUrls: sharedPhotos,
+      ),
+    );
+  }
+
   // ── ICON BUTTON HELPER ────────────────────────────────────────────
   Widget _iconBtn({
     required IconData icon,
@@ -1694,43 +1746,48 @@ class _ChatWindowState extends State<ChatWindow> {
                 ),
                 const SizedBox(width: 8),
               ],
-              // Avatar + paid badge
-              Stack(
-                children: [
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: const Color(0xFFF1F5F9),
-                    backgroundImage: chatProvider.profilePicture != null &&
-                            chatProvider.profilePicture!.isNotEmpty
-                        ? NetworkImage(chatProvider.profilePicture!)
-                        : null,
-                    child: chatProvider.profilePicture == null ||
-                            chatProvider.profilePicture!.isEmpty
-                        ? Icon(Icons.person, size: 18, color: Colors.grey[400])
-                        : null,
-                  ),
-                  if (chatProvider.ispaid)
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        width: 14,
-                        height: 14,
-                        decoration: BoxDecoration(
-                          color: Colors.amber,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white, width: 1.5),
-                        ),
-                        child: const Icon(Icons.star, size: 8, color: Colors.white),
-                      ),
+              // Avatar + paid badge (tappable to open mini-profile sheet)
+              GestureDetector(
+                onTap: () => _showUserProfileSheet(context, chatProvider),
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: const Color(0xFFF1F5F9),
+                      backgroundImage: chatProvider.profilePicture != null &&
+                              chatProvider.profilePicture!.isNotEmpty
+                          ? NetworkImage(chatProvider.profilePicture!)
+                          : null,
+                      child: chatProvider.profilePicture == null ||
+                              chatProvider.profilePicture!.isEmpty
+                          ? Icon(Icons.person, size: 18, color: Colors.grey[400])
+                          : null,
                     ),
-                ],
+                    if (chatProvider.ispaid)
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          width: 14,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: Colors.amber,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white, width: 1.5),
+                          ),
+                          child: const Icon(Icons.star, size: 8, color: Colors.white),
+                        ),
+                      ),
+                  ],
+                ),
               ),
               const SizedBox(width: 10),
 
-              // Name + status
+              // Name + status (tappable to open mini-profile sheet)
               Expanded(
-                child: Column(
+                child: GestureDetector(
+                  onTap: () => _showUserProfileSheet(context, chatProvider),
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -1813,6 +1870,7 @@ class _ChatWindowState extends State<ChatWindow> {
                       ],
                     ),
                   ],
+                ),
                 ),
               ),
 
@@ -5404,6 +5462,392 @@ class _ZoomablePageImageState extends State<_ZoomablePageImage> {
             size: 64,
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─── Mini-profile bottom sheet for Admin Chat ────────────────────────────────
+
+class _AdminUserProfileSheet extends StatelessWidget {
+  final int userId;
+  final String name;
+  final String? avatarUrl;
+  final bool isOnline;
+  final bool isPaid;
+  final List<String> sharedPhotoUrls;
+
+  const _AdminUserProfileSheet({
+    required this.userId,
+    required this.name,
+    this.avatarUrl,
+    required this.isOnline,
+    required this.isPaid,
+    required this.sharedPhotoUrls,
+  });
+
+  void _openPhotoViewer(BuildContext context, int index) {
+    if (sharedPhotoUrls.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _AdminPhotoViewerPage(
+          urls: sharedPhotoUrls,
+          initialIndex: index,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Drag handle
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // Avatar + name + status
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 32,
+                    backgroundColor: const Color(0xFFF1F5F9),
+                    backgroundImage: (avatarUrl != null && avatarUrl!.isNotEmpty)
+                        ? NetworkImage(avatarUrl!)
+                        : null,
+                    child: (avatarUrl == null || avatarUrl!.isEmpty)
+                        ? const Icon(Icons.person, size: 30, color: Colors.grey)
+                        : null,
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                name,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ),
+                            if (isPaid)
+                              Container(
+                                margin: const EdgeInsets.only(left: 6),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.shade100,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.star,
+                                        size: 12, color: Colors.amber),
+                                    SizedBox(width: 3),
+                                    Text(
+                                      'Premium',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.amber,
+                                          fontWeight: FontWeight.w600),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isOnline ? Colors.green : Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              isOnline ? 'Online' : 'Offline',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isOnline ? Colors.green : Colors.grey[600],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'ID: $userId',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            // Shared photos section
+            if (sharedPhotoUrls.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Shared Photos',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => _openPhotoViewer(context, 0),
+                      child: const Text(
+                        'View All',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.red,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                height: 90,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: sharedPhotoUrls.length > 8 ? 8 : sharedPhotoUrls.length,
+                  itemBuilder: (ctx, i) {
+                    final isLastVisible =
+                        i == 7 && sharedPhotoUrls.length > 8;
+                    return GestureDetector(
+                      onTap: () => _openPhotoViewer(context, i),
+                      child: Container(
+                        width: 80,
+                        height: 80,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          color: Colors.grey[200],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.network(
+                                sharedPhotoUrls[i],
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.photo,
+                                  color: Colors.grey,
+                                  size: 30,
+                                ),
+                              ),
+                              if (isLastVisible)
+                                Container(
+                                  color: Colors.black54,
+                                  child: Center(
+                                    child: Text(
+                                      '+${sharedPhotoUrls.length - 7}',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+            ],
+            // View Profile button
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => UserDetailsScreen(
+                          userId: userId,
+                          myId: 1,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.person_outline),
+                  label: const Text('View Profile'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Full-screen photo viewer for Admin Chat ──────────────────────────────────
+
+class _AdminPhotoViewerPage extends StatefulWidget {
+  final List<String> urls;
+  final int initialIndex;
+
+  const _AdminPhotoViewerPage({
+    required this.urls,
+    required this.initialIndex,
+  });
+
+  @override
+  State<_AdminPhotoViewerPage> createState() => _AdminPhotoViewerPageState();
+}
+
+class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
+  late final PageController _pageController;
+  late int _current;
+
+  @override
+  void initState() {
+    super.initState();
+    _current = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            itemCount: widget.urls.length,
+            onPageChanged: (i) => setState(() => _current = i),
+            itemBuilder: (ctx, i) => InteractiveViewer(
+              child: Center(
+                child: Image.network(
+                  widget.urls[i],
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Icon(
+                    Icons.broken_image,
+                    color: Colors.white54,
+                    size: 64,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // Close button
+          Positioned(
+            top: 48,
+            right: 16,
+            child: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white, size: 28),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+          // Page counter
+          Positioned(
+            top: 54,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Text(
+                '${_current + 1} / ${widget.urls.length}',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+          // Dot indicators
+          if (widget.urls.length > 1)
+            Positioned(
+              bottom: 32,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                  widget.urls.length > 20 ? 20 : widget.urls.length,
+                  (i) => Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: _current == i ? 10 : 6,
+                    height: _current == i ? 10 : 6,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _current == i ? Colors.white : Colors.white38,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

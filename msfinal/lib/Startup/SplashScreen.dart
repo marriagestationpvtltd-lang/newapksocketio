@@ -55,9 +55,11 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   // Guaranteed to be set in initState before any async callback can use it.
   late Future<void> _animationCompleted;
 
-  // Animation durations
-  static const int _firstLaunchEntranceMs = 1200;
-  static const int _repeatLaunchEntranceMs = 850;
+  // Animation durations — the logo GIF needs ~3 s to complete its cycle, so
+  // keep the entrance long enough that the full animation plays before
+  // navigation fires.
+  static const int _firstLaunchEntranceMs = 3000;
+  static const int _repeatLaunchEntranceMs = 3000;
 
   // Current app versions - Update these with your actual current versions
   final String currentAndroidVersion = '24.0.0'; // Your current Android version
@@ -141,8 +143,8 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   }
 
   void _setupAnimations() {
-    // First launch: 1200 ms (full cinematic entrance).
-    // Subsequent launches: 850 ms (snappy but still branded).
+    // Both first launch and subsequent launches use 3 000 ms so the full logo
+    // GIF animation plays before navigation fires.
     final entranceMs = _isFirstLaunch ? _firstLaunchEntranceMs : _repeatLaunchEntranceMs;
 
     _entranceController = AnimationController(
@@ -162,10 +164,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       duration: const Duration(milliseconds: 900),
     )..repeat();
 
-    // Decorative rings: runs once, 1100 ms
+    // Decorative rings: runs once, 2200 ms (scales with the longer entrance)
     _ringController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1100),
+      duration: const Duration(milliseconds: 2200),
     );
 
     // ── Logo ────────────────────────────────────────────────────────────────
@@ -774,7 +776,14 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   void _goTo(Widget screen) {
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (_) => screen),
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => screen,
+        transitionDuration: const Duration(milliseconds: 600),
+        reverseTransitionDuration: const Duration(milliseconds: 300),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+      ),
     );
   }
 
@@ -835,6 +844,13 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
+    // Make the logo fill most of the screen width (≈3-4× the previous 220dp).
+    final screenWidth = MediaQuery.of(context).size.width;
+    final logoSize = screenWidth * 0.85;          // ~85% of screen width
+    final containerSize = logoSize * 1.15;         // breathing room for rings/glow
+    final glowSize = logoSize * 1.1;
+    final ringBaseSize = logoSize * 0.95;
+
     // Single unified animated build — every launch gets the premium experience.
     return Scaffold(
       backgroundColor: AppColors.white,
@@ -848,8 +864,8 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
               children: [
                 // ── Logo area: glow + rings + logo stacked ───────────────────
                 SizedBox(
-                  width: 280,
-                  height: 280,
+                  width: containerSize,
+                  height: containerSize,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
@@ -862,8 +878,8 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                             child: child,
                           ),
                           child: Container(
-                            width: 260,
-                            height: 260,
+                            width: glowSize,
+                            height: glowSize,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               gradient: RadialGradient(
@@ -879,9 +895,9 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                         ),
 
                       // Decorative expanding rings (matrimony celebration)
-                      _buildRing(_ring1Scale, _ring1Opacity, 220),
-                      _buildRing(_ring2Scale, _ring2Opacity, 220),
-                      _buildRing(_ring3Scale, _ring3Opacity, 220),
+                      _buildRing(_ring1Scale, _ring1Opacity, ringBaseSize),
+                      _buildRing(_ring2Scale, _ring2Opacity, ringBaseSize),
+                      _buildRing(_ring3Scale, _ring3Opacity, ringBaseSize),
 
                       // Logo: drops in from above + elastic bounce + pulse
                       if (_entranceController != null &&
@@ -903,18 +919,18 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                               ),
                             );
                           },
-                          child: const Image(
-                            image: AssetImage('assets/images/Mslogo.gif'),
-                            height: 220,
-                            width: 220,
+                          child: Image(
+                            image: const AssetImage('assets/images/Mslogo.gif'),
+                            height: logoSize,
+                            width: logoSize,
                             fit: BoxFit.contain,
                           ),
                         )
                       else
-                        const Image(
-                          image: AssetImage('assets/images/Mslogo.gif'),
-                          height: 220,
-                          width: 220,
+                        Image(
+                          image: const AssetImage('assets/images/Mslogo.gif'),
+                          height: logoSize,
+                          width: logoSize,
                           fit: BoxFit.contain,
                         ),
                     ],

@@ -45,6 +45,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   Map<String, dynamic>? _versionData;
   bool _isCheckingVersion = true;
   String? _errorMessage;
+  bool _isFirstLaunch = true; // Track if this is the first app launch
 
   // Completes when the entrance animation finishes.
   // Guaranteed to be set in initState before any async callback can use it.
@@ -73,13 +74,44 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   void initState() {
     super.initState();
     _setupAnimations();
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    // Check first launch status before doing anything else
+    await _checkFirstLaunch();
+
     // TickerCanceled is expected when the widget disposes while the animation
     // is still running (e.g. user leaves the app); swallow it intentionally.
-    _animationCompleted = _entranceController.forward().orCancel
-        .catchError((Object e) {
-          if (e is! TickerCanceled) debugPrint('Splash animation error: $e');
-        });
+    // Only play animation on first launch
+    if (_isFirstLaunch) {
+      _animationCompleted = _entranceController.forward().orCancel
+          .catchError((Object e) {
+            if (e is! TickerCanceled) debugPrint('Splash animation error: $e');
+          });
+    } else {
+      // Skip animation on subsequent launches - complete immediately
+      _animationCompleted = Future.value();
+      _entranceController.value = 1.0; // Jump to end state
+    }
+
     _checkAppVersion();
+  }
+
+  Future<void> _checkFirstLaunch() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasLaunchedBefore = prefs.getBool('has_launched_before') ?? false;
+
+    if (mounted) {
+      setState(() {
+        _isFirstLaunch = !hasLaunchedBefore;
+      });
+    }
+
+    // Mark that the app has been launched
+    if (!hasLaunchedBefore) {
+      await prefs.setBool('has_launched_before', true);
+    }
   }
 
   void _setupAnimations() {
@@ -414,12 +446,22 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   Future<void> _proceedWithNavigation() async {
     if (!mounted) return;
 
-    // Wait for the entrance animation to finish so we never navigate
-    // mid-animation and the user always sees the full splash.
-    await _animationCompleted;
+    // On subsequent launches, skip the animation wait entirely
+    if (!_isFirstLaunch) {
+      // Proceed immediately without animation delay
+      await _navigateBasedOnUserState();
+    } else {
+      // Wait for the entrance animation to finish so we never navigate
+      // mid-animation and the user always sees the full splash on first launch.
+      await _animationCompleted;
 
-    if (!mounted) return;
+      if (!mounted) return;
 
+      await _navigateBasedOnUserState();
+    }
+  }
+
+  Future<void> _navigateBasedOnUserState() async {
     await context.read<SignupModel>().loadUserData();
 
     final prefs = await SharedPreferences.getInstance();
@@ -621,6 +663,99 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   @override
   Widget build(BuildContext context) {
+    // On subsequent launches, show a minimal splash screen
+    if (!_isFirstLaunch) {
+      return Scaffold(
+        backgroundColor: AppColors.white,
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Show logo without animation on subsequent launches
+              const Image(
+                image: AssetImage('assets/images/Mslogo.gif'),
+                height: 250,
+                width: 250,
+                fit: BoxFit.contain,
+              ),
+              const SizedBox(height: 28),
+              ShaderMask(
+                shaderCallback: (bounds) =>
+                    AppColors.primaryGradient.createShader(bounds),
+                child: const Text(
+                  'Marriage Station',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.white,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                "Nepal's #1 Matrimony Platform",
+                style: TextStyle(
+                  fontSize: 16,
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              if (_isCheckingVersion) ...[
+                const SizedBox(height: 40),
+                const CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                ),
+              ],
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 40),
+                Icon(Icons.wifi_off_rounded,
+                    color: AppColors.error.withOpacity(0.7), size: 36),
+                const SizedBox(height: 12),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    _errorMessage!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _isCheckingVersion = true;
+                      _errorMessage = null;
+                    });
+                    _checkAppVersion();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 28, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Icon(Icons.refresh,
+                      color: AppColors.white),
+                  label: const Text(
+                    'Retry',
+                    style: TextStyle(
+                        color: AppColors.white,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    // First launch: Show full animated splash screen
     return Scaffold(
       backgroundColor: AppColors.white,
       body: Stack(

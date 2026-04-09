@@ -10,8 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 // On native (dart:io) it manually follows redirects to preserve POST.
 // On web the browser's XHR layer is used unchanged.
 import '_http_upload_stub.dart'
-import 'package:adminmrz/config/app_endpoints.dart';
     if (dart.library.io) '_http_upload_io.dart';
+import 'package:adminmrz/config/app_endpoints.dart';
 
 /// Available ringtone options bundled with the app.
 class RingtoneTone {

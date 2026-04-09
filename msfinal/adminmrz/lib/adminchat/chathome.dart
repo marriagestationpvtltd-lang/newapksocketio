@@ -2658,18 +2658,18 @@ class _ChatWindowState extends State<ChatWindow> {
     if (type == 'image_gallery') {
       List<String> galleryUrls;
       try {
-        final decoded = jsonDecode(rawMessage);
+        final decoded = jsonDecode(message);
         if (decoded is List) {
           galleryUrls = decoded.whereType<String>().toList();
         } else {
-          galleryUrls = [rawMessage];
+          galleryUrls = [message];
         }
       } on FormatException catch (e) {
         debugPrint('image_gallery: JSON parse error: $e');
-        galleryUrls = [rawMessage];
+        galleryUrls = [message];
       } catch (e) {
         debugPrint('image_gallery: unexpected error: $e');
-        galleryUrls = [rawMessage];
+        galleryUrls = [message];
       }
 
       Widget galleryWidget = _buildAdminGalleryGrid(galleryUrls);

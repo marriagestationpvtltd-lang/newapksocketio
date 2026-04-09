@@ -27,6 +27,7 @@ import '../service/pagenocheck.dart';
 import '../webrtc/webrtc.dart';
 import '../constant/app_colors.dart';
 import '../constant/app_dimensions.dart';
+import '../navigation/app_navigation.dart';
 import 'MainControllere.dart';
 import 'onboarding.dart';
 
@@ -45,6 +46,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   bool _isCheckingVersion = true;
   String? _errorMessage;
   bool _isFirstLaunch = true; // Track if this is the first app launch
+
+  // Prevents double-navigation when the background version check completes
+  // after the splash screen has already navigated away.
+  bool _navigationStarted = false;
 
   // Completes when the entrance animation finishes.
   // Guaranteed to be set in initState before any async callback can use it.
@@ -93,8 +98,13 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       _animationCompleted = Future.value();
     }
 
-    // Run version check in parallel with animation/navigation
-    _checkAppVersion();
+    // Proceed to navigation immediately — version check runs in the background
+    // so a slow or unreachable server never blocks the user from opening the app.
+    _proceedWithNavigation();
+
+    // Check for app updates in background. The result never delays navigation;
+    // if an update is available a dialog is shown on top of the current screen.
+    _checkAppVersionInBackground();
   }
 
   Future<void> _checkFirstLaunch() async {
@@ -187,101 +197,95 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     super.dispose();
   }
 
-  Future<void> _checkAppVersion() async {
-    // Skip the version check if it succeeded recently (within the last 6 hours)
-    // and no update was pending. This avoids a network round-trip on every
-    // subsequent launch and lets users reach the home screen immediately.
+  /// Background version check — runs after navigation has already started so
+  /// it never blocks the user from reaching the app.
+  ///
+  /// • Within 6 h of the last check  → skipped entirely.
+  /// • HTTP success with new version  → shows update dialog on the current screen.
+  /// • HTTP error / timeout           → saves a shortened cache time (30 min) so
+  ///   we retry later but don't hammer the server on every launch.
+  Future<void> _checkAppVersionInBackground() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      // 0 means "never checked" → the subtraction yields a large positive number
-      // that is guaranteed to exceed sixHoursMs, so the API call proceeds.
+      // 0 means "never checked" → always proceeds on fresh install.
       final lastCheck = prefs.getInt('last_version_check_ok') ?? 0;
       final msElapsed = DateTime.now().millisecondsSinceEpoch - lastCheck;
       const sixHoursMs = 6 * 60 * 60 * 1000;
-      if (msElapsed < sixHoursMs) {
-        if (mounted) setState(() => _isCheckingVersion = false);
-        _proceedWithNavigation();
-        return;
-      }
-    } catch (_) {}
+      if (msElapsed < sixHoursMs) return; // Checked recently — nothing to do.
 
-    try {
-      // Attempt the version check directly — no separate connectivity
-      // pre-check (that would fire two more HTTP requests to google.com /
-      // cloudflare.com and add up to 5 s on a slow connection).
-      // A 5 s timeout is enough; on failure we proceed without blocking.
       final response = await http.get(
         Uri.parse('${kApiBaseUrl}/app.php'),
       ).timeout(const Duration(seconds: 5));
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true) {
-          // Cache the timestamp so we can skip this check for the next 6 hours.
-          SharedPreferences.getInstance()
-              .then((p) => p.setInt('last_version_check_ok',
-                  DateTime.now().millisecondsSinceEpoch))
-              .catchError((_) {});
-          if (mounted) {
-            setState(() {
-              _versionData = data['data'];
-              _isCheckingVersion = false;
-            });
-          }
-          // Check if update is needed
-          await _checkUpdateNeeded();
-        } else {
-          if (mounted) setState(() => _isCheckingVersion = false);
-          _proceedWithNavigation();
-        }
-      } else {
-        if (mounted) setState(() => _isCheckingVersion = false);
-        _proceedWithNavigation();
-      }
-    } catch (_) {
-      // Network unavailable or timeout — proceed so logged-in users are not
-      // stuck on the splash screen just because of a failed version check.
+      // Always update the cache after a real HTTP attempt so that a server
+      // returning non-success or an update-not-needed result doesn't trigger
+      // a repeat check on the very next launch.
+      await prefs.setInt(
+          'last_version_check_ok', DateTime.now().millisecondsSinceEpoch);
+
+      if (response.statusCode != 200) return;
+
+      final data = jsonDecode(response.body);
+      if (data['success'] != true) return;
+
+      _versionData = data['data'];
       if (mounted) setState(() => _isCheckingVersion = false);
-      _proceedWithNavigation();
+
+      _showUpdateDialogIfNeeded();
+    } catch (_) {
+      // Network unavailable or timeout.  Save a shortened cache timestamp so
+      // that we retry in ~30 min rather than on every single launch.
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final retryAfter30Min = DateTime.now().millisecondsSinceEpoch -
+            (6 * 60 * 60 * 1000 - 30 * 60 * 1000);
+        await prefs.setInt('last_version_check_ok', retryAfter30Min);
+      } catch (_) {}
     }
   }
 
-  Future<void> _checkUpdateNeeded() async {
-    if (_versionData == null) {
-      _proceedWithNavigation();
-      return;
-    }
+  /// Shows an update dialog on whichever screen is currently active.
+  /// Safe to call after the splash screen has already navigated away because it
+  /// uses the global [navigatorKey] context instead of the widget's own context.
+  void _showUpdateDialogIfNeeded() {
+    if (_versionData == null) return;
 
-    final String serverAndroidVersion = _versionData!['android_version'];
-    final String serverIOSVersion = _versionData!['ios_version'];
-    final bool forceUpdate = _versionData!['force_update'];
-    final String description = _versionData!['description'];
-    final String appLink = _versionData!['app_link'];
+    final String serverAndroidVersion =
+        _versionData!['android_version']?.toString() ?? '';
+    final String serverIOSVersion =
+        _versionData!['ios_version']?.toString() ?? '';
+    final bool forceUpdate = _versionData!['force_update'] == true;
+    final String description =
+        _versionData!['description']?.toString() ?? '';
+    final String appLink = _versionData!['app_link']?.toString() ?? '';
 
-    if (kIsWeb) {
-      // On web, no platform-specific version check; proceed directly
-      _proceedWithNavigation();
-      return;
-    }
+    if (kIsWeb) return;
 
     bool updateNeeded = false;
     String? platformVersion;
     final isAndroid = defaultTargetPlatform == TargetPlatform.android;
     final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
 
-    if (isAndroid) {
-      updateNeeded = _compareVersions(currentAndroidVersion, serverAndroidVersion);
+    if (isAndroid && serverAndroidVersion.isNotEmpty) {
+      updateNeeded =
+          _compareVersions(currentAndroidVersion, serverAndroidVersion);
       platformVersion = serverAndroidVersion;
-    } else if (isIOS) {
+    } else if (isIOS && serverIOSVersion.isNotEmpty) {
       updateNeeded = _compareVersions(currentIOSVersion, serverIOSVersion);
       platformVersion = serverIOSVersion;
     }
 
-    if (updateNeeded) {
-      _showUpdateDialog(forceUpdate, description, appLink, platformVersion!);
-    } else {
-      _proceedWithNavigation();
-    }
+    if (!updateNeeded) return;
+
+    // Use the global navigator key so the dialog works even after the splash
+    // screen has been replaced by the destination screen.
+    final ctx = mounted ? context : navigatorKey.currentContext;
+    if (ctx == null) return;
+
+    _showUpdateDialog(
+      forceUpdate, description, appLink, platformVersion!,
+      dialogContext: ctx,
+    );
   }
 
   bool _compareVersions(String current, String server) {
@@ -297,11 +301,15 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     return serverParts.length > currentParts.length;
   }
 
-  void _showUpdateDialog(bool forceUpdate, String description, String appLink, String newVersion) {
+  void _showUpdateDialog(bool forceUpdate, String description, String appLink,
+      String newVersion, {BuildContext? dialogContext}) {
+    // Use the supplied context (e.g. navigatorKey.currentContext when called
+    // from the background check) or fall back to the widget's own context.
+    final ctx = dialogContext ?? context;
     showDialog(
-      context: context,
+      context: ctx,
       barrierDismissible: !forceUpdate,
-      builder: (BuildContext context) {
+      builder: (BuildContext dialogCtx) {
         return PopScope(
           canPop: !forceUpdate,
           child: AlertDialog(
@@ -401,7 +409,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
               if (!forceUpdate)
                 TextButton(
                   onPressed: () {
-                    Navigator.of(context).pop();
+                    Navigator.of(dialogCtx).pop();
+                    // _proceedWithNavigation() is a no-op once navigation has
+                    // started, so it's safe to call here for the rare case
+                    // where the background dialog fires before navigation.
                     _proceedWithNavigation();
                   },
                   style: TextButton.styleFrom(
@@ -451,6 +462,11 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   }
 
   Future<void> _proceedWithNavigation() async {
+    // Prevent duplicate navigation (e.g. from the background version-check
+    // callback firing after we have already navigated away).
+    if (_navigationStarted) return;
+    _navigationStarted = true;
+
     if (!mounted) return;
 
     // On subsequent launches, proceed immediately without any delay

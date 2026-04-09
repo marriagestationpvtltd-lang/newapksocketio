@@ -1004,22 +1004,24 @@ Future<void> setupFirebaseMessaging() async {
   FirebaseMessaging.onBackgroundMessage(firebaseBackgroundHandler);
 }
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
+/// Initialises Firebase without blocking [runApp]. The returned [Future] is
+/// awaited in [addPostFrameCallback] before any Firebase-dependent setup runs.
+Future<void> _initFirebase() async {
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   } catch (e) {
     debugPrint('⚠️ Firebase initialization failed: $e');
   }
+}
 
-  // Fire-and-forget: sign in anonymously so Firestore security rules that
-  // require request.auth != null are satisfied. Firebase Auth caches the
-  // anonymous credential after the first call, so this is only slow on a
-  // brand-new install. Deferring it keeps it off the critical startup path.
-  FirebaseAuth.instance.signInAnonymously().catchError((Object e) {
-    debugPrint('⚠️ Firebase anonymous sign-in failed: $e');
-  });
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Start Firebase initialisation in the background so it does not delay
+  // the first rendered frame. All Firebase-dependent setup (FCM, Auth, local
+  // notifications) runs in addPostFrameCallback and explicitly awaits this
+  // future before proceeding.
+  final firebaseInitFuture = _initFirebase();
 
   // Connectivity service: create now, but start the background HTTP reachability
   // checks (to google.com / cloudflare.com) after the first frame — they can
@@ -1052,6 +1054,18 @@ void main() async {
     // works correctly before initialize() completes; the service updates its
     // state and notifies listeners once the HTTP checks finish.
     connectivityService.initialize();
+
+    // Wait for Firebase before any Firebase-dependent setup so that
+    // FCM token requests and local notification channel creation succeed.
+    await firebaseInitFuture;
+
+    // Fire-and-forget: sign in anonymously so Firestore security rules that
+    // require request.auth != null are satisfied. Firebase Auth caches the
+    // anonymous credential after the first call, so this is only slow on a
+    // brand-new install.
+    FirebaseAuth.instance.signInAnonymously().catchError((Object e) {
+      debugPrint('⚠️ Firebase anonymous sign-in failed: $e');
+    });
 
     // Initialise local notifications after the first frame so channel creation
     // and plugin setup don't add to the cold-start time.

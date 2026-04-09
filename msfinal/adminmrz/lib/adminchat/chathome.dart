@@ -2992,7 +2992,7 @@ class _ChatWindowState extends State<ChatWindow> {
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
-                                  children: const [
+                                  children: <Widget>[
                                     Icon(Icons.person_pin_rounded, size: 9, color: Colors.white),
                                     SizedBox(width: 3),
                                     Text('Profile Shared', style: TextStyle(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.w600, letterSpacing: 0.2)),
@@ -5564,7 +5564,7 @@ class _AdminUserProfileSheet extends StatelessWidget {
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
-                                  children: const [
+                                  children: <Widget>[
                                     Icon(Icons.star,
                                         size: 12, color: Colors.amber),
                                     SizedBox(width: 3),

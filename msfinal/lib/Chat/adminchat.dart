@@ -1204,8 +1204,8 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     final bool isRead = data['isRead'] == true || data['read'] == true;
 
     // Determine if message is from admin
-    bool isFromAdmin = senderId == _adminUserId;
-    String senderName =
+    final bool isFromAdmin = senderId == _adminUserId;
+    final String senderName =
         isFromAdmin ? "Admin Support" : (isMe ? "You" : widget.userName);
 
     // Render call events inline (WhatsApp-style)

@@ -26,7 +26,7 @@ try {
 
     $userid    = isset($data['userid'])    ? intval($data['userid'])    : 0;
     $packageid = isset($data['packageid']) ? intval($data['packageid']) : 0;
-    $paidby    = isset($data['paidby'])    ? trim($data['paidby'])      : '';
+    $paidby    = isset($data['paidby'])    ? strtolower(trim($data['paidby'])) : '';
 
     // Validate numeric IDs
     if ($userid <= 0 || $packageid <= 0) {
@@ -36,7 +36,7 @@ try {
 
     // Whitelist payment methods to prevent unexpected values in DB
     $allowedPaidBy = ['esewa', 'khalti', 'stripe', 'paypal', 'bank', 'card', 'cash', 'other'];
-    if (!in_array(strtolower($paidby), $allowedPaidBy, true)) {
+    if (!in_array($paidby, $allowedPaidBy, true)) {
         echo json_encode(["success" => false, "message" => "Invalid payment method."]);
         exit;
     }

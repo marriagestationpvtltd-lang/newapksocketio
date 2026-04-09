@@ -304,7 +304,7 @@ app.post('/api/calls', async (req, res) => {
     res.json({ success: true, callId });
   } catch (err) {
     console.error('POST /api/calls error:', err.message);
-    res.status(500).json({ error: \'Internal server error\' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -324,7 +324,7 @@ app.put('/api/calls/:callId', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('PUT /api/calls/:callId error:', err.message);
-    res.status(500).json({ error: \'Internal server error\' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -363,7 +363,7 @@ app.get('/api/calls', async (req, res) => {
     res.json({ success: true, calls });
   } catch (err) {
     console.error('GET /api/calls error:', err.message);
-    res.status(500).json({ error: \'Internal server error\' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -374,7 +374,7 @@ app.delete('/api/calls/:callId', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('DELETE /api/calls/:callId error:', err.message);
-    res.status(500).json({ error: \'Internal server error\' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -389,7 +389,7 @@ app.delete('/api/calls/user/:userId', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('DELETE /api/calls/user/:userId error:', err.message);
-    res.status(500).json({ error: \'Internal server error\' });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 

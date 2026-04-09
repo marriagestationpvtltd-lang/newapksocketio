@@ -3431,33 +3431,45 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     );
   }
 
-  /// Returns all image URLs that the other user has sent in this chat.
-  List<String> _getSharedPhotoUrls() {
-    final List<String> urls = [];
+  /// Returns all image URLs exchanged in this chat (both sender and receiver).
+  List<_SharedPhoto> _getSharedPhotos() {
+    final List<_SharedPhoto> photos = [];
     for (final msg in _cachedMessages) {
-      if (msg['senderId'] == widget.currentUserId) continue;
       final type = msg['messageType']?.toString() ?? 'text';
+      if (type != 'image' && type != 'image_gallery') continue;
+
       final text = msg['message']?.toString() ?? '';
+      final senderId = msg['senderId']?.toString();
+      final bool isFromReceiver = senderId != null && senderId != widget.currentUserId;
+
       if (type == 'image' && text.isNotEmpty) {
-        urls.add(resolveApiImageUrl(text));
+        photos.add(_SharedPhoto(
+          url: resolveApiImageUrl(text),
+          isFromReceiver: isFromReceiver,
+        ));
       } else if (type == 'image_gallery') {
         try {
           final decoded = jsonDecode(text);
           if (decoded is List) {
             for (final u in decoded) {
-              if (u is String && u.isNotEmpty) urls.add(resolveApiImageUrl(u));
+              if (u is String && u.isNotEmpty) {
+                photos.add(_SharedPhoto(
+                  url: resolveApiImageUrl(u),
+                  isFromReceiver: isFromReceiver,
+                ));
+              }
             }
           }
         } catch (_) {}
       }
     }
-    return urls;
+    return photos;
   }
 
   /// Shows a mini-profile bottom sheet for the person we are chatting with.
   void _showChatUserProfileSheet(BuildContext context) {
     final String resolvedImage = resolveApiImageUrl(widget.receiverImage);
-    final List<String> sharedPhotos = _getSharedPhotoUrls();
+    final List<_SharedPhoto> sharedPhotos = _getSharedPhotos();
 
     showModalBottomSheet(
       context: context,
@@ -3471,7 +3483,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         receiverPhotoRequest: widget.receiverPhotoRequest,
         isOnline: _isOtherUserOnline,
         lastSeen: _otherUserLastSeen,
-        sharedPhotoUrls: sharedPhotos,
+        sharedPhotos: sharedPhotos,
       ),
     );
   }
@@ -4097,6 +4109,16 @@ class _SwipeToReplyWrapperState extends State<_SwipeToReplyWrapper>
   }
 }
 
+class _SharedPhoto {
+  final String url;
+  final bool isFromReceiver;
+
+  const _SharedPhoto({
+    required this.url,
+    required this.isFromReceiver,
+  });
+}
+
 // ─── Mini-profile bottom sheet shown when tapping avatar / name in chat ───────
 
 class _ChatUserProfileSheet extends StatelessWidget {
@@ -4107,7 +4129,7 @@ class _ChatUserProfileSheet extends StatelessWidget {
   final String? receiverPhotoRequest;
   final bool isOnline;
   final DateTime? lastSeen;
-  final List<String> sharedPhotoUrls;
+  final List<_SharedPhoto> sharedPhotos;
 
   const _ChatUserProfileSheet({
     required this.receiverId,
@@ -4117,15 +4139,15 @@ class _ChatUserProfileSheet extends StatelessWidget {
     this.receiverPhotoRequest,
     required this.isOnline,
     this.lastSeen,
-    required this.sharedPhotoUrls,
+    required this.sharedPhotos,
   });
 
   void _openPhotoViewer(BuildContext context, int index) {
-    if (sharedPhotoUrls.isEmpty) return;
+    if (sharedPhotos.isEmpty) return;
     showDialog(
       context: context,
       builder: (ctx) => _GalleryViewerDialog(
-        urls: sharedPhotoUrls,
+        urls: sharedPhotos.map((p) => p.url).toList(),
         initialIndex: index,
       ),
     );
@@ -4216,7 +4238,7 @@ class _ChatUserProfileSheet extends StatelessWidget {
             ),
             const Divider(height: 1),
             // Shared photos section
-            if (sharedPhotoUrls.isNotEmpty) ...[
+            if (sharedPhotos.isNotEmpty) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
                 child: Row(
@@ -4249,12 +4271,14 @@ class _ChatUserProfileSheet extends StatelessWidget {
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: sharedPhotoUrls.length > 8
+                  itemCount: sharedPhotos.length > 8
                       ? 8
-                      : sharedPhotoUrls.length,
+                      : sharedPhotos.length,
                   itemBuilder: (ctx, i) {
                     final isLastVisible = i == 7 &&
-                        sharedPhotoUrls.length > 8;
+                        sharedPhotos.length > 8;
+                    final photo = sharedPhotos[i];
+                    final shouldBlur = photo.isFromReceiver && !canShowPhotos;
                     return GestureDetector(
                       onTap: () => _openPhotoViewer(context, i),
                       child: Container(
@@ -4270,21 +4294,12 @@ class _ChatUserProfileSheet extends StatelessWidget {
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              canShowPhotos
-                                  ? Image.network(
-                                      sharedPhotoUrls[i],
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => const Icon(
-                                        Icons.photo,
-                                        color: Colors.grey,
-                                        size: 30,
-                                      ),
-                                    )
-                                  : Stack(
+                              shouldBlur
+                                  ? Stack(
                                       fit: StackFit.expand,
                                       children: [
                                         Image.network(
-                                          sharedPhotoUrls[i],
+                                          photo.url,
                                           fit: BoxFit.cover,
                                         ),
                                         BackdropFilter(
@@ -4300,13 +4315,22 @@ class _ChatUserProfileSheet extends StatelessWidget {
                                               color: Colors.white, size: 24),
                                         ),
                                       ],
+                                    )
+                                  : Image.network(
+                                      photo.url,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const Icon(
+                                        Icons.photo,
+                                        color: Colors.grey,
+                                        size: 30,
+                                      ),
                                     ),
                               if (isLastVisible)
                                 Container(
                                   color: Colors.black54,
                                   child: Center(
                                     child: Text(
-                                      '+${sharedPhotoUrls.length - 7}',
+                                      '+${sharedPhotos.length - 7}',
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 16,

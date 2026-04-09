@@ -1025,6 +1025,94 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ── add_participant_to_call ───────────────────────────────────────────────
+  // Admin emits this to add a third participant to an ongoing call (conference call).
+  // This notifies the new participant and all existing participants.
+  socket.on('add_participant_to_call', (data) => {
+    const { newParticipantId, channelName, callType, adminId, adminName, existingParticipantId, ...rest } = data || {};
+    if (!newParticipantId || !channelName) return;
+
+    // Notify the new participant they're being added to a call
+    io.to(`user:${newParticipantId.toString()}`).emit('added_to_call', {
+      channelName,
+      callType: callType || 'audio',
+      adminId: adminId ? adminId.toString() : undefined,
+      adminName,
+      existingParticipantId: existingParticipantId ? existingParticipantId.toString() : undefined,
+      ...rest,
+    });
+
+    // Notify existing participants that a new user joined
+    if (existingParticipantId) {
+      io.to(`user:${existingParticipantId.toString()}`).emit('participant_added_to_call', {
+        newParticipantId: newParticipantId.toString(),
+        channelName,
+        callType: callType || 'audio',
+        ...rest,
+      });
+    }
+
+    // Notify admin (if different from sender)
+    if (adminId) {
+      io.to(`user:${adminId.toString()}`).emit('participant_added_to_call', {
+        newParticipantId: newParticipantId.toString(),
+        channelName,
+        callType: callType || 'audio',
+        ...rest,
+      });
+    }
+  });
+
+  // ── participant_call_accept ───────────────────────────────────────────────
+  // New participant accepts the conference call invitation
+  socket.on('participant_call_accept', (data) => {
+    const { adminId, existingParticipantId, channelName, acceptedById, ...rest } = data || {};
+    if (!channelName) return;
+
+    // Notify admin that new participant accepted
+    if (adminId) {
+      io.to(`user:${adminId.toString()}`).emit('participant_accepted_call', {
+        acceptedById: acceptedById ? acceptedById.toString() : undefined,
+        channelName,
+        ...rest,
+      });
+    }
+
+    // Notify existing participant
+    if (existingParticipantId) {
+      io.to(`user:${existingParticipantId.toString()}`).emit('participant_accepted_call', {
+        acceptedById: acceptedById ? acceptedById.toString() : undefined,
+        channelName,
+        ...rest,
+      });
+    }
+  });
+
+  // ── participant_call_reject ───────────────────────────────────────────────
+  // New participant rejects the conference call invitation
+  socket.on('participant_call_reject', (data) => {
+    const { adminId, existingParticipantId, channelName, rejectedById, ...rest } = data || {};
+    if (!channelName) return;
+
+    // Notify admin that new participant rejected
+    if (adminId) {
+      io.to(`user:${adminId.toString()}`).emit('participant_rejected_call', {
+        rejectedById: rejectedById ? rejectedById.toString() : undefined,
+        channelName,
+        ...rest,
+      });
+    }
+
+    // Notify existing participant (optional)
+    if (existingParticipantId) {
+      io.to(`user:${existingParticipantId.toString()}`).emit('participant_rejected_call', {
+        rejectedById: rejectedById ? rejectedById.toString() : undefined,
+        channelName,
+        ...rest,
+      });
+    }
+  });
+
   // ── disconnect ────────────────────────────────────────────────────────────
   socket.on('disconnect', async () => {
     console.log(`🔌 Socket disconnected: ${socket.id}`);

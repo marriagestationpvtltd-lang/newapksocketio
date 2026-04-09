@@ -135,30 +135,36 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
       await _ensureCallToneSettingsLoaded();
       await _stopRingtone();
 
+      // Set release mode to loop BEFORE setting up the listener
+      await _ringtonePlayer.setReleaseMode(ReleaseMode.loop);
+
       // Fallback: restart playback when the player completes, in case
       // ReleaseMode.loop is not honoured on some Android devices.
       _playerStateSub?.cancel();
       _playerStateSub = _ringtonePlayer.onPlayerStateChanged.listen((state) {
+        debugPrint('🔊 Ringtone player state changed: $state');
         if (state == PlayerState.completed &&
             _isPlayingRingtone &&
             !_isRestartingRingtone &&
             !_ending &&
             mounted) {
           _isRestartingRingtone = true;
-          debugPrint('Ringtone completed unexpectedly – restarting (loop fallback)');
-          _playConfiguredTone().whenComplete(() => _isRestartingRingtone = false);
+          debugPrint('🔁 Ringtone completed – restarting for continuous loop');
+          _playConfiguredTone().whenComplete(() {
+            _isRestartingRingtone = false;
+            debugPrint('✅ Ringtone restart complete');
+          });
         }
       });
 
-      await _ringtonePlayer.setReleaseMode(ReleaseMode.loop);
       await _playConfiguredTone();
 
       if (mounted) {
         setState(() => _isPlayingRingtone = true);
       }
-      debugPrint('Started playing calling tone');
+      debugPrint('🎵 Started playing calling tone with loop mode');
     } catch (e) {
-      debugPrint('Error playing calling tone: $e');
+      debugPrint('❌ Error playing calling tone: $e');
     }
   }
 

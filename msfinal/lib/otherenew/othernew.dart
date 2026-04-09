@@ -1595,14 +1595,7 @@ class _ProfileHeaderSection extends StatelessWidget {
                   color: Colors.orange.shade100,
                   shape: BoxShape.circle,
                 ),
-                child: const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
-                  ),
-                ),
+                child: Icon(Icons.hourglass_bottom, color: Colors.orange.shade700, size: 24),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -2684,14 +2677,7 @@ class _ContactInfoSection extends StatelessWidget {
                   color: Colors.orange.shade100,
                   shape: BoxShape.circle,
                 ),
-                child: const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.orange),
-                  ),
-                ),
+                child: Icon(Icons.hourglass_bottom, color: Colors.orange.shade700, size: 24),
               ),
               const SizedBox(width: 16),
               Expanded(

@@ -1610,35 +1610,40 @@ class _ChatWindowState extends State<ChatWindow> {
 
   // ── PROFILE SHEET HELPERS ────────────────────────────────────────────
 
-  /// Returns image URLs from messages sent by the user (not admin) in this chat.
-  List<String> _getAdminSharedPhotoUrls() {
-    final List<String> urls = [];
+  /// Returns shared photos from messages sent by the user (not admin) in this chat.
+  List<_AdminSharedPhoto> _getAdminSharedPhotos() {
+    final List<_AdminSharedPhoto> photos = [];
     for (final msg in _messages) {
       if (msg['senderid'] == senderId.toString()) continue;
+      final String messageId = msg['messageid']?.toString() ?? '';
       final type = msg['type']?.toString() ?? 'text';
       if (type == 'image') {
         final imageUrl = msg['imageUrl']?.toString() ?? '';
-        if (imageUrl.isNotEmpty) urls.add(imageUrl);
+        if (imageUrl.isNotEmpty) {
+          photos.add(_AdminSharedPhoto(url: imageUrl, messageId: messageId));
+        }
       } else if (type == 'image_gallery') {
         final raw = msg['message']?.toString() ?? '';
         try {
           final decoded = jsonDecode(raw);
           if (decoded is List) {
             for (final u in decoded) {
-              if (u is String && u.isNotEmpty) urls.add(u);
+              if (u is String && u.isNotEmpty) {
+                photos.add(_AdminSharedPhoto(url: u, messageId: messageId));
+              }
             }
           }
         } catch (_) {}
       }
     }
-    return urls;
+    return photos;
   }
 
   /// Shows a mini-profile bottom sheet for the selected user.
   void _showUserProfileSheet(BuildContext context, ChatProvider chatProvider) {
     final int? userId = chatProvider.id;
     if (userId == null) return;
-    final List<String> sharedPhotos = _getAdminSharedPhotoUrls();
+    final List<_AdminSharedPhoto> sharedPhotos = _getAdminSharedPhotos();
     final String name = chatProvider.namee ?? 'User';
     final String? avatarUrl = chatProvider.profilePicture;
     final bool isOnline = chatProvider.online;
@@ -1653,7 +1658,8 @@ class _ChatWindowState extends State<ChatWindow> {
         avatarUrl: avatarUrl,
         isOnline: isOnline,
         isPaid: chatProvider.ispaid,
-        sharedPhotoUrls: sharedPhotos,
+        sharedPhotos: sharedPhotos,
+        onDeleteMessage: _deleteMessage,
       ),
     );
   }
@@ -5493,13 +5499,24 @@ class _ZoomablePageImageState extends State<_ZoomablePageImage> {
 
 // ─── Mini-profile bottom sheet for Admin Chat ────────────────────────────────
 
+class _AdminSharedPhoto {
+  final String url;
+  final String? messageId;
+
+  const _AdminSharedPhoto({
+    required this.url,
+    this.messageId,
+  });
+}
+
 class _AdminUserProfileSheet extends StatelessWidget {
   final int userId;
   final String name;
   final String? avatarUrl;
   final bool isOnline;
   final bool isPaid;
-  final List<String> sharedPhotoUrls;
+  final List<_AdminSharedPhoto> sharedPhotos;
+  final ValueChanged<String> onDeleteMessage;
 
   const _AdminUserProfileSheet({
     required this.userId,
@@ -5507,17 +5524,21 @@ class _AdminUserProfileSheet extends StatelessWidget {
     this.avatarUrl,
     required this.isOnline,
     required this.isPaid,
-    required this.sharedPhotoUrls,
+    required this.sharedPhotos,
+    required this.onDeleteMessage,
   });
 
   void _openPhotoViewer(BuildContext context, int index) {
-    if (sharedPhotoUrls.isEmpty) return;
+    if (sharedPhotos.isEmpty) return;
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => _AdminPhotoViewerPage(
-          urls: sharedPhotoUrls,
+          photos: sharedPhotos,
           initialIndex: index,
+          userName: name,
+          userId: userId,
+          onDeleteMessage: onDeleteMessage,
         ),
       ),
     );
@@ -5641,7 +5662,7 @@ class _AdminUserProfileSheet extends StatelessWidget {
             ),
             const Divider(height: 1),
             // Shared photos section
-            if (sharedPhotoUrls.isNotEmpty) ...[
+            if (sharedPhotos.isNotEmpty) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
                 child: Row(
@@ -5674,10 +5695,10 @@ class _AdminUserProfileSheet extends StatelessWidget {
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: sharedPhotoUrls.length > 8 ? 8 : sharedPhotoUrls.length,
+                  itemCount: sharedPhotos.length > 8 ? 8 : sharedPhotos.length,
                   itemBuilder: (ctx, i) {
                     final isLastVisible =
-                        i == 7 && sharedPhotoUrls.length > 8;
+                        i == 7 && sharedPhotos.length > 8;
                     return GestureDetector(
                       onTap: () => _openPhotoViewer(context, i),
                       child: Container(
@@ -5694,7 +5715,7 @@ class _AdminUserProfileSheet extends StatelessWidget {
                             fit: StackFit.expand,
                             children: [
                               Image.network(
-                                sharedPhotoUrls[i],
+                                sharedPhotos[i].url,
                                 fit: BoxFit.cover,
                                 errorBuilder: (_, __, ___) => const Icon(
                                   Icons.photo,
@@ -5707,7 +5728,7 @@ class _AdminUserProfileSheet extends StatelessWidget {
                                   color: Colors.black54,
                                   child: Center(
                                     child: Text(
-                                      '+${sharedPhotoUrls.length - 7}',
+                                      '+${sharedPhotos.length - 7}',
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 16,
@@ -5772,12 +5793,18 @@ class _AdminUserProfileSheet extends StatelessWidget {
 // ─── Full-screen photo viewer for Admin Chat ──────────────────────────────────
 
 class _AdminPhotoViewerPage extends StatefulWidget {
-  final List<String> urls;
+  final List<_AdminSharedPhoto> photos;
   final int initialIndex;
+  final String userName;
+  final int userId;
+  final ValueChanged<String> onDeleteMessage;
 
   const _AdminPhotoViewerPage({
-    required this.urls,
+    required this.photos,
     required this.initialIndex,
+    required this.userName,
+    required this.userId,
+    required this.onDeleteMessage,
   });
 
   @override
@@ -5787,15 +5814,17 @@ class _AdminPhotoViewerPage extends StatefulWidget {
 class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
   late final PageController _pageController;
   late int _current;
+  late List<_AdminSharedPhoto> _photos;
   final Map<int, TransformationController> _transformControllers = {};
 
   @override
   void initState() {
     super.initState();
+    _photos = List<_AdminSharedPhoto>.from(widget.photos);
     _current = widget.initialIndex;
     _pageController = PageController(initialPage: widget.initialIndex);
     // Pre-initialize transformation controllers for better performance
-    for (int i = 0; i < widget.urls.length; i++) {
+    for (int i = 0; i < _photos.length; i++) {
       _transformControllers[i] = TransformationController();
     }
   }
@@ -5809,15 +5838,106 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
     super.dispose();
   }
 
+  Future<void> _copyCurrentPhoto() async {
+    if (_photos.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: _photos[_current].url));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Photo link copied')),
+    );
+  }
+
+  Future<void> _photoCopyCurrent() async {
+    if (_photos.isEmpty) return;
+    final url = _photos[_current].url;
+    if (kIsWeb) {
+      final uri = Uri.tryParse(url);
+      final lastSegment = (uri != null && uri.pathSegments.isNotEmpty)
+          ? uri.pathSegments.last
+          : '';
+      final hasKnownExt = RegExp(r'\.(png|jpe?g|webp|gif|bmp|heic|heif)$', caseSensitive: false)
+          .hasMatch(lastSegment);
+      final ext = hasKnownExt ? lastSegment.split('.').last : 'img';
+      final anchor = html.AnchorElement(href: url)
+        ..setAttribute('download', 'photo_${DateTime.now().millisecondsSinceEpoch}.$ext')
+        ..target = '_blank';
+      anchor.click();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Photo copy/download started')),
+      );
+      return;
+    }
+    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _deleteCurrentPhoto() async {
+    if (_photos.isEmpty) return;
+    final photo = _photos[_current];
+    final messageId = photo.messageId;
+    if (messageId == null || messageId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Delete unavailable for this photo')),
+      );
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Photo Message'),
+        content: const Text('This will delete the related chat photo message. Continue?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    widget.onDeleteMessage(messageId);
+    for (final controller in _transformControllers.values) {
+      controller.dispose();
+    }
+    _transformControllers.clear();
+    final updated = List<_AdminSharedPhoto>.from(_photos)..removeAt(_current);
+    if (updated.isEmpty) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      return;
+    }
+    final int nextIndex = _current.clamp(0, updated.length - 1);
+    for (int i = 0; i < updated.length; i++) {
+      _transformControllers[i] = TransformationController();
+    }
+    setState(() {
+      _photos = updated;
+      _current = nextIndex;
+    });
+    _pageController.jumpToPage(_current);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final c = ChatColors.of(context);
+    if (_photos.isEmpty) {
+      return Scaffold(
+        backgroundColor: c.bg,
+        body: const Center(child: Text('No photos')),
+      );
+    }
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: c.bg,
       body: Stack(
         children: [
           PageView.builder(
             controller: _pageController,
-            itemCount: widget.urls.length,
+            itemCount: _photos.length,
             onPageChanged: (i) {
               setState(() => _current = i);
               // Reset zoom on any non-current images when switching pages
@@ -5847,7 +5967,7 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
                   boundaryMargin: const EdgeInsets.all(double.infinity),
                   child: Center(
                     child: Image.network(
-                      widget.urls[i],
+                      _photos[i].url,
                       fit: BoxFit.contain,
                       errorBuilder: (_, __, ___) => const Icon(
                         Icons.broken_image,
@@ -5860,32 +5980,88 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
               );
             },
           ),
-          // Close button
           Positioned(
-            top: 48,
-            right: 16,
-            child: IconButton(
-              icon: const Icon(Icons.close, color: Colors.white, size: 28),
-              onPressed: () => Navigator.pop(context),
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: c.header.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: c.border),
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.arrow_back, color: c.text),
+                      onPressed: () => Navigator.pop(context),
+                      tooltip: 'Close',
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.userName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: c.text,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            'ID: ${widget.userId}',
+                            style: TextStyle(
+                              color: c.muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.copy_rounded, color: c.text),
+                      onPressed: _copyCurrentPhoto,
+                      tooltip: 'Copy',
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.file_copy_outlined, color: c.text),
+                      onPressed: _photoCopyCurrent,
+                      tooltip: 'Photo copy',
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444)),
+                      onPressed: _deleteCurrentPhoto,
+                      tooltip: 'Delete',
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
           // Page counter
           Positioned(
-            top: 54,
+            top: 94,
             left: 0,
             right: 0,
             child: Center(
               child: Text(
-                '${_current + 1} / ${widget.urls.length}',
-                style: const TextStyle(
-                  color: Colors.white70,
+                '${_current + 1} / ${_photos.length}',
+                style: TextStyle(
+                  color: c.muted,
                   fontSize: 14,
                 ),
               ),
             ),
           ),
           // Dot indicators
-          if (widget.urls.length > 1)
+          if (_photos.length > 1)
             Positioned(
               bottom: 32,
               left: 0,
@@ -5893,14 +6069,14 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(
-                  widget.urls.length > 20 ? 20 : widget.urls.length,
+                  _photos.length > 20 ? 20 : _photos.length,
                   (i) => Container(
                     margin: const EdgeInsets.symmetric(horizontal: 3),
                     width: _current == i ? 10 : 6,
                     height: _current == i ? 10 : 6,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: _current == i ? Colors.white : Colors.white38,
+                      color: _current == i ? c.text : c.muted.withOpacity(0.5),
                     ),
                   ),
                 ),

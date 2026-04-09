@@ -2195,8 +2195,8 @@ class _ChatWindowState extends State<ChatWindow> {
                             (context, index) {
                               final data = group.messages[index];
                               final String msgId = data['messageId'] as String;
-                              final isSentByUser = data['senderid'] == senderId.toString();
-                              final isSentByAdmin = !isSentByUser;
+                              final isSentByAdmin = data['senderid'] == senderId.toString();
+                              final isSentByUser = !isSentByAdmin;
                               final timestamp = _messageTimestampFromData(data);
                               final replyPayload = _buildReplyPayload(
                                 messageId: msgId,

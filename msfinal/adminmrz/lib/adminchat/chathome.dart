@@ -2608,35 +2608,38 @@ class _ChatWindowState extends State<ChatWindow> {
                 ),
               )
             else
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4, offset: const Offset(0, 1))],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    imageUrl,
-                    width: MediaQuery.of(context).size.width * 0.24,
-                    fit: BoxFit.cover,
-                    cacheWidth: (MediaQuery.of(context).size.width * 0.24).toInt(),
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return const Center(child: CircularProgressIndicator(color: kPrimary));
-                    },
-                    errorBuilder: (context, error, stackTrace) {
-                      return Column(
-                        children: [
-                          const Text('Error loading image'),
-                          Text('Details: $error', style: const TextStyle(fontSize: 10)),
-                          ElevatedButton(
-                            onPressed: () => setState(() {}),
-                            child: const Text("Retry"),
-                          ),
-                        ],
-                      );
-                    },
+              GestureDetector(
+                onTap: () => _openAdminGalleryViewer([imageUrl], 0),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4, offset: const Offset(0, 1))],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      imageUrl,
+                      width: MediaQuery.of(context).size.width * 0.24,
+                      fit: BoxFit.cover,
+                      cacheWidth: (MediaQuery.of(context).size.width * 0.24).toInt(),
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const Center(child: CircularProgressIndicator(color: kPrimary));
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return Column(
+                          children: [
+                            const Text('Error loading image'),
+                            Text('Details: $error', style: const TextStyle(fontSize: 10)),
+                            ElevatedButton(
+                              onPressed: () => setState(() {}),
+                              child: const Text("Retry"),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -5233,6 +5236,24 @@ class _AdminGalleryViewerDialogState extends State<_AdminGalleryViewerDialog> {
     super.dispose();
   }
 
+  void _prev() {
+    if (_current > 0) {
+      _pageController.previousPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
+  void _next() {
+    if (_current < widget.urls.length - 1) {
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -5244,20 +5265,9 @@ class _AdminGalleryViewerDialogState extends State<_AdminGalleryViewerDialog> {
             controller: _pageController,
             itemCount: widget.urls.length,
             onPageChanged: (i) => setState(() => _current = i),
-            itemBuilder: (ctx, i) => InteractiveViewer(
-              child: Center(
-                child: Image.network(
-                  widget.urls[i],
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Icon(
-                    Icons.broken_image,
-                    color: Colors.white54,
-                    size: 64,
-                  ),
-                ),
-              ),
-            ),
+            itemBuilder: (ctx, i) => _ZoomablePageImage(url: widget.urls[i]),
           ),
+          // Close button
           Positioned(
             top: 40,
             right: 16,
@@ -5266,6 +5276,59 @@ class _AdminGalleryViewerDialogState extends State<_AdminGalleryViewerDialog> {
               onPressed: () => Navigator.pop(context),
             ),
           ),
+          // Image counter (e.g. "2 / 5")
+          if (widget.urls.length > 1)
+            Positioned(
+              top: 44,
+              left: 0,
+              right: 52,
+              child: Center(
+                child: Text(
+                  '${_current + 1} / ${widget.urls.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
+                  ),
+                ),
+              ),
+            ),
+          // Prev arrow
+          if (widget.urls.length > 1 && _current > 0)
+            Positioned(
+              left: 4,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: Material(
+                  color: Colors.black45,
+                  borderRadius: BorderRadius.circular(24),
+                  child: IconButton(
+                    icon: const Icon(Icons.chevron_left, color: Colors.white, size: 36),
+                    onPressed: _prev,
+                  ),
+                ),
+              ),
+            ),
+          // Next arrow
+          if (widget.urls.length > 1 && _current < widget.urls.length - 1)
+            Positioned(
+              right: 4,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: Material(
+                  color: Colors.black45,
+                  borderRadius: BorderRadius.circular(24),
+                  child: IconButton(
+                    icon: const Icon(Icons.chevron_right, color: Colors.white, size: 36),
+                    onPressed: _next,
+                  ),
+                ),
+              ),
+            ),
+          // Page indicator dots
           if (widget.urls.length > 1)
             Positioned(
               bottom: 24,
@@ -5285,6 +5348,62 @@ class _AdminGalleryViewerDialogState extends State<_AdminGalleryViewerDialog> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// A zoomable image page that passes horizontal swipes to the parent [PageView]
+/// when the image is at 1× zoom, and enables panning only when zoomed in.
+class _ZoomablePageImage extends StatefulWidget {
+  final String url;
+  const _ZoomablePageImage({required this.url});
+
+  @override
+  State<_ZoomablePageImage> createState() => _ZoomablePageImageState();
+}
+
+class _ZoomablePageImageState extends State<_ZoomablePageImage> {
+  final TransformationController _ctrl = TransformationController();
+  bool _zoomed = false;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _onInteractionUpdate(ScaleUpdateDetails details) {
+    final scale = _ctrl.value.getMaxScaleOnAxis();
+    final isZoomed = scale > 1.01;
+    if (isZoomed != _zoomed) setState(() => _zoomed = isZoomed);
+  }
+
+  void _onInteractionEnd(ScaleEndDetails details) {
+    final scale = _ctrl.value.getMaxScaleOnAxis();
+    if (scale <= 1.01) {
+      _ctrl.value = Matrix4.identity();
+      if (_zoomed) setState(() => _zoomed = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InteractiveViewer(
+      transformationController: _ctrl,
+      panEnabled: _zoomed,
+      onInteractionUpdate: _onInteractionUpdate,
+      onInteractionEnd: _onInteractionEnd,
+      child: Center(
+        child: Image.network(
+          widget.url,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => const Icon(
+            Icons.broken_image,
+            color: Colors.white54,
+            size: 64,
+          ),
+        ),
       ),
     );
   }

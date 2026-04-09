@@ -403,6 +403,18 @@ const userActiveChatRoom = new Map(); // userId → chatRoomId | null
 // DB helpers
 // ──────────────────────────────────────────────────────────────────────────────
 
+/** Returns the sender_id for a message, or null if not found / IDs invalid. */
+async function getMessageSender(messageId, chatRoomId) {
+  if (!messageId || !chatRoomId) return null;
+  const safeMessageId  = String(messageId).slice(0, 100);
+  const safeChatRoomId = String(chatRoomId).slice(0, 100);
+  const [[msg]] = await pool.query(
+    'SELECT sender_id FROM chat_messages WHERE message_id = ? AND chat_room_id = ? LIMIT 1',
+    [safeMessageId, safeChatRoomId],
+  );
+  return msg ? msg.sender_id?.toString() ?? null : null;
+}
+
 async function ensureChatRoom({ chatRoomId, user1Id, user2Id, user1Name, user2Name, user1Image, user2Image }) {
   await pool.query(
     `INSERT IGNORE INTO chat_rooms
@@ -841,11 +853,8 @@ io.on('connection', (socket) => {
       if (!authenticatedUserId) return; // require authentication
 
       // Only allow the original sender to edit their own message
-      const [[msg]] = await pool.query(
-        'SELECT sender_id FROM chat_messages WHERE message_id = ? AND chat_room_id = ? LIMIT 1',
-        [messageId, chatRoomId],
-      );
-      if (!msg || msg.sender_id?.toString() !== authenticatedUserId) return;
+      const senderId = await getMessageSender(messageId, chatRoomId);
+      if (!senderId || senderId !== authenticatedUserId) return;
 
       // Enforce edited message length limit
       const safeNewMessage = typeof newMessage === 'string' ? newMessage.slice(0, 65536) : '';
@@ -867,11 +876,8 @@ io.on('connection', (socket) => {
 
       // For "delete for everyone", only the sender may do so
       if (deleteForEveryone) {
-        const [[msg]] = await pool.query(
-          'SELECT sender_id FROM chat_messages WHERE message_id = ? AND chat_room_id = ? LIMIT 1',
-          [messageId, chatRoomId],
-        );
-        if (!msg || msg.sender_id?.toString() !== uid) return;
+        const senderId = await getMessageSender(messageId, chatRoomId);
+        if (!senderId || senderId !== uid) return;
       }
 
       await deleteMessage({ chatRoomId, messageId, userId: uid, deleteForEveryone });

@@ -2195,23 +2195,24 @@ class _ChatWindowState extends State<ChatWindow> {
                             (context, index) {
                               final data = group.messages[index];
                               final String msgId = data['messageId'] as String;
-                              final isSentByAdmin = data['senderid'] != senderId.toString();
+                              final isSentByUser = data['senderid'] == senderId.toString();
+                              final isSentByMe = !isSentByUser;
                               final timestamp = _messageTimestampFromData(data);
                               final replyPayload = _buildReplyPayload(
                                 messageId: msgId,
                                 data: data,
-                                senderId: isSentByAdmin
+                                senderId: isSentByMe
                                     ? senderId.toString()
                                     : (chatProvider.id?.toString() ?? ''),
                                 senderName:
-                                    isSentByAdmin ? 'You' : (chatProvider.namee ?? 'User'),
+                                    isSentByMe ? 'You' : (chatProvider.namee ?? 'User'),
                               );
-                              final canEdit = _canEditMessage(data, isSentByAdmin);
-                              final canMutate = _canMutateMessage(data, isSentByAdmin);
+                              final canEdit = _canEditMessage(data, isSentByMe);
+                              final canMutate = _canMutateMessage(data, isSentByMe);
 
                               return _AdminSwipeToReplyWrapper(
                                 key: ValueKey(msgId),
-                                isMine: isSentByAdmin,
+                                isMine: isSentByMe,
                                 onReply: () => _startReply(
                                   msgId,
                                   replyPayload['message']?.toString() ?? '',
@@ -2235,7 +2236,7 @@ class _ChatWindowState extends State<ChatWindow> {
                                     context,
                                     msgId,
                                     replyPayload,
-                                    isSentByAdmin,
+                                    isSentByMe,
                                     canEdit: canEdit,
                                     canMutate: canMutate,
                                   );
@@ -2245,7 +2246,7 @@ class _ChatWindowState extends State<ChatWindow> {
                                   isHighlighted: _highlightedMessageId == msgId,
                                   child: _buildChatBubble(
                                     data['message'],
-                                    isSentByAdmin,
+                                    isSentByMe,
                                     timestamp,
                                     data['type'],
                                     data.containsKey('profileData')

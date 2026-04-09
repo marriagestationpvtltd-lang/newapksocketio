@@ -3515,66 +3515,68 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               ),
             ),
           ),
-          IconButton(
-            onPressed: () {
-              // Prevent starting a new call if one is already active
-              if (CallOverlayManager().isCallActive) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('You are already in a call'),
-                    duration: Duration(seconds: 2),
+          if (!kIsWeb)
+            IconButton(
+              onPressed: () {
+                // Prevent starting a new call if one is already active
+                if (CallOverlayManager().isCallActive) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('You are already in a call'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                  return;
+                }
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    settings: const RouteSettings(name: activeCallRouteName),
+                    builder: (context) => CallScreen(
+                      currentUserId: widget.currentUserId,
+                      currentUserName: widget.currentUserName,
+                      currentUserImage: widget.currentUserImage,
+                      otherUserId: widget.receiverId,
+                      otherUserName: widget.receiverName,
+                      otherUserImage: widget.receiverImage,
+                      chatRoomId: widget.chatRoomId,
+                    ),
                   ),
                 );
-                return;
-              }
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  settings: const RouteSettings(name: activeCallRouteName),
-                  builder: (context) => CallScreen(
-                    currentUserId: widget.currentUserId,
-                    currentUserName: widget.currentUserName,
-                    currentUserImage: widget.currentUserImage,
-                    otherUserId: widget.receiverId,
-                    otherUserName: widget.receiverName,
-                    otherUserImage: widget.receiverImage,
-                    chatRoomId: widget.chatRoomId,
-                  ),
-                ),
-              );
-            },
-            icon: const Icon(Icons.call, color: Colors.white),
-          ),
-          IconButton(
-            onPressed: () {
-              // Prevent starting a new call if one is already active
-              if (CallOverlayManager().isCallActive) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('You are already in a call'),
-                    duration: Duration(seconds: 2),
+              },
+              icon: const Icon(Icons.call, color: Colors.white),
+            ),
+          if (!kIsWeb)
+            IconButton(
+              onPressed: () {
+                // Prevent starting a new call if one is already active
+                if (CallOverlayManager().isCallActive) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('You are already in a call'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                  return;
+                }
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    settings: const RouteSettings(name: activeCallRouteName),
+                    builder: (context) => VideoCallScreen(
+                      currentUserId: widget.currentUserId,
+                      currentUserName: widget.currentUserName,
+                      currentUserImage: widget.currentUserImage,
+                      otherUserId: widget.receiverId,
+                      otherUserName: widget.receiverName,
+                      otherUserImage: widget.receiverImage,
+                      chatRoomId: widget.chatRoomId,
+                    ),
                   ),
                 );
-                return;
-              }
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  settings: const RouteSettings(name: activeCallRouteName),
-                  builder: (context) => VideoCallScreen(
-                    currentUserId: widget.currentUserId,
-                    currentUserName: widget.currentUserName,
-                    currentUserImage: widget.currentUserImage,
-                    otherUserId: widget.receiverId,
-                    otherUserName: widget.receiverName,
-                    otherUserImage: widget.receiverImage,
-                    chatRoomId: widget.chatRoomId,
-                  ),
-                ),
-              );
-            },
-            icon: const Icon(Icons.videocam, color: Colors.white),
-          ),
+              },
+              icon: const Icon(Icons.videocam, color: Colors.white),
+            ),
           PopupMenuButton<String>(
             onSelected: (String result) {
               if (result == 'block') {

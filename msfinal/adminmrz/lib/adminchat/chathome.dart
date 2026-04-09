@@ -9,6 +9,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
@@ -3821,8 +3822,31 @@ class _ChatWindowState extends State<ChatWindow> {
   Future<String> _uploadVoiceMessage(String filePath) async {
     // For web, flutter_sound returns a blob URL; use XHR to fetch then upload
     if (kIsWeb) {
-      final response = await http.get(Uri.parse(filePath));
-      if (response.statusCode != 200) {
+      // Resolve relative paths returned by the recorder to an absolute URL so
+      // the browser can fetch the blob bytes.
+      String resolvedUrl = filePath;
+      final uri = Uri.parse(filePath);
+      if (!uri.hasScheme) {
+        final origin = html.window.location.origin;
+        final normalizedPath = filePath.startsWith('/') ? filePath : '/$filePath';
+        resolvedUrl = '$origin$normalizedPath';
+      }
+
+      final xhr = await html.HttpRequest.request(
+        resolvedUrl,
+        responseType: 'arraybuffer',
+      );
+      final resp = xhr.response;
+      if (xhr.status != 200 || resp == null) {
+        throw Exception('Failed to read recorded audio data');
+      }
+
+      late final Uint8List bytes;
+      if (resp is ByteBuffer) {
+        bytes = Uint8List.view(resp);
+      } else if (resp is Uint8List) {
+        bytes = resp;
+      } else {
         throw Exception('Failed to read recorded audio data');
       }
       final req = http.MultipartRequest(
@@ -3831,7 +3855,7 @@ class _ChatWindowState extends State<ChatWindow> {
       );
       req.files.add(http.MultipartFile.fromBytes(
         'file',
-        response.bodyBytes,
+        bytes,
         filename: 'voice_${DateTime.now().millisecondsSinceEpoch}.webm',
       ));
       final streamed = await req.send();

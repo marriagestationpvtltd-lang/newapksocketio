@@ -226,6 +226,51 @@ class _UserProfilePageState extends State<UserProfilePage> {
         return;
       }
 
+      final photoRequest = _profileData!.personalDetail['photo_request']?.toString().toLowerCase();
+      final chatRequest = _profileData!.personalDetail['chat_request']?.toString().toLowerCase();
+
+      final hasPhotoRequest = photoRequest == 'pending';
+      final hasChatRequest = chatRequest == 'pending';
+
+      if (!hasPhotoRequest && !hasChatRequest) {
+        _showRequestSentPopup('No pending request to cancel');
+        return;
+      }
+
+      // If both are pending, ask which one to cancel
+      String? requestTypeToCancel;
+      if (hasPhotoRequest && hasChatRequest) {
+        requestTypeToCancel = await showDialog<String>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Cancel Request'),
+            content: const Text('Which request would you like to cancel?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, 'Photo'),
+                child: const Text('Photo Request'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, 'Chat'),
+                child: const Text('Chat Request'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, 'Both'),
+                child: const Text('Both'),
+              ),
+            ],
+          ),
+        );
+
+        if (requestTypeToCancel == null) return;
+      } else {
+        requestTypeToCancel = hasPhotoRequest ? 'Photo' : 'Chat';
+      }
+
       // Show loading
       showDialog(
         context: context,
@@ -235,32 +280,45 @@ class _UserProfilePageState extends State<UserProfilePage> {
         ),
       );
 
-      // Determine which request type to cancel based on what's pending
-      final photoRequest = _profileData!.personalDetail['photo_request']?.toString().toLowerCase();
-      final chatRequest = _profileData!.personalDetail['chat_request']?.toString().toLowerCase();
+      bool success = false;
+      String message = '';
 
-      String requestType = 'Photo';
-      if (photoRequest == 'pending') {
-        requestType = 'Photo';
-      } else if (chatRequest == 'pending') {
-        requestType = 'Chat';
+      if (requestTypeToCancel == 'Both') {
+        // Cancel both requests
+        final photoResponse = await _profileService.cancelRequest(
+          senderId: senderId,
+          receiverId: _parsedUserId,
+          requestType: 'Photo',
+        );
+
+        final chatResponse = await _profileService.cancelRequest(
+          senderId: senderId,
+          receiverId: _parsedUserId,
+          requestType: 'Chat',
+        );
+
+        success = photoResponse['success'] == true && chatResponse['success'] == true;
+        message = success ? 'All requests cancelled successfully' : 'Some requests failed to cancel';
+      } else {
+        // Cancel single request
+        final response = await _profileService.cancelRequest(
+          senderId: senderId,
+          receiverId: _parsedUserId,
+          requestType: requestTypeToCancel,
+        );
+
+        success = response['success'] == true;
+        message = response['message'] ?? 'Request cancelled';
       }
-
-      final response = await _profileService.cancelRequest(
-        senderId: senderId,
-        receiverId: _parsedUserId,
-        requestType: requestType,
-      );
 
       // Close loading dialog
       if (mounted) Navigator.pop(context);
 
-      if (response['success'] == true) {
-        _showRequestSentPopup('Request cancelled successfully');
+      _showRequestSentPopup(message);
+
+      if (success) {
         // Reload profile to update request status
         await _loadProfileData();
-      } else {
-        _showRequestSentPopup(response['message'] ?? 'Failed to cancel request');
       }
     } catch (e) {
       if (mounted) Navigator.pop(context);

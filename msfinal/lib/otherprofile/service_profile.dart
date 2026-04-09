@@ -90,14 +90,13 @@ class ProfileService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/rejectProposal.php'),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: {
-          'sender_id': senderId.toString(),
-          'receiver_id': receiverId.toString(),
+        Uri.parse('$_baseUrl/cancel_request.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'sender_id': senderId,
+          'receiver_id': receiverId,
           'request_type': requestType,
-          'user_id': senderId.toString(),
-        },
+        }),
       );
 
       if (response.statusCode == 200) {

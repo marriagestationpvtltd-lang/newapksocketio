@@ -136,7 +136,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     // Logo zooms in from 0.3 → 1.0 with elastic spring (0 – 65%)
     _logoScale = Tween<double>(begin: 0.3, end: 1.0).animate(
       CurvedAnimation(
-        parent: _entranceController,
+        parent: _entranceController!,
         curve: const Interval(0.0, 0.65, curve: Curves.elasticOut),
       ),
     );
@@ -144,20 +144,20 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     // Logo fades in quickly (0 – 35%)
     _logoOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
-        parent: _entranceController,
+        parent: _entranceController!,
         curve: const Interval(0.0, 0.35, curve: Curves.easeIn),
       ),
     );
 
     // Subtle breathing pulse while loading (1.0 → 1.04)
     _pulseScale = Tween<double>(begin: 1.0, end: 1.04).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+      CurvedAnimation(parent: _pulseController!, curve: Curves.easeInOut),
     );
 
     // App-name slides up + fades in (50 – 82%)
     _textOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
-        parent: _entranceController,
+        parent: _entranceController!,
         curve: const Interval(0.50, 0.82, curve: Curves.easeOut),
       ),
     );
@@ -166,7 +166,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       end: Offset.zero,
     ).animate(
       CurvedAnimation(
-        parent: _entranceController,
+        parent: _entranceController!,
         curve: const Interval(0.50, 0.82, curve: Curves.easeOutCubic),
       ),
     );
@@ -174,7 +174,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     // Tagline fades in last (68 – 100%)
     _taglineOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
-        parent: _entranceController,
+        parent: _entranceController!,
         curve: const Interval(0.68, 1.0, curve: Curves.easeOut),
       ),
     );

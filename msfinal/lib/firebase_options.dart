@@ -68,14 +68,14 @@ class DefaultFirebaseOptions {
   );
 
   // Web app configuration.
-  // apiKey  → same Firebase project; browser-unrestricted key (same as Android).
-  // appId   → MUST be filled in after registering a Web app in Firebase Console:
+  // apiKey  → same Firebase project; browser-unrestricted key (matches web/firebase-messaging-sw.js).
+  // appId   → Registered Web app from Firebase Console
   //           console.firebase.google.com → digitallamicomnp → Project settings
-  //           → Your apps → Add app → Web → copy the appId (1:477405059891:web:…)
+  //           → Your apps → Web app (matches web/firebase-messaging-sw.js)
   // measurementId → optional (Google Analytics). Leave empty or fill from Console.
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDtihED7bReUPkjkhAOBFDp3zw3chUTmgU',
-    appId: 'REPLACE_WITH_WEB_APP_ID', // TODO: register Web app in Firebase Console
+    apiKey: 'AIzaSyA6BqEPNDcAZORqSrKcMUEpxRagJbZci9w',
+    appId: '1:477405059891:web:86dc05c92a2406b84d7c46',
     messagingSenderId: '477405059891',
     projectId: 'digitallamicomnp',
     authDomain: 'digitallamicomnp.firebaseapp.com',

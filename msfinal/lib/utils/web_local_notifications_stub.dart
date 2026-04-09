@@ -28,8 +28,7 @@ class FlutterLocalNotificationsPlugin {
 
   Future<void> cancel(int id, {String? tag}) async {}
 
-  ResolvePlatformSpecificImplementation<T>?
-      resolvePlatformSpecificImplementation<T extends Object>() => null;
+  T? resolvePlatformSpecificImplementation<T extends Object>() => null;
 
   Future<List<PendingNotificationRequest>> pendingNotificationRequests() async => [];
 }
@@ -259,9 +258,43 @@ class BigPictureStyleInformation extends StyleInformation {
 }
 
 class DarwinNotificationCategory {
-  const DarwinNotificationCategory(this.identifier);
+  const DarwinNotificationCategory(
+    this.identifier, {
+    this.actions = const [],
+    this.options = const {},
+  });
   final String identifier;
+  final List<DarwinNotificationAction> actions;
+  final Set<DarwinNotificationCategoryOption> options;
 }
+
+class DarwinNotificationAction {
+  const DarwinNotificationAction.plain(
+    this.identifier,
+    this.title, {
+    this.options = const {},
+  });
+  final String identifier;
+  final String title;
+  final Set<DarwinNotificationActionOption> options;
+}
+
+enum DarwinNotificationActionOption {
+  foreground,
+  destructive,
+  authenticationRequired,
+}
+
+enum DarwinNotificationCategoryOption {
+  customDismissAction,
+  allowInCarPlay,
+  hiddenPreviewShowTitle,
+  hiddenPreviewShowSubtitle,
+}
+
+class IOSFlutterLocalNotificationsPlugin
+    extends ResolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin> {}
+
 
 class NotificationResponse {
   const NotificationResponse({

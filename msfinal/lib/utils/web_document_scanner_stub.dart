@@ -7,7 +7,7 @@ library web_document_scanner_stub;
 class CunningDocumentScanner {
   /// Always returns an empty list on web.
   static Future<List<String>?> getPictures({
-    bool noOfPages = false,
+    int noOfPages = 1,
     bool isGalleryImportAllowed = false,
   }) async => null;
 }

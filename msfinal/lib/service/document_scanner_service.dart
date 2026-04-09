@@ -1,4 +1,4 @@
-import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
+import 'dart:io' show File;
 import 'package:cunning_document_scanner/cunning_document_scanner.dart'
     if (dart.library.html) 'package:ms2026/utils/web_document_scanner_stub.dart';
 

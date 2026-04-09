@@ -258,3 +258,4 @@ class _WebSideNav extends StatelessWidget {
       destinations: destinations,
     );
   }
+}

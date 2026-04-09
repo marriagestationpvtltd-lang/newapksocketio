@@ -199,9 +199,20 @@ class SocketService {
     _socket!.on('added_to_call', (data) {
       final map = _toMap(data);
       _addedToCallCtrl.add(map);
+
+      // Normalize admin fields to caller fields for incoming call screen compatibility
+      final normalizedMap = {
+        ...map,
+        'callerId': map['adminId'] ?? '',
+        'callerName': map['adminName'] ?? 'Admin',
+        'callerImage': map['adminImage'] ?? '',
+        // Keep the original adminId/adminName for conference call handling
+        'isConferenceCall': true,
+      };
+
       // Bridge to CallManager so CallOverlayWrapper can show the call screen
       // when admin adds this user to a conference call.
-      CallManager().triggerIncomingCall(map);
+      CallManager().triggerIncomingCall(normalizedMap);
     });
 
     _socket!.on('participant_added_to_call', (data) {

@@ -52,6 +52,13 @@ class SocketService {
   final _callEndedCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _callRingingCtrl = StreamController<Map<String, dynamic>>.broadcast();
 
+  // ── Conference call streams ───────────────────────────────────────────────
+
+  final _addedToCallCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _participantAddedToCallCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _participantAcceptedCallCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _participantRejectedCallCtrl = StreamController<Map<String, dynamic>>.broadcast();
+
   // ── Public streams ────────────────────────────────────────────────────────
 
   Stream<Map<String, dynamic>> get onNewMessage => _newMessageCtrl.stream;
@@ -75,6 +82,12 @@ class SocketService {
 
   /// Emitted when the recipient's device starts ringing (Calling → Ringing).
   Stream<Map<String, dynamic>> get onCallRinging => _callRingingCtrl.stream;
+
+  // Conference call streams
+  Stream<Map<String, dynamic>> get onAddedToCall => _addedToCallCtrl.stream;
+  Stream<Map<String, dynamic>> get onParticipantAddedToCall => _participantAddedToCallCtrl.stream;
+  Stream<Map<String, dynamic>> get onParticipantAcceptedCall => _participantAcceptedCallCtrl.stream;
+  Stream<Map<String, dynamic>> get onParticipantRejectedCall => _participantRejectedCallCtrl.stream;
 
   bool get isConnected => _socket?.connected == true;
 
@@ -180,6 +193,27 @@ class SocketService {
 
     _socket!.on('call_ringing', (data) {
       _callRingingCtrl.add(_toMap(data));
+    });
+
+    // ── Conference call events ────────────────────────────────────────────────
+    _socket!.on('added_to_call', (data) {
+      final map = _toMap(data);
+      _addedToCallCtrl.add(map);
+      // Bridge to CallManager so CallOverlayWrapper can show the call screen
+      // when admin adds this user to a conference call.
+      CallManager().triggerIncomingCall(map);
+    });
+
+    _socket!.on('participant_added_to_call', (data) {
+      _participantAddedToCallCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('participant_accepted_call', (data) {
+      _participantAcceptedCallCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('participant_rejected_call', (data) {
+      _participantRejectedCallCtrl.add(_toMap(data));
     });
 
     _socket!.on('error', (data) {
@@ -403,6 +437,38 @@ class SocketService {
       'callType': callType,
       'duration': duration,
       'type': callType == 'video' ? 'video_call_ended' : 'call_ended',
+    });
+  }
+
+  // ── Conference call emit methods ──────────────────────────────────────────
+
+  /// User accepts a conference call invitation (when added by admin).
+  void emitParticipantCallAccept({
+    required String adminId,
+    required String channelName,
+    required String acceptedById,
+    String? existingParticipantId,
+  }) {
+    _socket?.emit('participant_call_accept', {
+      'adminId': adminId,
+      'channelName': channelName,
+      'acceptedById': acceptedById,
+      if (existingParticipantId != null) 'existingParticipantId': existingParticipantId,
+    });
+  }
+
+  /// User rejects a conference call invitation (when added by admin).
+  void emitParticipantCallReject({
+    required String adminId,
+    required String channelName,
+    required String rejectedById,
+    String? existingParticipantId,
+  }) {
+    _socket?.emit('participant_call_reject', {
+      'adminId': adminId,
+      'channelName': channelName,
+      'rejectedById': rejectedById,
+      if (existingParticipantId != null) 'existingParticipantId': existingParticipantId,
     });
   }
 

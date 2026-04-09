@@ -1660,6 +1660,7 @@ class _ChatWindowState extends State<ChatWindow> {
         isOnline: isOnline,
         isPaid: chatProvider.ispaid,
         sharedPhotos: sharedPhotos,
+        onViewProfile: _openProfileInNewTab,
         onDeleteMessage: _deleteMessage,
       ),
     );
@@ -5562,6 +5563,7 @@ class _AdminUserProfileSheet extends StatelessWidget {
   final bool isOnline;
   final bool isPaid;
   final List<_AdminSharedPhoto> sharedPhotos;
+  final void Function(BuildContext context, int userId) onViewProfile;
   final ValueChanged<String> onDeleteMessage;
 
   const _AdminUserProfileSheet({
@@ -5571,6 +5573,7 @@ class _AdminUserProfileSheet extends StatelessWidget {
     required this.isOnline,
     required this.isPaid,
     required this.sharedPhotos,
+    required this.onViewProfile,
     required this.onDeleteMessage,
   });
 
@@ -5818,7 +5821,7 @@ class _AdminUserProfileSheet extends StatelessWidget {
                   onPressed: () {
                     Navigator.pop(context);
                     // Open profile in new tab
-                    _openProfileInNewTab(context, userId);
+                    onViewProfile(context, userId);
                   },
                   icon: const Icon(Icons.person_outline),
                   label: const Text('View Profile'),

@@ -848,52 +848,114 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 final myid = int.tryParse(userData["id"].toString());
                 Navigator.pop(context);
 
-                // Show loading
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (context) => const Center(
-                    child: CircularProgressIndicator(),
+                // Optimistically update UI immediately
+                final userProfile = Provider.of<UserProfile>(context, listen: false);
+                final currentResponse = userProfile.profileResponse;
+                if (currentResponse != null) {
+                  // Create updated response with pending status
+                  final updatedPersonalDetail = PersonalDetail(
+                    photoRequest: 'pending',
+                    chatRequest: currentResponse.data.personalDetail.chatRequest,
+                    firstName: currentResponse.data.personalDetail.firstName,
+                    lastName: currentResponse.data.personalDetail.lastName,
+                    profilePicture: currentResponse.data.personalDetail.profilePicture,
+                    usertype: currentResponse.data.personalDetail.usertype,
+                    isVerified: currentResponse.data.personalDetail.isVerified,
+                    privacy: currentResponse.data.personalDetail.privacy,
+                    city: currentResponse.data.personalDetail.city,
+                    country: currentResponse.data.personalDetail.country,
+                    educationmedium: currentResponse.data.personalDetail.educationmedium,
+                    educationtype: currentResponse.data.personalDetail.educationtype,
+                    faculty: currentResponse.data.personalDetail.faculty,
+                    degree: currentResponse.data.personalDetail.degree,
+                    areyouworking: currentResponse.data.personalDetail.areyouworking,
+                    occupationtype: currentResponse.data.personalDetail.occupationtype,
+                    companyname: currentResponse.data.personalDetail.companyname,
+                    designation: currentResponse.data.personalDetail.designation,
+                    workingwith: currentResponse.data.personalDetail.workingwith,
+                    annualincome: currentResponse.data.personalDetail.annualincome,
+                    businessname: currentResponse.data.personalDetail.businessname,
+                    memberid: currentResponse.data.personalDetail.memberid,
+                    heightName: currentResponse.data.personalDetail.heightName,
+                    maritalStatusId: currentResponse.data.personalDetail.maritalStatusId,
+                    maritalStatusName: currentResponse.data.personalDetail.maritalStatusName,
+                    motherTongue: currentResponse.data.personalDetail.motherTongue,
+                    aboutMe: currentResponse.data.personalDetail.aboutMe,
+                    birthDate: currentResponse.data.personalDetail.birthDate,
+                    disability: currentResponse.data.personalDetail.disability,
+                    bloodGroup: currentResponse.data.personalDetail.bloodGroup,
+                    religionName: currentResponse.data.personalDetail.religionName,
+                    communityName: currentResponse.data.personalDetail.communityName,
+                    subCommunityName: currentResponse.data.personalDetail.subCommunityName,
+                    manglik: currentResponse.data.personalDetail.manglik,
+                    birthtime: currentResponse.data.personalDetail.birthtime,
+                    birthcity: currentResponse.data.personalDetail.birthcity,
+                    photoRequestType: 'sent',
+                    chatRequestType: currentResponse.data.personalDetail.chatRequestType,
+                  );
+
+                  final updatedData = ProfileData(
+                    personalDetail: updatedPersonalDetail,
+                    familyDetail: currentResponse.data.familyDetail,
+                    lifestyle: currentResponse.data.lifestyle,
+                    partner: currentResponse.data.partner,
+                  );
+
+                  final optimisticResponse = ProfileResponse(
+                    status: currentResponse.status,
+                    data: updatedData,
+                    partnerMatch: currentResponse.partnerMatch,
+                    gallery: currentResponse.gallery,
+                    accessControl: currentResponse.accessControl,
+                  );
+
+                  userProfile.updateFromResponse(optimisticResponse);
+                }
+
+                // Show success message immediately
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Photo request sent successfully!'),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 2),
                   ),
                 );
 
+                // Send request in background without blocking UI
                 try {
                   final service = ProfileService();
                   final result = await service.sendPhotoRequest(
-                    myId: myid.toString(), // Get from your auth system
-                    userId: widget.userId, // Current profile ID
+                    myId: myid.toString(),
+                    userId: widget.userId,
                   );
 
-                  Navigator.pop(context); // Remove loading
-
-                  if (result['status'] == 'success') {
+                  // If request failed, revert the optimistic update
+                  if (result['status'] != 'success') {
                     await _refreshProfile(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Photo request sent successfully!'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  } else {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            result['message']?.toString().isNotEmpty == true
+                                ? result['message'].toString()
+                                : 'Unable to send photo request right now.',
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                } catch (e) {
+                  // Revert on error
+                  await _refreshProfile(context);
+                  if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(
-                          result['message']?.toString().isNotEmpty == true
-                              ? result['message'].toString()
-                              : 'Unable to send photo request right now.',
-                        ),
+                        content: Text('Failed to send photo request: $e'),
                         backgroundColor: Colors.red,
                       ),
                     );
                   }
-                } catch (e) {
-                  Navigator.pop(context); // Remove loading
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to send photo request: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
                 }
               },
               child: Text(
@@ -923,58 +985,120 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             TextButton(
               onPressed: () async {
+                final prefs = await SharedPreferences.getInstance();
+                final userDataString = prefs.getString('user_data');
+                final userData = jsonDecode(userDataString!);
+                final myid = int.tryParse(userData["id"].toString());
                 Navigator.pop(context);
 
-                // Show loading
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (context) => const Center(
-                    child: CircularProgressIndicator(),
+                // Optimistically update UI immediately
+                final userProfile = Provider.of<UserProfile>(context, listen: false);
+                final currentResponse = userProfile.profileResponse;
+                if (currentResponse != null) {
+                  // Create updated response with pending status
+                  final updatedPersonalDetail = PersonalDetail(
+                    photoRequest: currentResponse.data.personalDetail.photoRequest,
+                    chatRequest: 'pending',
+                    firstName: currentResponse.data.personalDetail.firstName,
+                    lastName: currentResponse.data.personalDetail.lastName,
+                    profilePicture: currentResponse.data.personalDetail.profilePicture,
+                    usertype: currentResponse.data.personalDetail.usertype,
+                    isVerified: currentResponse.data.personalDetail.isVerified,
+                    privacy: currentResponse.data.personalDetail.privacy,
+                    city: currentResponse.data.personalDetail.city,
+                    country: currentResponse.data.personalDetail.country,
+                    educationmedium: currentResponse.data.personalDetail.educationmedium,
+                    educationtype: currentResponse.data.personalDetail.educationtype,
+                    faculty: currentResponse.data.personalDetail.faculty,
+                    degree: currentResponse.data.personalDetail.degree,
+                    areyouworking: currentResponse.data.personalDetail.areyouworking,
+                    occupationtype: currentResponse.data.personalDetail.occupationtype,
+                    companyname: currentResponse.data.personalDetail.companyname,
+                    designation: currentResponse.data.personalDetail.designation,
+                    workingwith: currentResponse.data.personalDetail.workingwith,
+                    annualincome: currentResponse.data.personalDetail.annualincome,
+                    businessname: currentResponse.data.personalDetail.businessname,
+                    memberid: currentResponse.data.personalDetail.memberid,
+                    heightName: currentResponse.data.personalDetail.heightName,
+                    maritalStatusId: currentResponse.data.personalDetail.maritalStatusId,
+                    maritalStatusName: currentResponse.data.personalDetail.maritalStatusName,
+                    motherTongue: currentResponse.data.personalDetail.motherTongue,
+                    aboutMe: currentResponse.data.personalDetail.aboutMe,
+                    birthDate: currentResponse.data.personalDetail.birthDate,
+                    disability: currentResponse.data.personalDetail.disability,
+                    bloodGroup: currentResponse.data.personalDetail.bloodGroup,
+                    religionName: currentResponse.data.personalDetail.religionName,
+                    communityName: currentResponse.data.personalDetail.communityName,
+                    subCommunityName: currentResponse.data.personalDetail.subCommunityName,
+                    manglik: currentResponse.data.personalDetail.manglik,
+                    birthtime: currentResponse.data.personalDetail.birthtime,
+                    birthcity: currentResponse.data.personalDetail.birthcity,
+                    photoRequestType: currentResponse.data.personalDetail.photoRequestType,
+                    chatRequestType: 'sent',
+                  );
+
+                  final updatedData = ProfileData(
+                    personalDetail: updatedPersonalDetail,
+                    familyDetail: currentResponse.data.familyDetail,
+                    lifestyle: currentResponse.data.lifestyle,
+                    partner: currentResponse.data.partner,
+                  );
+
+                  final optimisticResponse = ProfileResponse(
+                    status: currentResponse.status,
+                    data: updatedData,
+                    partnerMatch: currentResponse.partnerMatch,
+                    gallery: currentResponse.gallery,
+                    accessControl: currentResponse.accessControl,
+                  );
+
+                  userProfile.updateFromResponse(optimisticResponse);
+                }
+
+                // Show success message immediately
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Chat request sent successfully!'),
+                    backgroundColor: Colors.green,
+                    duration: Duration(seconds: 2),
                   ),
                 );
 
+                // Send request in background without blocking UI
                 try {
-                  final prefs = await SharedPreferences.getInstance();
-                  final userDataString = prefs.getString('user_data');
-                  final userData = jsonDecode(userDataString!);
-                  final myid = int.tryParse(userData["id"].toString());
                   final service = ProfileService();
                   final result = await service.sendChatRequest(
-                    myId: myid.toString(), // Get from your auth system
-                    userId: widget.userId // Current profile ID
+                    myId: myid.toString(),
+                    userId: widget.userId,
                   );
 
-                  Navigator.pop(context); // Remove loading
-
-                  if (result['status'] == 'success') {
+                  // If request failed, revert the optimistic update
+                  if (result['status'] != 'success') {
                     await _refreshProfile(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Chat request sent successfully!'),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  } else {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            result['message']?.toString().isNotEmpty == true
+                                ? result['message'].toString()
+                                : 'Unable to send chat request right now.',
+                          ),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                } catch (e) {
+                  // Revert on error
+                  await _refreshProfile(context);
+                  if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(
-                          result['message']?.toString().isNotEmpty == true
-                              ? result['message'].toString()
-                              : 'Unable to send chat request right now.',
-                        ),
+                        content: Text('Failed to send chat request: $e'),
                         backgroundColor: Colors.red,
                       ),
                     );
                   }
-                } catch (e) {
-                  Navigator.pop(context); // Remove loading
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Failed to send chat request: $e'),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
                 }
               },
               child: Text(

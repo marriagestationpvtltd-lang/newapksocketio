@@ -1,8 +1,10 @@
 // lib/models/signup_model.dart
 import 'dart:convert';
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart' show XFile;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ms2026/config/app_endpoints.dart';
 
@@ -21,6 +23,8 @@ class SignupModel extends ChangeNotifier {
 
   // Local-only UI items
   File? profilePictureFile;
+  /// Used on web where [File] from dart:io is unavailable.
+  XFile? profilePictureXFile;
 
   // State
   bool isSubmitting = false;
@@ -40,6 +44,7 @@ class SignupModel extends ChangeNotifier {
   void setDateOfBirth(String v) { dateofbirth = v; notifyListeners(); }
   void setProfileForId(int v) { profileforId = v; notifyListeners(); }
   void setProfilePicture(File? f) { profilePictureFile = f; notifyListeners(); }
+  void setProfilePictureXFile(XFile? x) { profilePictureXFile = x; profilePictureFile = kIsWeb ? null : (x != null ? File(x.path) : null); notifyListeners(); }
 
   // Clear possible previous error
   void clearError() { error = null; notifyListeners(); }
@@ -112,8 +117,16 @@ class SignupModel extends ChangeNotifier {
       // Add text fields
       req.fields.addAll(_textFieldsForApi());
 
-      // Add profile picture if present
-      if (profilePictureFile != null && await profilePictureFile!.exists()) {
+      // Add profile picture if present (cross-platform bytes approach)
+      if (kIsWeb && profilePictureXFile != null) {
+        final bytes = await profilePictureXFile!.readAsBytes();
+        final fileName = profilePictureXFile!.name;
+        req.files.add(http.MultipartFile.fromBytes(
+          'profile_picture',
+          bytes,
+          filename: fileName,
+        ));
+      } else if (!kIsWeb && profilePictureFile != null && await profilePictureFile!.exists()) {
         final stream = http.ByteStream(profilePictureFile!.openRead());
         final length = await profilePictureFile!.length();
         final fileName = profilePictureFile!.path.split('/').last;

@@ -1,5 +1,6 @@
-import 'dart:io';
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart'
+    if (dart.library.html) 'package:ms2026/utils/web_mlkit_stub.dart';
 
 /// Service for extracting text from document images using Google ML Kit
 class OCRService {
@@ -34,12 +35,11 @@ class OCRService {
     return _nepaliToEnglishDigits.keys.any((nepali) => text.contains(nepali));
   }
 
-  /// Scans an image and extracts document ID numbers
-  /// Returns the extracted text or null if no text is found
-  /// Supports both English and Nepali (Devanagari) numerals
+  /// Scans an image and extracts document ID numbers.
+  /// On web this always returns null (OCR requires native ML Kit).
   Future<String?> extractDocumentId(File imageFile) async {
     try {
-      final inputImage = InputImage.fromFile(imageFile);
+      final inputImage = InputImage.fromFilePath(imageFile.path);
       final RecognizedText recognizedText = await _textRecognizer.processImage(inputImage);
 
       if (recognizedText.text.isEmpty) {

@@ -1,11 +1,12 @@
 import 'dart:async';
-import 'dart:io';
+import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:geocoding/geocoding.dart';
+import 'package:geocoding/geocoding.dart'
+    if (dart.library.html) 'package:ms2026/utils/web_geocoding_stub.dart';
 import 'package:ms2026/Auth/Screen/signupscreen5.dart';
-import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../ReUsable/dropdownwidget.dart';

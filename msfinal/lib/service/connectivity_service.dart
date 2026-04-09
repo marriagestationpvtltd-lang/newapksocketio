@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 class ConnectivityService extends ChangeNotifier {
   static final ConnectivityService _instance = ConnectivityService._internal();
@@ -76,13 +76,20 @@ class ConnectivityService extends ChangeNotifier {
     return _hasInternet;
   }
 
-  /// Check if a specific host is reachable
+  /// Check if a specific host is reachable.
+  /// Uses HTTP HEAD on all platforms (avoids dart:io dependency on web).
   Future<bool> _checkHost(String host) async {
     try {
-      final result = await InternetAddress.lookup(host)
+      if (kIsWeb) {
+        // On web, trust connectivity_plus; InternetAddress.lookup is unavailable.
+        return !_connectionStatus.contains(ConnectivityResult.none);
+      }
+      final uri = Uri.https(host, '/');
+      final response = await http
+          .head(uri)
           .timeout(const Duration(seconds: 5));
-      return result.isNotEmpty && result[0].rawAddress.isNotEmpty;
-    } catch (e) {
+      return response.statusCode >= 200 && response.statusCode < 400;
+    } catch (_) {
       return false;
     }
   }

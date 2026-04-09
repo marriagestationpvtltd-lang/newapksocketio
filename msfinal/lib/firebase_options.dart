@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -67,5 +64,19 @@ class DefaultFirebaseOptions {
     storageBucket: 'digitallamicomnp.firebasestorage.app',
     iosClientId: 'REPLACE_WITH_NEW_IOS_CLIENT_ID',
     iosBundleId: 'com.digitallami.appz',
+  );
+
+  // TODO: Replace the placeholder values below with your Firebase web app
+  // configuration from Firebase Console → Project Settings → Your apps → Web app.
+  // Run `flutterfire configure` to auto-generate these values.
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'REPLACE_WITH_WEB_API_KEY',
+    appId: 'REPLACE_WITH_WEB_APP_ID',
+    messagingSenderId: '477405059891',
+    projectId: 'digitallamicomnp',
+    authDomain: 'digitallamicomnp.firebaseapp.com',
+    databaseURL: 'https://digitallamicomnp-default-rtdb.firebaseio.com',
+    storageBucket: 'digitallamicomnp.firebasestorage.app',
+    measurementId: 'REPLACE_WITH_MEASUREMENT_ID',
   );
 }

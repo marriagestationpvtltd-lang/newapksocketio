@@ -1,5 +1,6 @@
 // Professional Redesigned Your Details Page - Step 2
-import 'dart:io';
+import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -470,9 +471,10 @@ class _YourDetailsPageState extends State<YourDetailsPage>
       );
 
       if (image != null) {
-        final file = File(image.path);
-        setState(() => _profileImage = file);
-        context.read<SignupModel>().setProfilePicture(file);
+        context.read<SignupModel>().setProfilePictureXFile(image);
+        if (!kIsWeb) {
+          setState(() => _profileImage = File(image.path));
+        }
       }
     } catch (e) {
       _showSnackBar('Failed to pick image', isError: true);
@@ -489,9 +491,10 @@ class _YourDetailsPageState extends State<YourDetailsPage>
       );
 
       if (image != null) {
-        final file = File(image.path);
-        setState(() => _profileImage = file);
-        context.read<SignupModel>().setProfilePicture(file);
+        context.read<SignupModel>().setProfilePictureXFile(image);
+        if (!kIsWeb) {
+          setState(() => _profileImage = File(image.path));
+        }
       }
     } catch (e) {
       _showSnackBar('Failed to take photo', isError: true);

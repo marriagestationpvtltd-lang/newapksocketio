@@ -1,6 +1,7 @@
 // screens/main_controller_screen.dart
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../ReUsable/Navbar.dart'; // AppNavbar with onItemSelected callback
@@ -9,6 +10,7 @@ import '../liked/liked.dart';
 import '../Chat/ChatlistScreen.dart';
 import '../profile/myprofile.dart';
 import '../service/socket_service.dart';
+import '../utils/responsive_layout.dart';
 
 class MainControllerScreen extends StatefulWidget {
   final int initialIndex;
@@ -115,7 +117,43 @@ class _MainControllerScreenState extends State<MainControllerScreen> {
   @override
   Widget build(BuildContext context) {
     final screens = _buildScreens();
+    final isWide = ResponsiveLayout.isWideLayout(context);
 
+    if (isWide && kIsWeb) {
+      // ── Web: side-navigation rail + content ──────────────────────────────
+      return PopScope(
+        canPop: false,
+        child: Scaffold(
+          body: Row(
+            children: [
+              _WebSideNav(
+                selectedIndex: _selectedIndex,
+                chatUnreadCount: _chatUnreadCount,
+                currentUserImage: _currentUserImage,
+                onItemSelected: (index) {
+                  setState(() {
+                    _selectedIndex = index;
+                    if (index == _chatTabIndex) {
+                      _chatUnreadCount = 0;
+                      _unreadChatRoomIds.clear();
+                    }
+                  });
+                },
+              ),
+              const VerticalDivider(width: 1, thickness: 1),
+              Expanded(
+                child: IndexedStack(
+                  index: _selectedIndex,
+                  children: screens,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // ── Mobile: bottom navigation ─────────────────────────────────────────
     return PopScope(
       canPop: _selectedIndex == 0,
       onPopInvoked: (bool didPop) {
@@ -149,3 +187,74 @@ class _MainControllerScreenState extends State<MainControllerScreen> {
     );
   }
 }
+
+/// A side navigation rail shown on web/wide-screen layouts.
+class _WebSideNav extends StatelessWidget {
+  const _WebSideNav({
+    required this.selectedIndex,
+    required this.chatUnreadCount,
+    required this.currentUserImage,
+    required this.onItemSelected,
+  });
+
+  final int selectedIndex;
+  final int chatUnreadCount;
+  final String? currentUserImage;
+  final ValueChanged<int> onItemSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.primary;
+
+    final destinations = [
+      const NavigationRailDestination(
+        icon: Icon(Icons.home_outlined),
+        selectedIcon: Icon(Icons.home),
+        label: Text('Home'),
+      ),
+      const NavigationRailDestination(
+        icon: Icon(Icons.favorite_border),
+        selectedIcon: Icon(Icons.favorite),
+        label: Text('Liked'),
+      ),
+      NavigationRailDestination(
+        icon: Badge(
+          isLabelVisible: chatUnreadCount > 0,
+          label: Text(chatUnreadCount > 9 ? '9+' : '$chatUnreadCount'),
+          child: const Icon(Icons.chat_bubble_outline),
+        ),
+        selectedIcon: const Icon(Icons.chat_bubble),
+        label: const Text('Chat'),
+      ),
+      NavigationRailDestination(
+        icon: currentUserImage != null
+            ? CircleAvatar(
+                radius: 13,
+                backgroundImage: NetworkImage(currentUserImage!),
+              )
+            : const Icon(Icons.person_outline),
+        selectedIcon: const Icon(Icons.person),
+        label: const Text('Profile'),
+      ),
+    ];
+
+    return NavigationRail(
+      selectedIndex: selectedIndex,
+      onDestinationSelected: onItemSelected,
+      extended: true,
+      minExtendedWidth: 200,
+      leading: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text(
+          'Marriage\nStation',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: color,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+      destinations: destinations,
+    );
+  }

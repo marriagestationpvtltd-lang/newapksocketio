@@ -220,13 +220,21 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     final String description = _versionData!['description'];
     final String appLink = _versionData!['app_link'];
 
+    if (kIsWeb) {
+      // On web, no platform-specific version check; proceed directly
+      _proceedWithNavigation();
+      return;
+    }
+
     bool updateNeeded = false;
     String? platformVersion;
+    final isAndroid = defaultTargetPlatform == TargetPlatform.android;
+    final isIOS = defaultTargetPlatform == TargetPlatform.iOS;
 
-    if (Platform.isAndroid) {
+    if (isAndroid) {
       updateNeeded = _compareVersions(currentAndroidVersion, serverAndroidVersion);
       platformVersion = serverAndroidVersion;
-    } else if (Platform.isIOS) {
+    } else if (isIOS) {
       updateNeeded = _compareVersions(currentIOSVersion, serverIOSVersion);
       platformVersion = serverIOSVersion;
     }

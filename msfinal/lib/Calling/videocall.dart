@@ -492,7 +492,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
             _syncOverlayState();
             unawaited(_startForegroundService());
           },
-          onUserJoined: (_, uid, __) {
+          onUserJoined: (_, uid, __) async {
             if (mounted) {
               setState(() {
                 _remoteUid = uid;
@@ -500,7 +500,11 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
                 _callActive = true;
               });
             }
-            _stopRingtone();
+            await _stopRingtone();
+            // Enable microphone only after call connects to avoid interrupting ringtone
+            if (_engineInitialized) {
+              await _engine.enableAudio();
+            }
             _startCallTimer();
             _syncOverlayState();
             _scheduleControlsHide(); // Start auto-hide once call is active
@@ -544,7 +548,6 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
       );
 
       await _engine.enableVideo();
-      await _engine.enableAudio();
       await _engine.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
 
       // Configure video encoder with adaptive bitrate support

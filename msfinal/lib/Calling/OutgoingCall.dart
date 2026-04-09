@@ -496,6 +496,10 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
               });
             }
             await _stopRingtone(); // Stop ringtone when user joins
+            // Enable microphone only after call connects to avoid interrupting ringtone
+            if (_engineInitialized) {
+              await _engine.enableAudio();
+            }
             _startCallTimer(); // Start call duration timer
             _syncOverlayState();
           },
@@ -508,7 +512,6 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
         ),
       );
 
-      await _engine.enableAudio();
       await _engine.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
 
       await _engine.joinChannel(

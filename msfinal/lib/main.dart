@@ -1006,33 +1006,27 @@ Future<void> setupFirebaseMessaging() async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
-  try {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  } catch (e) {
-    debugPrint('⚠️ Firebase initialization failed: $e');
-  }
+  // Run UI orientation/system-chrome setup and Firebase init in parallel to
+  // minimise the time before runApp() is called.
+  await Future.wait([
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]),
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge),
+    Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform)
+        .catchError((Object e) {
+      debugPrint('⚠️ Firebase initialization failed: $e');
+    }),
+  ]);
 
-  // Sign in anonymously so Firestore security rules that require
-  // request.auth != null are satisfied for chat and presence operations.
-  // signInAnonymously() returns the existing anonymous user when already signed in.
-  try {
-    await FirebaseAuth.instance.signInAnonymously();
-  } catch (e) {
-    debugPrint('⚠️ Firebase anonymous sign-in failed: $e');
-  }
-
-  await initLocalNotifications();
-
-  // Initialize connectivity service
+  // Create the connectivity service instance now so the provider is
+  // available immediately after runApp().  Actual network probing is
+  // deferred to the post-frame callback below.
   final connectivityService = ConnectivityService();
-  await connectivityService.initialize();
 
   // Initialize call state recovery manager
   final callRecoveryManager = CallStateRecoveryManager();
 
+  // Render the first frame as fast as possible.
   runApp(
     MultiProvider(
       providers: [
@@ -1047,7 +1041,22 @@ void main() async {
     ),
   );
 
+  // Defer all heavy / network-touching initialisation to after the first
+  // frame so the splash screen appears instantly.
   WidgetsBinding.instance.addPostFrameCallback((_) {
+    // Run independently – none of these block navigation.
+    Future.wait([
+      // Sign in anonymously so Firestore security rules (request.auth != null)
+      // are satisfied for chat and presence operations.
+      FirebaseAuth.instance.signInAnonymously().catchError((Object e) {
+        debugPrint('⚠️ Firebase anonymous sign-in failed: $e');
+      }),
+      // Set up local notification channels.
+      initLocalNotifications(),
+      // Start connectivity monitoring (probes google.com + cloudflare.com).
+      connectivityService.initialize(),
+    ]);
+
     setupFirebaseMessaging();
     // Initialize call recovery after first frame
     callRecoveryManager.initialize();

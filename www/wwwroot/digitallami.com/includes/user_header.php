@@ -224,7 +224,7 @@ $_currentPage = basename($_SERVER['PHP_SELF']);
         <div class="collapse navbar-collapse" id="msMainNav">
             <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
                 <li class="nav-item">
-                    <a class="nav-link <?php echo $_currentPage === 'index.php' ? 'active' : ''; ?>" href="index.php">
+                    <a class="nav-link <?php echo in_array($_currentPage, ['index.php', 'home.php']) ? 'active' : ''; ?>" href="home.php">
                         <i class="fas fa-home"></i> Home
                     </a>
                 </li>

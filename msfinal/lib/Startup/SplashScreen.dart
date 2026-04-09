@@ -229,6 +229,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     } catch (e) {
       // Network unavailable or timeout – proceed so returning users are
       // not blocked from reaching the main app.
+      debugPrint('⚠️ Version check failed: $e');
       if (mounted) {
         setState(() {
           _errorMessage = 'No internet connection';

@@ -1466,7 +1466,7 @@ class _ChatWindowState extends State<ChatWindow> {
     // Fetch available users (excluding admin and current participant)
     try {
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('access_token') ?? '';
+      final token = prefs.getString('token') ?? '';
 
       final response = await http.post(
         Uri.parse('$kAdminApi2BaseUrl/getusers.php'),

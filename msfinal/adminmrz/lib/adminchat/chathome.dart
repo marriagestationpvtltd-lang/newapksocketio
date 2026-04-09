@@ -4028,7 +4028,10 @@ class _ChatWindowState extends State<ChatWindow> {
       }
       final req = http.MultipartRequest(
         'POST',
-        Uri.parse('$kAdminSocketUrl/upload?type=voice'),
+        Uri.parse(kAdminSocketUrl).replace(
+          path: '/upload',
+          queryParameters: {'type': 'voice'},
+        ),
       );
       req.files.add(http.MultipartFile.fromBytes(
         'file',
@@ -4049,7 +4052,10 @@ class _ChatWindowState extends State<ChatWindow> {
     } else {
       final req = http.MultipartRequest(
         'POST',
-        Uri.parse('$kAdminSocketUrl/upload?type=voice'),
+        Uri.parse(kAdminSocketUrl).replace(
+          path: '/upload',
+          queryParameters: {'type': 'voice'},
+        ),
       );
       req.files.add(await http.MultipartFile.fromPath('file', filePath));
       final streamed = await req.send();
@@ -4624,7 +4630,10 @@ class _ChatWindowState extends State<ChatWindow> {
   }) async {
     final request = http.MultipartRequest(
       'POST',
-      Uri.parse('$kAdminSocketUrl/upload?type=image'),
+      Uri.parse(kAdminSocketUrl).replace(
+        path: '/upload',
+        queryParameters: {'type': 'image'},
+      ),
     );
 
     if (kIsWeb) {

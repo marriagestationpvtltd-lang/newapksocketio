@@ -197,6 +197,84 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     super.dispose();
   }
 
+  /// Performs an app version check. When [isBackground] is true, the call
+  /// respects the cached timestamp to avoid hammering the server and never
+  /// surfaces user-facing errors.
+  Future<void> _checkAppVersion({bool isBackground = false}) async {
+    const sixHoursMs = 6 * 60 * 60 * 1000;
+    const thirtyMinutesMs = 30 * 60 * 1000;
+    SharedPreferences? prefs;
+
+    if (!isBackground && mounted) {
+      setState(() {
+        _isCheckingVersion = true;
+        _errorMessage = null;
+      });
+    }
+
+    try {
+      prefs = await SharedPreferences.getInstance();
+      // 0 means "never checked" → always proceeds on fresh install.
+      if (isBackground) {
+        final lastCheck = prefs.getInt('last_version_check_ok') ?? 0;
+        final msElapsed = DateTime.now().millisecondsSinceEpoch - lastCheck;
+        if (msElapsed < sixHoursMs) {
+          if (mounted) setState(() => _isCheckingVersion = false);
+          return; // Checked recently — nothing to do.
+        }
+      }
+
+      final response = await http
+          .get(Uri.parse('${kApiBaseUrl}/app.php'))
+          .timeout(const Duration(seconds: 5));
+
+      // Always update the cache after a real HTTP attempt so that a server
+      // returning non-success or an update-not-needed result doesn't trigger
+      // a repeat check on the very next launch.
+      await prefs.setInt(
+          'last_version_check_ok', DateTime.now().millisecondsSinceEpoch);
+
+      if (response.statusCode != 200) {
+        throw Exception('Non-200 response');
+      }
+
+      final data = jsonDecode(response.body);
+      if (data['success'] != true) {
+        throw Exception('Invalid response');
+      }
+
+      _versionData = data['data'];
+      if (mounted) {
+        setState(() {
+          _isCheckingVersion = false;
+          _errorMessage = null;
+        });
+      }
+
+      _showUpdateDialogIfNeeded();
+    } catch (_) {
+      if (isBackground) {
+        // Network unavailable or timeout.  Save a shortened cache timestamp so
+        // that we retry in ~30 min rather than on every single launch.
+        try {
+          prefs ??= await SharedPreferences.getInstance();
+          // Back-date the timestamp by (sixHours - thirtyMinutes) so the next
+          // cache check fires after ~30 minutes instead of another 6 hours.
+          final retryAfter30Min = DateTime.now().millisecondsSinceEpoch -
+              (sixHoursMs - thirtyMinutesMs);
+          await prefs.setInt('last_version_check_ok', retryAfter30Min);
+          if (mounted) setState(() => _isCheckingVersion = false);
+        } catch (_) {}
+      } else if (mounted) {
+        setState(() {
+          _isCheckingVersion = false;
+          _errorMessage =
+              'Unable to check for updates. Please check your connection and try again.';
+        });
+      }
+    }
+  }
+
   /// Background version check — runs after navigation has already started so
   /// it never blocks the user from reaching the app.
   ///
@@ -205,47 +283,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   /// • HTTP error / timeout           → saves a shortened cache time (30 min) so
   ///   we retry later but don't hammer the server on every launch.
   Future<void> _checkAppVersionInBackground() async {
-    const sixHoursMs = 6 * 60 * 60 * 1000;
-    const thirtyMinutesMs = 30 * 60 * 1000;
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      // 0 means "never checked" → always proceeds on fresh install.
-      final lastCheck = prefs.getInt('last_version_check_ok') ?? 0;
-      final msElapsed = DateTime.now().millisecondsSinceEpoch - lastCheck;
-      if (msElapsed < sixHoursMs) return; // Checked recently — nothing to do.
-
-      final response = await http.get(
-        Uri.parse('${kApiBaseUrl}/app.php'),
-      ).timeout(const Duration(seconds: 5));
-
-      // Always update the cache after a real HTTP attempt so that a server
-      // returning non-success or an update-not-needed result doesn't trigger
-      // a repeat check on the very next launch.
-      await prefs.setInt(
-          'last_version_check_ok', DateTime.now().millisecondsSinceEpoch);
-
-      if (response.statusCode != 200) return;
-
-      final data = jsonDecode(response.body);
-      if (data['success'] != true) return;
-
-      _versionData = data['data'];
-      if (mounted) setState(() => _isCheckingVersion = false);
-
-      _showUpdateDialogIfNeeded();
-    } catch (_) {
-      // Network unavailable or timeout.  Save a shortened cache timestamp so
-      // that we retry in ~30 min rather than on every single launch.
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        // Back-date the timestamp by (sixHours - thirtyMinutes) so the next
-        // cache check fires after ~30 minutes instead of another 6 hours.
-        final retryAfter30Min = DateTime.now().millisecondsSinceEpoch -
-            (sixHoursMs - thirtyMinutesMs);
-        await prefs.setInt('last_version_check_ok', retryAfter30Min);
-      } catch (_) {}
-    }
+    await _checkAppVersion(isBackground: true);
   }
 
   /// Shows an update dialog on whichever screen is currently active.

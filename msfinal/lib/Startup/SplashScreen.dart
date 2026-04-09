@@ -32,7 +32,6 @@ import 'MainControllere.dart';
 import 'onboarding.dart';
 
 import 'dart:convert';
-import 'dart:io' show Platform;
 import 'package:ms2026/config/app_endpoints.dart';
 
 class SplashScreen extends StatefulWidget {

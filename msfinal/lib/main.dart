@@ -13,6 +13,8 @@ import 'package:ms2026/Notification/notification_inbox_service.dart';
 import 'package:ms2026/pushnotification/pushservice.dart';
 import 'package:provider/provider.dart';
 
+import 'firebase_options.dart';
+
 import 'Calling/incomingvideocall.dart';
 import 'Calling/incommingcall.dart';
 import 'Calling/call_state_recovery_manager.dart';
@@ -49,7 +51,7 @@ const String generalChannelDescription = 'Channel for general app notifications'
 
 @pragma('vm:entry-point')
 Future<void> firebaseBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Initialize local notifications plugin so we can show custom notifications
   // (e.g. full-screen call intent) from this background isolate.
@@ -1007,7 +1009,11 @@ void main() async {
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
-  await Firebase.initializeApp();
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (e) {
+    debugPrint('⚠️ Firebase initialization failed: $e');
+  }
 
   // Sign in anonymously so Firestore security rules that require
   // request.auth != null are satisfied for chat and presence operations.

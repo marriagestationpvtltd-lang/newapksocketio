@@ -96,6 +96,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   CallToneSettings _callToneSettings = const CallToneSettings();
   bool _callToneSettingsLoaded = false;
   StreamSubscription<PlayerState>? _playerStateSub;
+  Timer? _ringtoneRestartTimer;
 
   // PiP (local video preview) draggable offset (from top-right)
   Offset _pipOffset = const Offset(20, 40);
@@ -135,24 +136,37 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
       await _ensureCallToneSettingsLoaded();
       await _stopRingtone();
 
-      // Set release mode to loop BEFORE setting up the listener
-      await _ringtonePlayer.setReleaseMode(ReleaseMode.loop);
+      // Use ReleaseMode.stop + timer-based repeat instead of ReleaseMode.loop.
+      // ReleaseMode.loop is unreliable on some Android devices and does not
+      // recover when Agora's enableAudio() takes over the audio session
+      // (audio-focus loss fires PlayerState.stopped, not .completed).
+      await _ringtonePlayer.setReleaseMode(ReleaseMode.stop);
 
-      // Fallback: restart playback when the player completes, in case
-      // ReleaseMode.loop is not honoured on some Android devices.
       _playerStateSub?.cancel();
       _playerStateSub = _ringtonePlayer.onPlayerStateChanged.listen((state) {
         debugPrint('🔊 Ringtone player state changed: $state');
-        if (state == PlayerState.completed &&
+        // Restart on both .completed (normal end) and .stopped (audio focus
+        // lost, e.g. when Agora initialises) so the caller always hears the
+        // ringing tone while waiting for the recipient.
+        if ((state == PlayerState.completed || state == PlayerState.stopped) &&
             _isPlayingRingtone &&
             !_isRestartingRingtone &&
             !_ending &&
             mounted) {
           _isRestartingRingtone = true;
-          debugPrint('🔁 Ringtone completed – restarting for continuous loop');
-          _playConfiguredTone().whenComplete(() {
-            _isRestartingRingtone = false;
-            debugPrint('✅ Ringtone restart complete');
+          _ringtoneRestartTimer?.cancel();
+          // Small delay lets the audio session stabilise after Agora init
+          // and avoids rapid-fire restart loops.
+          _ringtoneRestartTimer = Timer(const Duration(milliseconds: 500), () {
+            if (!_ending && mounted && _isPlayingRingtone) {
+              debugPrint('🔁 Ringtone interrupted/completed – restarting');
+              _playConfiguredTone().whenComplete(() {
+                _isRestartingRingtone = false;
+                debugPrint('✅ Ringtone restart complete');
+              });
+            } else {
+              _isRestartingRingtone = false;
+            }
           });
         }
       });
@@ -162,7 +176,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
       if (mounted) {
         setState(() => _isPlayingRingtone = true);
       }
-      debugPrint('🎵 Started playing calling tone with loop mode');
+      debugPrint('🎵 Started playing calling tone');
     } catch (e) {
       debugPrint('❌ Error playing calling tone: $e');
     }
@@ -191,12 +205,17 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
 
   Future<void> _stopRingtone() async {
     try {
+      _ringtoneRestartTimer?.cancel();
+      _ringtoneRestartTimer = null;
       _playerStateSub?.cancel();
       _playerStateSub = null;
       await _ringtonePlayer.stop();
 
       if (!mounted) return;
-      setState(() => _isPlayingRingtone = false);
+      setState(() {
+        _isPlayingRingtone = false;
+        _isRestartingRingtone = false;
+      });
     } catch (e) {
       debugPrint('Error stopping calling tone: $e');
     }
@@ -598,6 +617,10 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     _socketRejectedSub?.cancel();
     _socketEndedSub?.cancel();
     _socketRingingSub?.cancel();
+    _socketAcceptedSub = null;
+    _socketRejectedSub = null;
+    _socketEndedSub = null;
+    _socketRingingSub = null;
 
     // Always stop ringtone when ending call
     await _stopRingtone();
@@ -1186,7 +1209,9 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     _socketRingingSub?.cancel();
     _connectivitySubscription?.cancel();
     _controlsHideTimer?.cancel();
+    _ringtoneRestartTimer?.cancel();
     _playerStateSub?.cancel();
+    _ringtonePlayer.dispose();
     // Release Agora engine if not already released by _endCall
     if (_engineInitialized) {
       unawaited(_releaseEngineAsync());

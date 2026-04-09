@@ -47,6 +47,10 @@ class AdminSocketService {
   final _callRejectedCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _callCancelledCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _callEndedCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _addedToCallCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _participantAddedToCallCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _participantAcceptedCallCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _participantRejectedCallCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _connectionCtrl = StreamController<bool>.broadcast();
 
   // ── Public streams ────────────────────────────────────────────────────────
@@ -67,6 +71,10 @@ class AdminSocketService {
   Stream<Map<String, dynamic>> get onCallRejected => _callRejectedCtrl.stream;
   Stream<Map<String, dynamic>> get onCallCancelled => _callCancelledCtrl.stream;
   Stream<Map<String, dynamic>> get onCallEnded => _callEndedCtrl.stream;
+  Stream<Map<String, dynamic>> get onAddedToCall => _addedToCallCtrl.stream;
+  Stream<Map<String, dynamic>> get onParticipantAddedToCall => _participantAddedToCallCtrl.stream;
+  Stream<Map<String, dynamic>> get onParticipantAcceptedCall => _participantAcceptedCallCtrl.stream;
+  Stream<Map<String, dynamic>> get onParticipantRejectedCall => _participantRejectedCallCtrl.stream;
   Stream<bool> get onConnectionChange => _connectionCtrl.stream;
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -169,6 +177,22 @@ class AdminSocketService {
 
     _socket!.on('call_ended', (data) {
       _callEndedCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('added_to_call', (data) {
+      _addedToCallCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('participant_added_to_call', (data) {
+      _participantAddedToCallCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('participant_accepted_call', (data) {
+      _participantAcceptedCallCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('participant_rejected_call', (data) {
+      _participantRejectedCallCtrl.add(_toMap(data));
     });
 
     _socket!.connect();
@@ -478,6 +502,62 @@ class AdminSocketService {
       'callType': callType,
       'duration': duration,
       'type': callType == 'video' ? 'video_call_ended' : 'call_ended',
+    });
+  }
+
+  /// Admin emits this to add a new participant to an ongoing call (conference call)
+  void emitAddParticipantToCall({
+    required String newParticipantId,
+    required String channelName,
+    required String callType,
+    required String adminId,
+    required String adminName,
+    String? existingParticipantId,
+    String? newParticipantName,
+    String? agoraAppId,
+    String? callerUid,
+  }) {
+    _socket?.emit('add_participant_to_call', {
+      'newParticipantId': newParticipantId,
+      'channelName': channelName,
+      'callType': callType,
+      'adminId': adminId,
+      'adminName': adminName,
+      if (existingParticipantId != null) 'existingParticipantId': existingParticipantId,
+      if (newParticipantName != null) 'newParticipantName': newParticipantName,
+      if (agoraAppId != null) 'agoraAppId': agoraAppId,
+      if (callerUid != null) 'callerUid': callerUid,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+  }
+
+  /// New participant accepts the conference call invitation
+  void emitParticipantCallAccept({
+    required String adminId,
+    required String channelName,
+    required String acceptedById,
+    String? existingParticipantId,
+  }) {
+    _socket?.emit('participant_call_accept', {
+      'adminId': adminId,
+      'channelName': channelName,
+      'acceptedById': acceptedById,
+      if (existingParticipantId != null) 'existingParticipantId': existingParticipantId,
+    });
+  }
+
+  /// New participant rejects the conference call invitation
+  void emitParticipantCallReject({
+    required String adminId,
+    required String channelName,
+    required String rejectedById,
+    String? existingParticipantId,
+  }) {
+    _socket?.emit('participant_call_reject', {
+      'adminId': adminId,
+      'channelName': channelName,
+      'rejectedById': rejectedById,
+      if (existingParticipantId != null) 'existingParticipantId': existingParticipantId,
     });
   }
 

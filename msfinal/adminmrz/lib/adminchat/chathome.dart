@@ -13,6 +13,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'OutgoingCall.dart';
 import 'audiocall.dart';
@@ -1459,6 +1460,127 @@ class _ChatWindowState extends State<ChatWindow> {
     _callOverlayEntry = null;
   }
 
+  /// Show a dialog to select a user to add to the ongoing call.
+  /// Returns the selected user ID or null if cancelled.
+  Future<String?> _showAddParticipantDialog(String currentParticipantId) async {
+    // Fetch available users (excluding admin and current participant)
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('access_token') ?? '';
+
+      final response = await http.post(
+        Uri.parse('$kAdminBaseUrl/Api2/getusers.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'access_token': token}),
+      );
+
+      if (response.statusCode != 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to load users')),
+        );
+        return null;
+      }
+
+      final data = jsonDecode(response.body);
+      final users = (data['users'] as List<dynamic>?)
+          ?.where((u) => u['id']?.toString() != currentParticipantId)
+          .toList() ?? [];
+
+      if (!mounted) return null;
+
+      return await showDialog<String>(
+        context: context,
+        builder: (ctx) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.person_add, color: Colors.white, size: 24),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Add Participant to Call',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                // User list
+                Flexible(
+                  child: users.isEmpty
+                      ? const Padding(
+                          padding: EdgeInsets.all(40),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.people_outline, size: 64, color: Colors.grey),
+                              SizedBox(height: 16),
+                              Text(
+                                'No users available',
+                                style: TextStyle(color: Colors.grey, fontSize: 16),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ListView.builder(
+                          shrinkWrap: true,
+                          itemCount: users.length,
+                          itemBuilder: (ctx, idx) {
+                            final user = users[idx];
+                            final userId = user['id']?.toString() ?? '';
+                            final userName = user['name']?.toString() ?? 'Unknown';
+                            final initial = userName.isNotEmpty ? userName[0].toUpperCase() : '?';
+
+                            return ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: const Color(0xFF6366F1),
+                                child: Text(
+                                  initial,
+                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              title: Text(userName),
+                              subtitle: Text('ID: $userId'),
+                              onTap: () => Navigator.pop(ctx, userId),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+      return null;
+    }
+  }
+
   /// Launch a call (video or audio) in a floating overlay so the admin can
   /// minimize it and continue browsing other conversations without ending it.
   void _launchCall(ChatProvider chatProvider, {required bool isVideo}) {
@@ -1486,6 +1608,7 @@ class _ChatWindowState extends State<ChatWindow> {
                   onMinimize: () => isMinimizedNotifier.value = true,
                   onEnd: _removeCallOverlay,
                   onCallEnded: onCallEnded,
+                  onAddParticipant: () => _showAddParticipantDialog(userId),
                 )
               : CallScreen(
                   currentUserId: '1',
@@ -1495,6 +1618,7 @@ class _ChatWindowState extends State<ChatWindow> {
                   onMinimize: () => isMinimizedNotifier.value = true,
                   onEnd: _removeCallOverlay,
                   onCallEnded: onCallEnded,
+                  onAddParticipant: () => _showAddParticipantDialog(userId),
                 );
 
           return Stack(

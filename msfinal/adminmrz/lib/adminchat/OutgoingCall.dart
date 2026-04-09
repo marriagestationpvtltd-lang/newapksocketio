@@ -27,6 +27,9 @@ class CallScreen extends StatefulWidget {
   /// Called when the call ends with (callType, status, durationSeconds).
   /// callType is always 'audio'. status is 'answered' or 'missed'.
   final void Function(String callType, String status, int durationSeconds)? onCallEnded;
+  /// Called when admin wants to add a participant to the call.
+  /// Returns the selected user ID or null if cancelled.
+  final Future<String?> Function()? onAddParticipant;
 
   const CallScreen({
     super.key,
@@ -39,6 +42,7 @@ class CallScreen extends StatefulWidget {
     this.onMinimize,
     this.onEnd,
     this.onCallEnded,
+    this.onAddParticipant,
   });
 
   @override
@@ -451,6 +455,45 @@ class _CallScreenState extends State<CallScreen>
     }
   }
 
+  /// Admin adds a third participant to create a conference call
+  Future<void> _addParticipant() async {
+    if (widget.onAddParticipant == null) return;
+    if (!_callActive) return; // Can only add participants to active calls
+
+    try {
+      final newParticipantId = await widget.onAddParticipant!();
+      if (newParticipantId == null || newParticipantId.isEmpty) return;
+
+      // Emit socket event to add participant
+      final socketReady = await _socketService.ensureConnected();
+      if (socketReady) {
+        _socketService.emitAddParticipantToCall(
+          newParticipantId: newParticipantId,
+          channelName: _channel,
+          callType: 'audio',
+          adminId: widget.currentUserId,
+          adminName: widget.currentUserName,
+          existingParticipantId: widget.otherUserId,
+          agoraAppId: AgoraTokenService.appId,
+          callerUid: _localUid.toString(),
+        );
+
+        // Send push notification as well
+        await NotificationService.sendCallNotification(
+          recipientUserId: newParticipantId,
+          callerName: widget.currentUserName,
+          channelName: _channel,
+          callerId: widget.currentUserId,
+          callerUid: _localUid.toString(),
+          agoraAppId: AgoraTokenService.appId,
+          agoraCertificate: 'SERVER_ONLY',
+        );
+      }
+    } catch (e) {
+      debugPrint('Error adding participant: $e');
+    }
+  }
+
   // ================= UI =================
   @override
   Widget build(BuildContext context) {
@@ -700,6 +743,15 @@ class _CallScreenState extends State<CallScreen>
             isActive: _videoEnabled,
             onTap: _toggleVideo,
           ),
+
+          // Call Plus button - add participant (admin only, when call is active)
+          if (widget.onAddParticipant != null && _callActive)
+            _ControlButton(
+              icon: Icons.person_add,
+              label: 'Add',
+              isActive: true,
+              onTap: _addParticipant,
+            ),
 
           // Minimize (optional)
           if (widget.onMinimize != null)

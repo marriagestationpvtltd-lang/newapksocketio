@@ -55,25 +55,24 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   final String currentAndroidVersion = '24.0.0'; // Your current Android version
   final String currentIOSVersion = '1.0.0';     // Your current iOS version
 
-  // Animation controllers
-  late AnimationController _entranceController;
-  late AnimationController _pulseController;
-  late AnimationController _dotsController;
+  // Animation controllers - nullable to avoid initialization when not needed
+  AnimationController? _entranceController;
+  AnimationController? _pulseController;
+  AnimationController? _dotsController;
 
   // Entrance animations
-  late Animation<double> _logoScale;
-  late Animation<double> _logoOpacity;
-  late Animation<double> _textOpacity;
-  late Animation<Offset> _textSlide;
-  late Animation<double> _taglineOpacity;
+  Animation<double>? _logoScale;
+  Animation<double>? _logoOpacity;
+  Animation<double>? _textOpacity;
+  Animation<Offset>? _textSlide;
+  Animation<double>? _taglineOpacity;
 
   // Pulse (breathing) scale while loading
-  late Animation<double> _pulseScale;
+  Animation<double>? _pulseScale;
 
   @override
   void initState() {
     super.initState();
-    _setupAnimations();
     _initializeApp();
   }
 
@@ -81,20 +80,21 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     // Check first launch status before doing anything else
     await _checkFirstLaunch();
 
-    // TickerCanceled is expected when the widget disposes while the animation
-    // is still running (e.g. user leaves the app); swallow it intentionally.
-    // Only play animation on first launch
+    // Only setup animations on first launch to save resources
     if (_isFirstLaunch) {
-      _animationCompleted = _entranceController.forward().orCancel
+      _setupAnimations();
+      // TickerCanceled is expected when the widget disposes while the animation
+      // is still running (e.g. user leaves the app); swallow it intentionally.
+      _animationCompleted = _entranceController!.forward().orCancel
           .catchError((Object e) {
             if (e is! TickerCanceled) debugPrint('Splash animation error: $e');
           });
     } else {
-      // Skip animation on subsequent launches - complete immediately
+      // Skip animation entirely on subsequent launches
       _animationCompleted = Future.value();
-      _entranceController.value = 1.0; // Jump to end state
     }
 
+    // Run version check in parallel with animation/navigation
     _checkAppVersion();
   }
 
@@ -182,9 +182,9 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   @override
   void dispose() {
-    _entranceController.dispose();
-    _pulseController.dispose();
-    _dotsController.dispose();
+    _entranceController?.dispose();
+    _pulseController?.dispose();
+    _dotsController?.dispose();
     super.dispose();
   }
 
@@ -446,19 +446,19 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   Future<void> _proceedWithNavigation() async {
     if (!mounted) return;
 
-    // On subsequent launches, skip the animation wait entirely
+    // On subsequent launches, proceed immediately without any delay
     if (!_isFirstLaunch) {
-      // Proceed immediately without animation delay
       await _navigateBasedOnUserState();
-    } else {
-      // Wait for the entrance animation to finish so we never navigate
-      // mid-animation and the user always sees the full splash on first launch.
-      await _animationCompleted;
-
-      if (!mounted) return;
-
-      await _navigateBasedOnUserState();
+      return;
     }
+
+    // Wait for the entrance animation to finish so we never navigate
+    // mid-animation and the user always sees the full splash on first launch.
+    await _animationCompleted;
+
+    if (!mounted) return;
+
+    await _navigateBasedOnUserState();
   }
 
   Future<void> _navigateBasedOnUserState() async {
@@ -635,14 +635,32 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   // ─── 3 bouncing brand-red dots ───────────────────────────────────────────────
   Widget _buildLoadingDots() {
+    // If no animation controller (subsequent launches), show static dots
+    if (_dotsController == null) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(3, (index) {
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 5),
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.7),
+              shape: BoxShape.circle,
+            ),
+          );
+        }),
+      );
+    }
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(3, (index) {
         final delay = index * 0.28;
         return AnimatedBuilder(
-          animation: _dotsController,
+          animation: _dotsController!,
           builder: (context, child) {
-            final rawProgress = (_dotsController.value - delay).clamp(0.0, 1.0);
+            final rawProgress = (_dotsController!.value - delay).clamp(0.0, 1.0);
             final bounceProgress = rawProgress < 0.5 ? rawProgress * 2.0 : (1.0 - rawProgress) * 2.0;
             final bounce = Curves.easeInOut.transform(bounceProgress);
             return Container(
@@ -766,53 +784,88 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Logo: elastic zoom-in + subtle pulse while loading
-                AnimatedBuilder(
-                  animation: Listenable.merge([_entranceController, _pulseController]),
-                  builder: (context, child) {
-                    final scale = _logoScale.value *
-                        (_isCheckingVersion ? _pulseScale.value : 1.0);
-                    return Opacity(
-                      opacity: _logoOpacity.value,
-                      child: Transform.scale(scale: scale, child: child),
-                    );
-                  },
-                  child: const Image(
+                if (_entranceController != null && _pulseController != null)
+                  AnimatedBuilder(
+                    animation: Listenable.merge([_entranceController!, _pulseController!]),
+                    builder: (context, child) {
+                      final scale = _logoScale!.value *
+                          (_isCheckingVersion ? _pulseScale!.value : 1.0);
+                      return Opacity(
+                        opacity: _logoOpacity!.value,
+                        child: Transform.scale(scale: scale, child: child),
+                      );
+                    },
+                    child: const Image(
+                      image: AssetImage('assets/images/Mslogo.gif'),
+                      height: 250,
+                      width: 250,
+                      fit: BoxFit.contain,
+                    ),
+                  )
+                else
+                  // Fallback if animations not initialized
+                  const Image(
                     image: AssetImage('assets/images/Mslogo.gif'),
                     height: 250,
                     width: 250,
                     fit: BoxFit.contain,
                   ),
-                ),
 
                 const SizedBox(height: 28),
 
                 // App name: slide-up + fade
-                FadeTransition(
-                  opacity: _textOpacity,
-                  child: SlideTransition(
-                    position: _textSlide,
-                    child: ShaderMask(
-                      shaderCallback: (bounds) =>
-                          AppColors.primaryGradient.createShader(bounds),
-                      child: const Text(
-                        'Marriage Station',
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.white,
-                          letterSpacing: 0.5,
+                if (_textOpacity != null && _textSlide != null)
+                  FadeTransition(
+                    opacity: _textOpacity!,
+                    child: SlideTransition(
+                      position: _textSlide!,
+                      child: ShaderMask(
+                        shaderCallback: (bounds) =>
+                            AppColors.primaryGradient.createShader(bounds),
+                        child: const Text(
+                          'Marriage Station',
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.white,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
                     ),
+                  )
+                else
+                  ShaderMask(
+                    shaderCallback: (bounds) =>
+                        AppColors.primaryGradient.createShader(bounds),
+                    child: const Text(
+                      'Marriage Station',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
                   ),
-                ),
 
                 const SizedBox(height: 8),
 
                 // Tagline: fade in last
-                FadeTransition(
-                  opacity: _taglineOpacity,
-                  child: const Text(
+                if (_taglineOpacity != null)
+                  FadeTransition(
+                    opacity: _taglineOpacity!,
+                    child: const Text(
+                      "Nepal's #1 Matrimony Platform",
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  )
+                else
+                  const Text(
                     "Nepal's #1 Matrimony Platform",
                     style: TextStyle(
                       fontSize: 16,
@@ -820,7 +873,6 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                ),
               ],
             ),
           ),

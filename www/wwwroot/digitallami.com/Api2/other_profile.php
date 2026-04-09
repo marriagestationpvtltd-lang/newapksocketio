@@ -37,10 +37,11 @@ if ($userid <= 0 || $myid <= 0) {
 }
 
 
-$photo_request = "not sent";
+$photo_request = "not_sent";
+$chat_request = "not_sent";
 
 $photoSql = "
-SELECT status 
+SELECT status
 FROM proposals
 WHERE request_type = 'Photo'
 AND (
@@ -62,6 +63,27 @@ if ($photoResult->num_rows > 0) {
     $photo_request = ($photoRow['status'] === 'accepted') ? 'accepted' : 'pending';
 }
 $photoStmt->close();
+
+// Check chat request status
+$chatSql = "
+SELECT status
+FROM proposals
+WHERE request_type = 'Chat'
+AND sender_id = ? AND receiver_id = ?
+ORDER BY id DESC
+LIMIT 1
+";
+
+$chatStmt = $conn->prepare($chatSql);
+$chatStmt->bind_param("ii", $myid, $userid);
+$chatStmt->execute();
+$chatResult = $chatStmt->get_result();
+
+if ($chatResult->num_rows > 0) {
+    $chatRow = $chatResult->fetch_assoc();
+    $chat_request = $chatRow['status'];
+}
+$chatStmt->close();
 
 // Prepare SQL statement for full profile including partner preferences
 $sql = "
@@ -158,6 +180,7 @@ function applySensitivePrivacy($value, $showFull, $default = "Hidden") {
 $data = [
     "personalDetail" => [
         "photo_request" => $photo_request, // ✅ INCLUDED
+        "chat_request" => $chat_request,   // ✅ CHAT REQUEST STATUS
 
         "firstName" => $row['firstName'] ?? $default,
         "lastName" => $row['lastName'] ?? $default,

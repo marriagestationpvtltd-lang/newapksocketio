@@ -83,6 +83,35 @@ class ProfileService {
     }
   }
 
+  Future<Map<String, dynamic>> cancelRequest({
+    required int senderId,
+    required int receiverId,
+    required String requestType,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/cancel_request.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({
+          'sender_id': senderId,
+          'receiver_id': receiverId,
+          'request_type': requestType,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final result = json.decode(response.body);
+        return {
+          'success': result['success'] == true,
+          'message': result['message'] ?? 'Request cancelled',
+        };
+      }
+      throw Exception('Failed to cancel request');
+    } catch (e) {
+      throw Exception('Error cancelling request: $e');
+    }
+  }
+
   static Future<int?> getCurrentUserId() async {
     final prefs = await SharedPreferences.getInstance();
     final userDataString = prefs.getString('user_data');

@@ -5994,9 +5994,13 @@ class _AdminPhotoViewerPage extends StatefulWidget {
 
 class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
   late final PageController _pageController;
+  late final ScrollController _thumbScrollController;
   late int _current;
   late List<_AdminSharedPhoto> _photos;
   final Map<int, TransformationController> _transformControllers = {};
+
+  static const double _thumbSize = 60.0;
+  static const double _thumbSpacing = 6.0;
 
   @override
   void initState() {
@@ -6004,15 +6008,36 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
     _photos = List<_AdminSharedPhoto>.from(widget.photos);
     _current = widget.initialIndex;
     _pageController = PageController(initialPage: widget.initialIndex);
+    _thumbScrollController = ScrollController();
     // Pre-initialize transformation controllers for better performance
     for (int i = 0; i < _photos.length; i++) {
       _transformControllers[i] = TransformationController();
     }
   }
 
+  void _scrollThumbToVisible(int index) {
+    if (!_thumbScrollController.hasClients) return;
+    final double offset = index * (_thumbSize + _thumbSpacing);
+    final double viewportWidth = _thumbScrollController.position.viewportDimension;
+    final double maxExtent = _thumbScrollController.position.maxScrollExtent;
+    final double target = (offset - (viewportWidth / 2) + (_thumbSize / 2))
+        .clamp(0.0, maxExtent);
+    // Only animate if the thumbnail is not already fully visible
+    final double current = _thumbScrollController.offset;
+    final bool alreadyVisible =
+        target >= current && target + _thumbSize <= current + viewportWidth;
+    if (alreadyVisible) return;
+    _thumbScrollController.animateTo(
+      target,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+    );
+  }
+
   @override
   void dispose() {
     _pageController.dispose();
+    _thumbScrollController.dispose();
     for (final controller in _transformControllers.values) {
       controller.dispose();
     }
@@ -6116,7 +6141,9 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
       backgroundColor: c.bg,
       body: Stack(
         children: [
-          PageView.builder(
+          Positioned.fill(
+            bottom: 80, // leave space for thumbnail strip
+            child: PageView.builder(
             controller: _pageController,
             itemCount: _photos.length,
             onPageChanged: (i) {
@@ -6127,6 +6154,10 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
                   entry.value.value = Matrix4.identity();
                 }
               }
+              // Keep the selected thumbnail visible
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _scrollThumbToVisible(i);
+              });
             },
             itemBuilder: (ctx, i) {
               final transformController = _transformControllers[i]!;
@@ -6160,6 +6191,7 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
                 ),
               );
             },
+          ),
           ),
           Positioned(
             top: 0,
@@ -6241,28 +6273,61 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
               ),
             ),
           ),
-          // Dot indicators
-          if (_photos.length > 1)
-            Positioned(
-              bottom: 32,
-              left: 0,
-              right: 0,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  _photos.length > 20 ? 20 : _photos.length,
-                  (i) => Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    width: _current == i ? 10 : 6,
-                    height: _current == i ? 10 : 6,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: _current == i ? c.text : c.muted.withOpacity(0.5),
-                    ),
-                  ),
+          // Thumbnail strip footer
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              color: Colors.black.withOpacity(0.75),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: SizedBox(
+                height: _thumbSize,
+                child: ListView.builder(
+                  controller: _thumbScrollController,
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: _photos.length,
+                  itemBuilder: (ctx, i) {
+                    final isSelected = i == _current;
+                    return GestureDetector(
+                      onTap: () {
+                        _pageController.animateToPage(
+                          i,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                        );
+                      },
+                      child: Container(
+                        width: _thumbSize,
+                        height: _thumbSize,
+                        margin: EdgeInsets.only(right: _thumbSpacing),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: isSelected ? Colors.red : Colors.white30,
+                            width: isSelected ? 2.5 : 1,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(5),
+                          child: Image.network(
+                            _photos[i].url,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.broken_image,
+                              color: Colors.white54,
+                              size: 24,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ),
+          ),
         ],
       ),
     );

@@ -56,8 +56,9 @@ class CallHistory {
   factory CallHistory.fromMap(Map<String, dynamic> map, [String? id]) {
     DateTime _parseDate(dynamic v) {
       if (v == null) return DateTime.now();
-      if (v is DateTime) return v;
-      return DateTime.tryParse(v.toString()) ?? DateTime.now();
+      if (v is DateTime) return v.isUtc ? v.toLocal() : v;
+      final dt = DateTime.tryParse(v.toString());
+      return dt != null ? dt.toLocal() : DateTime.now();
     }
 
     return CallHistory(
@@ -73,7 +74,7 @@ class CallHistory {
         orElse: () => CallType.audio,
       ),
       startTime: _parseDate(map['startTime']),
-      endTime: map['endTime'] != null ? DateTime.tryParse(map['endTime'].toString()) : null,
+      endTime: map['endTime'] != null ? DateTime.tryParse(map['endTime'].toString())?.toLocal() : null,
       duration: (map['duration'] ?? 0) is int
           ? (map['duration'] ?? 0)
           : int.tryParse(map['duration'].toString()) ?? 0,

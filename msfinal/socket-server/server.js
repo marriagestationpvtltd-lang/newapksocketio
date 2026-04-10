@@ -41,6 +41,9 @@ const pool = mysql.createPool({
   // MAX_QUEUE_SIZE in the message queue, preventing unbounded work growth.
   queueLimit:         0,
   charset:            'utf8mb4',
+  // Treat all DATETIME columns as UTC so JS Date objects are serialised/
+  // deserialised in UTC regardless of the MySQL server's local timezone.
+  timezone:           '+00:00',
 });
 
 // Test DB connection on startup and run safe schema migrations
@@ -48,6 +51,10 @@ pool.getConnection()
   .then(async conn => {
     console.log('✅ MySQL connected');
     const dbName = process.env.DB_NAME || 'marriagestation';
+
+    // Ensure this session uses UTC so UTC_TIMESTAMP() / NOW() return UTC values.
+    await conn.query("SET time_zone = '+00:00'");
+    console.log('✅ MySQL session timezone set to UTC');
 
     // Add `liked` column to chat_messages if not present (idempotent).
     const [[col]] = await conn.query(
@@ -281,7 +288,7 @@ app.post('/api/calls', async (req, res) => {
          (call_id, caller_id, caller_name, caller_image,
           recipient_id, recipient_name, recipient_image,
           call_type, start_time, status, initiated_by)
-       VALUES (?,?,?,?,?,?,?,?,NOW(),'missed',?)`,
+       VALUES (?,?,?,?,?,?,?,?,UTC_TIMESTAMP(),'missed',?)`,
       [callId, callerId, callerName, callerImage,
        recipientId, recipientName, recipientImage,
        callType === 'video' ? 'video' : 'audio', initiatedBy],
@@ -308,18 +315,22 @@ app.post('/api/calls', async (req, res) => {
   }
 });
 
-// PUT /api/calls/:callId — Update call end (status + duration)
+// PUT /api/calls/:callId — Update call end (duration is calculated server-side from timestamps)
 app.put('/api/calls/:callId', async (req, res) => {
   try {
     const { callId } = req.params;
-    const { status, duration = 0 } = req.body;
+    const { status } = req.body;
 
     const allowed = ['completed', 'missed', 'declined', 'cancelled'];
     const safeStatus = allowed.includes(status) ? status : 'missed';
 
     await pool.query(
-      `UPDATE call_history SET end_time = NOW(), duration = ?, status = ? WHERE call_id = ?`,
-      [duration, safeStatus, callId],
+      `UPDATE call_history
+          SET end_time = UTC_TIMESTAMP(),
+              duration = GREATEST(0, TIMESTAMPDIFF(SECOND, start_time, UTC_TIMESTAMP())),
+              status   = ?
+        WHERE call_id = ?`,
+      [safeStatus, callId],
     );
     res.json({ success: true });
   } catch (err) {
@@ -439,7 +450,7 @@ async function ensureChatRoom({ chatRoomId, user1Id, user2Id, user1Name, user2Na
   await pool.query(
     `INSERT IGNORE INTO chat_rooms
        (id, participants, participant_names, participant_images, last_message, last_message_type, last_message_time, last_message_sender_id)
-     VALUES (?, ?, ?, ?, '', 'text', NOW(), '')`,
+     VALUES (?, ?, ?, ?, '', 'text', UTC_TIMESTAMP(), '')`,
     [
       chatRoomId,
       JSON.stringify([user1Id, user2Id]),
@@ -471,7 +482,7 @@ async function saveMessage(msg) {
       msg.isRead    ? 1 : 0,
       msg.isDelivered ? 1 : 0,
       msg.repliedTo ? JSON.stringify(msg.repliedTo) : null,
-      msg.timestamp ? new Date(msg.timestamp) : new Date(),
+      new Date(), // always use server UTC time; never trust client-supplied timestamp
     ],
   );
 }
@@ -494,7 +505,7 @@ async function saveMessageBatch(messages) {
       msg.isRead     ? 1 : 0,
       msg.isDelivered ? 1 : 0,
       msg.repliedTo ? JSON.stringify(msg.repliedTo) : null,
-      msg.timestamp ? new Date(msg.timestamp) : new Date(),
+      new Date(), // always use server UTC time; never trust client-supplied timestamp
     );
     return '(?,?,?,?,?,?,?,?,?,?,0)';
   }).join(',');
@@ -511,7 +522,7 @@ async function saveMessageBatch(messages) {
 async function updateChatRoomLastMessage({ chatRoomId, message, messageType, senderId, receiverId, isReceiverViewing }) {
   await pool.query(
     `UPDATE chat_rooms
-        SET last_message = ?, last_message_type = ?, last_message_time = NOW(), last_message_sender_id = ?
+        SET last_message = ?, last_message_type = ?, last_message_time = UTC_TIMESTAMP(), last_message_sender_id = ?
       WHERE id = ?`,
     [message, messageType || 'text', senderId, chatRoomId],
   );
@@ -604,7 +615,7 @@ async function markMessagesRead({ chatRoomId, userId }) {
 async function editMessage({ chatRoomId, messageId, newMessage }) {
   await pool.query(
     `UPDATE chat_messages
-        SET message = ?, is_edited = 1, edited_at = NOW()
+        SET message = ?, is_edited = 1, edited_at = UTC_TIMESTAMP()
       WHERE message_id = ? AND chat_room_id = ?`,
     [newMessage, messageId, chatRoomId],
   );
@@ -655,10 +666,10 @@ async function upsertOnlineStatus(userId, isOnline, activeChatRoomId = null) {
     // Update user_online_status table
     await pool.query(
       `INSERT INTO user_online_status (user_id, is_online, last_seen, active_chat_room_id)
-         VALUES (?, ?, NOW(), ?)
+         VALUES (?, ?, UTC_TIMESTAMP(), ?)
        ON DUPLICATE KEY UPDATE
          is_online           = VALUES(is_online),
-         last_seen           = IF(VALUES(is_online) = 0, NOW(), last_seen),
+         last_seen           = IF(VALUES(is_online) = 0, UTC_TIMESTAMP(), last_seen),
          active_chat_room_id = VALUES(active_chat_room_id)`,
       [userId, isOnline ? 1 : 0, activeChatRoomId],
     );

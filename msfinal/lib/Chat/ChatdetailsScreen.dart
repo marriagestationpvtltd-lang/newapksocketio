@@ -341,10 +341,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       final decoded = jsonDecode(raw) as List<dynamic>;
       return decoded.map((item) {
         final m = Map<String, dynamic>.from(item as Map);
-        // Re-parse ISO string timestamps back to DateTime
+        // Re-parse ISO string timestamps back to DateTime, converting UTC → local
         if (m['timestamp'] is String) {
           final dt = DateTime.tryParse(m['timestamp'] as String);
-          if (dt != null) m['timestamp'] = dt;
+          if (dt != null) m['timestamp'] = dt.toLocal();
         }
         return m;
       }).toList();
@@ -1309,7 +1309,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   // FORMATTING HELPERS
   String _formatTime(DateTime timestamp) {
-    return DateFormat('hh:mm a').format(timestamp);
+    return DateFormat('hh:mm a').format(timestamp.toLocal());
   }
 
   String _formatDuration(int seconds) {
@@ -3336,9 +3336,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       final rawTs = data['timestamp'];
       if (rawTs == null) continue;
       final timestamp = rawTs is DateTime
-          ? rawTs
+          ? rawTs.toLocal()
           : rawTs is String
-              ? DateTime.tryParse(rawTs)
+              ? DateTime.tryParse(rawTs)?.toLocal()
               : null;
       if (timestamp == null) continue;
       final dateKey = _formatDateForGrouping(timestamp);
@@ -3360,14 +3360,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         final rawB = b['timestamp'];
         if (rawA == null || rawB == null) return 0;
         final timeA = rawA is DateTime
-            ? rawA
+            ? rawA.toLocal()
             : rawA is String
-                ? (DateTime.tryParse(rawA) ?? DateTime.now())
+                ? (DateTime.tryParse(rawA)?.toLocal() ?? DateTime.now())
                 : DateTime.now();
         final timeB = rawB is DateTime
-            ? rawB
+            ? rawB.toLocal()
             : rawB is String
-                ? (DateTime.tryParse(rawB) ?? DateTime.now())
+                ? (DateTime.tryParse(rawB)?.toLocal() ?? DateTime.now())
                 : DateTime.now();
         return timeA.compareTo(timeB);
       });
@@ -3379,9 +3379,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       for (final data in messagesForDate) {
         final rawTs = data['timestamp'];
         final timestamp = rawTs is DateTime
-            ? rawTs
+            ? rawTs.toLocal()
             : rawTs is String
-                ? (DateTime.tryParse(rawTs) ?? DateTime.now())
+                ? (DateTime.tryParse(rawTs)?.toLocal() ?? DateTime.now())
                 : DateTime.now();
 
         if ((data['messageType'] ?? 'text') == 'call') {
@@ -3836,17 +3836,18 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
 // Format date for grouping
   String _formatDateForGrouping(DateTime date) {
+    final localDate = date.toLocal();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = DateTime(now.year, now.month, now.day - 1);
-    final messageDate = DateTime(date.year, date.month, date.day);
+    final messageDate = DateTime(localDate.year, localDate.month, localDate.day);
 
     if (messageDate == today) {
       return 'Today';
     } else if (messageDate == yesterday) {
       return 'Yesterday';
     } else {
-      return DateFormat('MMM dd, yyyy').format(date);
+      return DateFormat('MMM dd, yyyy').format(localDate);
     }
   }
 

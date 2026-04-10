@@ -578,8 +578,11 @@ class AdminSocketService {
   /// Parse a nullable timestamp string to [DateTime].
   static DateTime? parseTimestamp(dynamic ts) {
     if (ts == null) return null;
-    if (ts is DateTime) return ts;
-    if (ts is String) return DateTime.tryParse(ts);
+    if (ts is DateTime) return ts.isUtc ? ts.toLocal() : ts;
+    if (ts is String) {
+      final dt = DateTime.tryParse(ts);
+      return dt?.toLocal();
+    }
     return null;
   }
 

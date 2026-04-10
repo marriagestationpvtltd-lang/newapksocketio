@@ -990,7 +990,6 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     if (result == null || result.files.isEmpty) return;
 
     // Show preview before sending
-    if (!mounted) return;
     final confirmed = await _showImagePreviewSheet(result.files);
     if (confirmed != true || !mounted) return;
 
@@ -4182,7 +4181,7 @@ class _ImagePreviewSheet extends StatelessWidget {
                   ),
                   icon: const Icon(Icons.send, size: 18, color: Colors.white),
                   label: Text(
-                    'Send ${files.length == 1 ? 'Photo' : '${files.length} Photos'}',
+                    'Send ${files.length} Photo${files.length == 1 ? '' : 's'}',
                     style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                   ),
                 ),

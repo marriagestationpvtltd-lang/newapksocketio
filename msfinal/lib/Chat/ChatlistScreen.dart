@@ -162,7 +162,7 @@ class _ChatListScreenState extends State<ChatListScreen>
       });
       return true;
     } catch (e) {
-      print('Error loading chat rooms cache: $e');
+      print('Error loading chat rooms cache for user $userId: $e');
       return false;
     }
   }
@@ -175,7 +175,7 @@ class _ChatListScreenState extends State<ChatListScreen>
       await prefs.setString(
           '${_chatRoomsCacheKey}_$userId', jsonEncode(rooms));
     } catch (e) {
-      print('Error saving chat rooms cache: $e');
+      print('Error saving chat rooms cache for user $userId: $e');
     }
   }
 
@@ -208,7 +208,7 @@ class _ChatListScreenState extends State<ChatListScreen>
       });
       return true;
     } catch (e) {
-      print('Error loading requests cache: $e');
+      print('Error loading requests cache for user $uid: $e');
       return false;
     }
   }
@@ -223,7 +223,7 @@ class _ChatListScreenState extends State<ChatListScreen>
       await prefs.setString('${_sentRequestsCacheKey}_$uid',
           jsonEncode(sent.map((p) => p.toJson()).toList()));
     } catch (e) {
-      print('Error saving requests cache: $e');
+      print('Error saving requests cache for user $uid: $e');
     }
   }
 

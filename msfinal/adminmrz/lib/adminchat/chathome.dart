@@ -35,6 +35,8 @@ import 'package:flutter/services.dart';
 import 'package:adminmrz/config/app_endpoints.dart';
 import 'package:adminmrz/users/userdetails/detailscreen.dart';
 import 'package:adminmrz/users/userdetails/userdetailprovider.dart';
+import 'package:adminmrz/users/userdetails/userdetailservice.dart';
+import 'package:adminmrz/users/userprovider.dart';
 import 'package:uuid/uuid.dart';
 
 class ChatWindow extends StatefulWidget {
@@ -115,6 +117,9 @@ class _ChatWindowState extends State<ChatWindow> {
 
   // Active call overlay
   OverlayEntry? _callOverlayEntry;
+
+  // Call-waiting banner overlay (shown when admin is already in a call)
+  OverlayEntry? _callWaitingBannerEntry;
 
   // Typing indicator state
   Timer? _typingTimer;
@@ -465,6 +470,44 @@ class _ChatWindowState extends State<ChatWindow> {
     });
   }
 
+  /// Fetch basic caller details (usertype, package status, member ID) from
+  /// cached UserProvider data and, in parallel, from the profile API.
+  /// Returns a map with keys: usertype, paymentStatus, memberId.
+  Future<Map<String, String?>> _fetchCallerDetails(String callerId) async {
+    final callerIdInt = int.tryParse(callerId);
+    String? usertype;
+    String? paymentStatus;
+    String? memberId;
+
+    // 1. Quick lookup in already-loaded UserProvider cache (no API call).
+    if (callerIdInt != null) {
+      try {
+        final userProvider =
+            Provider.of<UserProvider>(context, listen: false);
+        final cachedUser = userProvider.getUserById(callerIdInt);
+        if (cachedUser != null) {
+          usertype = cachedUser.usertype;
+          paymentStatus = cachedUser.paymentStatus;
+        }
+      } catch (_) {}
+    }
+
+    // 2. Fetch full profile to get memberId (and confirm usertype if not cached).
+    try {
+      final svc = UserDetailsService();
+      final response =
+          await svc.getUserDetails(callerIdInt ?? 0, 1 /* admin id */);
+      memberId = response.data.personalDetail.memberId;
+      usertype ??= response.data.personalDetail.userType;
+    } catch (_) {}
+
+    return {
+      'usertype': usertype,
+      'paymentStatus': paymentStatus,
+      'memberId': memberId,
+    };
+  }
+
   /// Show an incoming call dialog when a user calls the admin.
   void _handleIncomingCallFromUser(Map<String, dynamic> data) {
     final callerId = data['callerId']?.toString() ?? '';
@@ -475,6 +518,20 @@ class _ChatWindowState extends State<ChatWindow> {
 
     if (channelName.isEmpty || callerId.isEmpty) return;
 
+    // If admin is already in a call, show a non-blocking banner notification
+    // so the current call is not interrupted.  Another admin session can
+    // still pick up the waiting call.
+    if (_callOverlayEntry != null) {
+      _showCallWaitingBanner(
+        callerId: callerId,
+        callerName: callerName,
+        channelName: channelName,
+        callType: callType,
+        isVideo: isVideo,
+      );
+      return;
+    }
+
     Timer? autoRejectTimer;
     StreamSubscription<Map<String, dynamic>>? cancelSub;
     StreamSubscription<Map<String, dynamic>>? endedSub;
@@ -482,9 +539,19 @@ class _ChatWindowState extends State<ChatWindow> {
     var dismissed = false;
     var remoteCallClosed = false;
 
+    // Notifier so the dialog can rebuild once caller details arrive.
+    final callerDetailsNotifier =
+        ValueNotifier<Map<String, String?>>({'usertype': null, 'paymentStatus': null, 'memberId': null});
+
+    // Kick off async fetch – dialog updates when data arrives.
+    _fetchCallerDetails(callerId).then((details) {
+      if (!dismissed) callerDetailsNotifier.value = details;
+    });
+
     void dismissDialog(bool accepted) {
       if (dismissed) return;
       dismissed = true;
+      callerDetailsNotifier.dispose();
       final ctx = incomingCallDialogContext;
       if (ctx != null && Navigator.of(ctx, rootNavigator: true).canPop()) {
         Navigator.of(ctx, rootNavigator: true).pop(accepted);
@@ -518,7 +585,7 @@ class _ChatWindowState extends State<ChatWindow> {
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           child: Container(
-            constraints: const BoxConstraints(maxWidth: 360),
+            constraints: const BoxConstraints(maxWidth: 380),
             padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
             decoration: BoxDecoration(
               color: const Color(0xFF111827),
@@ -532,84 +599,172 @@ class _ChatWindowState extends State<ChatWindow> {
                 ),
               ],
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 76,
-                  height: 76,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: isVideo
-                          ? const [Color(0xFF8B5CF6), Color(0xFF6366F1)]
-                          : const [Color(0xFF10B981), Color(0xFF059669)],
-                    ),
-                  ),
-                  child: Icon(icon, color: Colors.white, size: 34),
-                ),
-                const SizedBox(height: 18),
-                Text(
-                  callerName,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.72),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.06),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    'Respond within $kIncomingCallTimeoutSeconds seconds',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.62),
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 22),
-                Row(
+            child: ValueListenableBuilder<Map<String, String?>>(
+              valueListenable: callerDetailsNotifier,
+              builder: (_, details, __) {
+                final usertype = details['usertype'];
+                final paymentStatus = details['paymentStatus'];
+                final memberId = details['memberId'];
+                final isPaid = (usertype ?? '').toLowerCase() == 'paid';
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: _buildIncomingCallActionButton(
-                        label: 'Reject',
-                        icon: Icons.call_end_rounded,
-                        backgroundColor: const Color(0xFF3F1D24),
-                        foregroundColor: const Color(0xFFF87171),
-                        onTap: () => dismissDialog(false),
+                    Container(
+                      width: 76,
+                      height: 76,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: isVideo
+                              ? const [Color(0xFF8B5CF6), Color(0xFF6366F1)]
+                              : const [Color(0xFF10B981), Color(0xFF059669)],
+                        ),
+                      ),
+                      child: Icon(icon, color: Colors.white, size: 34),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      callerName,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildIncomingCallActionButton(
-                        label: 'Accept',
-                        icon: isVideo
-                            ? Icons.videocam_rounded
-                            : Icons.call_rounded,
-                        backgroundColor: const Color(0xFF123F34),
-                        foregroundColor: const Color(0xFF34D399),
-                        onTap: () => dismissDialog(true),
+                    const SizedBox(height: 6),
+                    // User type badge (FREE / PAID)
+                    if (usertype != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isPaid
+                              ? const Color(0xFF1A3A2A)
+                              : const Color(0xFF1A2A3A),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: isPaid
+                                ? const Color(0xFF34D399)
+                                : const Color(0xFF60A5FA),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isPaid
+                                  ? Icons.workspace_premium_rounded
+                                  : Icons.person_outline_rounded,
+                              size: 13,
+                              color: isPaid
+                                  ? const Color(0xFF34D399)
+                                  : const Color(0xFF60A5FA),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              isPaid ? 'PREMIUM' : 'FREE',
+                              style: TextStyle(
+                                color: isPaid
+                                    ? const Color(0xFF34D399)
+                                    : const Color(0xFF60A5FA),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(height: 6),
+                    ],
+                    // Package status row
+                    if (paymentStatus != null && paymentStatus.isNotEmpty) ...[
+                      _buildCallerDetailRow(
+                        icon: Icons.card_membership_rounded,
+                        label: 'Package',
+                        value: paymentStatus,
+                        color: const Color(0xFFFBBF24),
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                    // Member ID / registration number row
+                    if (memberId != null && memberId.isNotEmpty &&
+                        memberId != 'Not available') ...[
+                      _buildCallerDetailRow(
+                        icon: Icons.badge_outlined,
+                        label: 'Member ID',
+                        value: memberId,
+                        color: const Color(0xFFA78BFA),
+                      ),
+                      const SizedBox(height: 4),
+                    ] else if (usertype != null && memberId == null) ...[
+                      // Still loading member ID
+                      _buildCallerDetailRow(
+                        icon: Icons.badge_outlined,
+                        label: 'Member ID',
+                        value: '…',
+                        color: Colors.white38,
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                    const SizedBox(height: 8),
+                    Text(
+                      title,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.72),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.06),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        'Respond within $kIncomingCallTimeoutSeconds seconds',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.62),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildIncomingCallActionButton(
+                            label: 'Reject',
+                            icon: Icons.call_end_rounded,
+                            backgroundColor: const Color(0xFF3F1D24),
+                            foregroundColor: const Color(0xFFF87171),
+                            onTap: () => dismissDialog(false),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildIncomingCallActionButton(
+                            label: 'Accept',
+                            icon: isVideo
+                                ? Icons.videocam_rounded
+                                : Icons.call_rounded,
+                            backgroundColor: const Color(0xFF123F34),
+                            foregroundColor: const Color(0xFF34D399),
+                            onTap: () => dismissDialog(true),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
-                ),
-              ],
+                );
+              },
             ),
           ),
         );
@@ -645,6 +800,304 @@ class _ChatWindowState extends State<ChatWindow> {
         );
       }
     });
+  }
+
+  /// Small info row used inside the incoming call dialog.
+  Widget _buildCallerDetailRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color color = Colors.white70,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: color),
+        const SizedBox(width: 4),
+        Text(
+          '$label: ',
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.55),
+            fontSize: 12,
+          ),
+        ),
+        Flexible(
+          child: Text(
+            value,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Shows a compact banner at the top when admin is already in a call and
+  /// another user is calling.  The ongoing call is NOT interrupted.
+  void _showCallWaitingBanner({
+    required String callerId,
+    required String callerName,
+    required String channelName,
+    required String callType,
+    required bool isVideo,
+  }) {
+    // Dismiss any previous waiting banner before showing the new one.
+    _removeCallWaitingBanner();
+
+    Timer? autoRejectTimer;
+    StreamSubscription<Map<String, dynamic>>? cancelSub;
+    StreamSubscription<Map<String, dynamic>>? endedSub;
+    var dismissed = false;
+    var remoteCallClosed = false;
+
+    // Fetch caller details for the banner (usertype / memberId).
+    final bannerDetailsNotifier =
+        ValueNotifier<Map<String, String?>>({'usertype': null, 'memberId': null});
+    _fetchCallerDetails(callerId).then((details) {
+      if (!dismissed) bannerDetailsNotifier.value = details;
+    });
+
+    void dismiss(bool accepted) {
+      if (dismissed) return;
+      dismissed = true;
+      autoRejectTimer?.cancel();
+      cancelSub?.cancel();
+      endedSub?.cancel();
+      bannerDetailsNotifier.dispose();
+      _removeCallWaitingBanner();
+      if (accepted) {
+        _socketService.emitCallAccept(
+          callerId: callerId,
+          recipientId: kAdminUserId,
+          recipientName: 'Admin',
+          recipientUid: '',
+          channelName: channelName,
+          callType: callType,
+        );
+        // End current call and start the new one.
+        _removeCallOverlay();
+        _launchIncomingCall(
+          userId: callerId,
+          userName: callerName,
+          channelName: channelName,
+          isVideo: isVideo,
+        );
+      } else if (!remoteCallClosed) {
+        _socketService.emitCallReject(
+          callerId: callerId,
+          recipientId: kAdminUserId,
+          recipientName: 'Admin',
+          channelName: channelName,
+          callType: callType,
+        );
+      }
+    }
+
+    cancelSub = _socketService.onCallCancelled.listen((event) {
+      if (event['channelName']?.toString() != channelName) return;
+      remoteCallClosed = true;
+      dismiss(false);
+    });
+    endedSub = _socketService.onCallEnded.listen((event) {
+      if (event['channelName']?.toString() != channelName) return;
+      remoteCallClosed = true;
+      dismiss(false);
+    });
+
+    autoRejectTimer = Timer(
+      const Duration(seconds: kIncomingCallTimeoutSeconds),
+      () => dismiss(false),
+    );
+
+    _callWaitingBannerEntry = OverlayEntry(
+      builder: (ctx) => Positioned(
+        top: MediaQuery.of(ctx).padding.top + 8,
+        left: 16,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          child: ValueListenableBuilder<Map<String, String?>>(
+            valueListenable: bannerDetailsNotifier,
+            builder: (_, details, __) {
+              final usertype = details['usertype'];
+              final memberId = details['memberId'];
+              final isPaid = (usertype ?? '').toLowerCase() == 'paid';
+              return Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1F2937),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                      color: const Color(0xFF374151)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.4),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: isVideo
+                              ? const [
+                                  Color(0xFF8B5CF6),
+                                  Color(0xFF6366F1)
+                                ]
+                              : const [
+                                  Color(0xFF10B981),
+                                  Color(0xFF059669)
+                                ],
+                        ),
+                      ),
+                      child: Icon(
+                        isVideo
+                            ? Icons.videocam_rounded
+                            : Icons.call_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  callerName,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              if (usertype != null) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isPaid
+                                        ? const Color(0xFF1A3A2A)
+                                        : const Color(0xFF1A2A3A),
+                                    borderRadius:
+                                        BorderRadius.circular(999),
+                                    border: Border.all(
+                                      color: isPaid
+                                          ? const Color(0xFF34D399)
+                                          : const Color(0xFF60A5FA),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    isPaid ? 'PREMIUM' : 'FREE',
+                                    style: TextStyle(
+                                      color: isPaid
+                                          ? const Color(0xFF34D399)
+                                          : const Color(0xFF60A5FA),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            isVideo
+                                ? 'Incoming video call (call waiting)'
+                                : 'Incoming call (call waiting)',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.6),
+                              fontSize: 12,
+                            ),
+                          ),
+                          if (memberId != null &&
+                              memberId.isNotEmpty &&
+                              memberId != 'Not available') ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              'ID: $memberId',
+                              style: TextStyle(
+                                color: const Color(0xFFA78BFA)
+                                    .withOpacity(0.9),
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Accept button
+                        GestureDetector(
+                          onTap: () => dismiss(true),
+                          child: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xFF123F34),
+                            ),
+                            child: const Icon(
+                              Icons.call_rounded,
+                              color: Color(0xFF34D399),
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        // Dismiss button
+                        GestureDetector(
+                          onTap: () => dismiss(false),
+                          child: Container(
+                            width: 36,
+                            height: 36,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xFF3F1D24),
+                            ),
+                            child: const Icon(
+                              Icons.call_end_rounded,
+                              color: Color(0xFFF87171),
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(_callWaitingBannerEntry!);
   }
 
   Widget _buildIncomingCallActionButton({
@@ -1471,6 +1924,11 @@ class _ChatWindowState extends State<ChatWindow> {
   void _removeCallOverlay() {
     _callOverlayEntry?.remove();
     _callOverlayEntry = null;
+  }
+
+  void _removeCallWaitingBanner() {
+    _callWaitingBannerEntry?.remove();
+    _callWaitingBannerEntry = null;
   }
 
   /// Show a dialog to select a user to add to the ongoing call.
@@ -5059,6 +5517,7 @@ class _ChatWindowState extends State<ChatWindow> {
   @override
   void dispose() {
     _removeCallOverlay();
+    _removeCallWaitingBanner();
     _typingTimer?.cancel();
     _replyHighlightTimer?.cancel();
     _floatingDateTimer?.cancel();

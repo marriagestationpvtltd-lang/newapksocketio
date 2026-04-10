@@ -71,6 +71,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   bool _isCallRinging = true; // ringing state: false once remote joins
   bool _isRecipientRinging = false; // true when recipient device is ringing
   bool _recipientOffline = false; // true when server confirmed recipient is offline
+  bool _recipientBusy = false; // true when server confirmed recipient is busy
   bool _foregroundServiceStarted = false;
 
   Timer? _timeoutTimer;
@@ -83,6 +84,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   StreamSubscription<Map<String, dynamic>>? _socketEndedSub;
   StreamSubscription<Map<String, dynamic>>? _socketRingingSub;
   StreamSubscription<Map<String, dynamic>>? _socketUserOfflineSub;
+  StreamSubscription<Map<String, dynamic>>? _socketUserBusySub;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   String? _connectionStatus;
 
@@ -269,6 +271,19 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
         _syncOverlayState();
       }
     });
+    // Server confirmed the recipient is busy (already in another call).
+    _socketUserBusySub = SocketService().onCallUserBusy.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
+      if (!_callActive && !_ending && mounted) {
+        setState(() => _recipientBusy = true);
+        _syncOverlayState();
+        // Automatically end the call after showing busy status
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!_callActive && !_ending) _endCall();
+        });
+      }
+    });
   }
 
   void _handleVideoCallResponseData(Map<String, dynamic> data) {
@@ -395,6 +410,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
       statusText = 'Connected';
     } else if (_remoteAccepted) {
       statusText = 'Connecting video...';
+    } else if (_recipientBusy) {
+      statusText = 'User is busy, please try again later';
     } else if (_recipientOffline) {
       statusText = 'User is not online';
     } else if (_isRecipientRinging) {
@@ -414,6 +431,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   String _getOutgoingStatusText({bool isVideoConnect = false}) {
     if (_callActive) return 'Connected';
     if (_remoteAccepted) return isVideoConnect ? 'Connecting video...' : 'Connecting...';
+    if (_recipientBusy) return 'User is busy, please try again later';
     if (_recipientOffline) return 'User is not online';
     if (_isRecipientRinging) return 'Ringing...';
     return 'Calling...';
@@ -686,11 +704,13 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     _socketEndedSub?.cancel();
     _socketRingingSub?.cancel();
     _socketUserOfflineSub?.cancel();
+    _socketUserBusySub?.cancel();
     _socketAcceptedSub = null;
     _socketRejectedSub = null;
     _socketEndedSub = null;
     _socketRingingSub = null;
     _socketUserOfflineSub = null;
+    _socketUserBusySub = null;
 
     // Always stop ringtone when ending call
     await _stopRingtone();
@@ -1278,6 +1298,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     _socketEndedSub?.cancel();
     _socketRingingSub?.cancel();
     _socketUserOfflineSub?.cancel();
+    _socketUserBusySub?.cancel();
     _connectivitySubscription?.cancel();
     _controlsHideTimer?.cancel();
     _ringtoneRestartTimer?.cancel();

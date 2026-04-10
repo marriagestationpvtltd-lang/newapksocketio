@@ -405,6 +405,10 @@ const userActiveChatRoom = new Map(); // userId → chatRoomId | null
 const activePendingCalls = new Map();
 const PENDING_CALL_TTL_MS = 60000; // 60 seconds — matches FCM notification lifetime
 
+// Tracks active calls (calls that have been accepted and are in progress)
+// userId → { channelName, otherUserId, callType, acceptedAt }
+const activeOngoingCalls = new Map();
+
 function _cleanExpiredPendingCalls() {
   const now = Date.now();
   for (const [channelName, call] of activePendingCalls) {
@@ -1016,6 +1020,20 @@ io.on('connection', (socket) => {
     const recipientIdStr = recipientId.toString();
     const callerIdStr    = callerId ? callerId.toString() : undefined;
 
+    // Check if recipient is already in an active call
+    if (activeOngoingCalls.has(recipientIdStr)) {
+      if (callerIdStr) {
+        const channelName = (rest.channelName || '').toString().trim();
+        io.to(`user:${callerIdStr}`).emit('call_user_busy', {
+          channelName:  channelName,
+          callerId:     callerIdStr,
+          recipientId:  recipientIdStr,
+          recipientName: rest.callerName || 'User',
+        });
+      }
+      return; // Don't process the call further
+    }
+
     const callPayload = {
       ...rest,
       callerId:    callerIdStr,
@@ -1073,36 +1091,73 @@ io.on('connection', (socket) => {
   // ── call_accept ───────────────────────────────────────────────────────────
   // Recipient emits this to inform the caller the call was accepted.
   socket.on('call_accept', (data) => {
-    const { callerId, ...rest } = data || {};
+    const { callerId, recipientId, channelName, callType, ...rest } = data || {};
     if (!callerId) return;
-    if (rest.channelName) activePendingCalls.delete(rest.channelName);
+    if (channelName) activePendingCalls.delete(channelName);
+
+    // Track both users as being in an active call
+    if (channelName && callerId && recipientId) {
+      const callerIdStr = callerId.toString();
+      const recipientIdStr = recipientId.toString();
+      const acceptedAt = Date.now();
+      const safeCallType = callType || 'audio';
+
+      activeOngoingCalls.set(callerIdStr, {
+        channelName,
+        otherUserId: recipientIdStr,
+        callType: safeCallType,
+        acceptedAt,
+      });
+      activeOngoingCalls.set(recipientIdStr, {
+        channelName,
+        otherUserId: callerIdStr,
+        callType: safeCallType,
+        acceptedAt,
+      });
+    }
+
     io.to(`user:${callerId.toString()}`).emit('call_accepted', {
       ...rest,
       callerId: callerId.toString(),
+      recipientId,
+      channelName,
+      callType,
     });
   });
 
   // ── call_reject ───────────────────────────────────────────────────────────
   // Recipient emits this to inform the caller the call was rejected.
   socket.on('call_reject', (data) => {
-    const { callerId, ...rest } = data || {};
+    const { callerId, recipientId, ...rest } = data || {};
     if (!callerId) return;
     if (rest.channelName) activePendingCalls.delete(rest.channelName);
+
+    // Remove from active calls if present (shouldn't normally be there on reject)
+    if (callerId) activeOngoingCalls.delete(callerId.toString());
+    if (recipientId) activeOngoingCalls.delete(recipientId.toString());
+
     io.to(`user:${callerId.toString()}`).emit('call_rejected', {
       ...rest,
       callerId: callerId.toString(),
+      recipientId,
     });
   });
 
   // ── call_cancel ───────────────────────────────────────────────────────────
   // Caller emits this when they cancel before the recipient answers.
   socket.on('call_cancel', (data) => {
-    const { recipientId, ...rest } = data || {};
+    const { recipientId, callerId, ...rest } = data || {};
     if (!recipientId) return;
     if (rest.channelName) activePendingCalls.delete(rest.channelName);
+
+    // Remove from active calls if present
+    if (callerId) activeOngoingCalls.delete(callerId.toString());
+    if (recipientId) activeOngoingCalls.delete(recipientId.toString());
+
     io.to(`user:${recipientId.toString()}`).emit('call_cancelled', {
       ...rest,
       recipientId: recipientId.toString(),
+      callerId,
     });
   });
 
@@ -1111,6 +1166,11 @@ io.on('connection', (socket) => {
   socket.on('call_end', (data) => {
     const { callerId, recipientId, ...rest } = data || {};
     if (rest.channelName) activePendingCalls.delete(rest.channelName);
+
+    // Remove both users from active calls
+    if (callerId) activeOngoingCalls.delete(callerId.toString());
+    if (recipientId) activeOngoingCalls.delete(recipientId.toString());
+
     if (callerId) {
       io.to(`user:${callerId.toString()}`).emit('call_ended', {
         ...rest, callerId, recipientId,
@@ -1219,6 +1279,9 @@ io.on('connection', (socket) => {
 
     userSockets.delete(authenticatedUserId);
     userActiveChatRoom.delete(authenticatedUserId);
+
+    // Remove from active calls
+    activeOngoingCalls.delete(authenticatedUserId);
 
     await upsertOnlineStatus(authenticatedUserId, false);
 

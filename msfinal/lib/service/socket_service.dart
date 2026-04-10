@@ -52,6 +52,7 @@ class SocketService {
   final _callEndedCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _callRingingCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _callUserOfflineCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _callUserBusyCtrl = StreamController<Map<String, dynamic>>.broadcast();
 
   // ── Conference call streams ───────────────────────────────────────────────
 
@@ -86,6 +87,9 @@ class SocketService {
 
   /// Emitted when the recipient is offline at the time of the call_invite.
   Stream<Map<String, dynamic>> get onCallUserOffline => _callUserOfflineCtrl.stream;
+
+  /// Emitted when the recipient is busy (already in another call).
+  Stream<Map<String, dynamic>> get onCallUserBusy => _callUserBusyCtrl.stream;
 
   // Conference call streams
   Stream<Map<String, dynamic>> get onAddedToCall => _addedToCallCtrl.stream;
@@ -201,6 +205,10 @@ class SocketService {
 
     _socket!.on('call_user_offline', (data) {
       _callUserOfflineCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_user_busy', (data) {
+      _callUserBusyCtrl.add(_toMap(data));
     });
 
     // ── Conference call events ────────────────────────────────────────────────
@@ -671,5 +679,7 @@ class SocketService {
     _callCancelledCtrl.close();
     _callEndedCtrl.close();
     _callRingingCtrl.close();
+    _callUserOfflineCtrl.close();
+    _callUserBusyCtrl.close();
   }
 }

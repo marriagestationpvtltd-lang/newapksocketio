@@ -1048,8 +1048,11 @@ io.on('connection', (socket) => {
       }
     }
 
-    if (activeCallUsers.has(recipientIdStr) || recipientAlreadyRinging) {
-      // Recipient is already on another call or currently ringing — notify caller immediately.
+    // Admin (userId === '1') is always available and can handle multiple concurrent calls.
+    const isAdminRecipient = recipientIdStr === '1';
+
+    if (!isAdminRecipient && (activeCallUsers.has(recipientIdStr) || recipientAlreadyRinging)) {
+      // Recipient is a normal user already on another call or ringing — notify caller immediately.
       if (channelName) activePendingCalls.delete(channelName);
       if (callerIdStr) {
         io.to(`user:${callerIdStr}`).emit('call_busy', {
@@ -1100,12 +1103,13 @@ io.on('connection', (socket) => {
     const { callerId, recipientId, ...rest } = data || {};
     if (!callerId) return;
     if (rest.channelName) activePendingCalls.delete(rest.channelName);
-    // Mark both parties as busy in an active call
+    // Mark both parties as busy in an active call.
+    // Admin (userId === '1') is always available — do not mark them as busy.
     const callerStr    = callerId.toString();
     const recipientStr = recipientId ? recipientId.toString() : undefined;
     if (rest.channelName) {
-      activeCallUsers.set(callerStr, rest.channelName);
-      if (recipientStr) activeCallUsers.set(recipientStr, rest.channelName);
+      if (callerStr !== '1') activeCallUsers.set(callerStr, rest.channelName);
+      if (recipientStr && recipientStr !== '1') activeCallUsers.set(recipientStr, rest.channelName);
     }
     io.to(`user:${callerStr}`).emit('call_accepted', {
       ...rest,

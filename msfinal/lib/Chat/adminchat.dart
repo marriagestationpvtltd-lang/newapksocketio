@@ -984,28 +984,66 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   Future<void> _sendImage() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.image,
+      allowMultiple: true,
       withData: kIsWeb,
     );
-    if (result != null) {
-      final fileName = result.files.single.name;
-      try {
+    if (result == null || result.files.isEmpty) return;
+
+    // Show preview before sending
+    if (!mounted) return;
+    final confirmed = await _showImagePreviewSheet(result.files);
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isSending = true);
+    try {
+      final List<String> urls = [];
+      for (final file in result.files) {
         Uint8List bytes;
         if (kIsWeb) {
-          bytes = result.files.single.bytes!;
+          bytes = file.bytes!;
         } else {
-          bytes = await File(result.files.single.path!).readAsBytes();
+          bytes = await File(file.path!).readAsBytes();
         }
         final url = await _socketService.uploadChatImage(
           bytes: bytes,
-          filename: fileName,
+          filename: file.name,
           userId: _mySenderId,
           chatRoomId: _chatRoomId,
         );
-        await _sendMessage('image', url, imageUrl: url);
-      } catch (e) {
-        debugPrint('Image upload error: $e');
+        urls.add(url);
       }
+      if (urls.length == 1) {
+        await _sendMessage('image', urls[0], imageUrl: urls[0]);
+      } else {
+        await _sendMessage('image_gallery', jsonEncode(urls));
+      }
+    } catch (e) {
+      debugPrint('Image upload error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send image: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSending = false);
     }
+  }
+
+  /// Shows a bottom sheet preview of selected images and returns true if user
+  /// confirms sending.
+  Future<bool?> _showImagePreviewSheet(List<PlatformFile> files) {
+    return showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _ImagePreviewSheet(
+        files: files,
+        accentColor: _primaryGradient.colors[0],
+      ),
+    );
   }
 
   void _toggleLike(String messageId, bool currentLiked) {
@@ -1130,6 +1168,8 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     switch (type) {
       case 'image':
         return '📷 Photo';
+      case 'image_gallery':
+        return '📷 Photos';
       case 'voice':
         return '🎤 Voice message';
       case 'doc':
@@ -1164,6 +1204,9 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         // For image messages the socket server stores the URL in 'message';
         // 'imageUrl' is the redundant alias written by admin chathome.dart.
         'imageUrl': data['message']?.toString() ?? data['imageUrl']?.toString(),
+      if (type == 'image_gallery')
+        // For gallery messages, extract the first URL for the reply thumbnail.
+        'imageUrl': _firstGalleryUrl(data['message']?.toString() ?? ''),
     };
   }
 
@@ -1335,6 +1378,57 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                         ],
                       ),
                     ),
+                  ] else if ((data['messageType'] ?? data['type']) == 'image') ...[
+                    // Single image: rendered outside the gradient bubble (fixes border issue)
+                    _buildChatImageMessage(
+                      data['message']?.toString() ?? data['imageUrl']?.toString(),
+                      isFromAdmin,
+                    ),
+                    const SizedBox(height: 4),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        mainAxisAlignment:
+                            isFromAdmin ? MainAxisAlignment.end : MainAxisAlignment.start,
+                        children: [
+                          Text(
+                            formattedTime,
+                            style: TextStyle(fontSize: 12, color: _lightTextColor),
+                          ),
+                          if (data['liked'] == true)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Icon(Icons.favorite,
+                                  size: 16, color: _accentColor),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ] else if ((data['messageType'] ?? data['type']) == 'image_gallery') ...[
+                    // Multiple images: rendered as WhatsApp-style grid outside the gradient bubble
+                    _buildChatGalleryGrid(
+                      _parseGalleryUrls(data['message']?.toString() ?? '[]'),
+                    ),
+                    const SizedBox(height: 4),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        mainAxisAlignment:
+                            isFromAdmin ? MainAxisAlignment.end : MainAxisAlignment.start,
+                        children: [
+                          Text(
+                            formattedTime,
+                            style: TextStyle(fontSize: 12, color: _lightTextColor),
+                          ),
+                          if (data['liked'] == true)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 8),
+                              child: Icon(Icons.favorite,
+                                  size: 16, color: _accentColor),
+                            ),
+                        ],
+                      ),
+                    ),
                   ] else
                   Container(
                     constraints: BoxConstraints(
@@ -1411,8 +1505,6 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                           _buildVoiceMessage(data['message'] ?? '', isFromAdmin),
                         if ((data['messageType'] ?? data['type']) == 'doc')
                           _buildDocumentMessage(data['message'] ?? '', isFromAdmin),
-                        if ((data['messageType'] ?? data['type']) == 'image')
-                          _buildImageMessage(data['message'] ?? data['imageUrl'], isFromAdmin),
                         const SizedBox(height: 6),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -2173,6 +2265,229 @@ class _AdminChatScreenState extends State<AdminChatScreen>
             color: isMe ? Colors.white : _textColor,
           ));
     }
+  }
+
+  /// Extracts the first URL from a JSON-encoded gallery list.
+  /// Returns an empty string if parsing fails.
+  String _firstGalleryUrl(String json) {
+    try {
+      final decoded = jsonDecode(json);
+      if (decoded is List && decoded.isNotEmpty) {
+        return decoded.first?.toString() ?? '';
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  /// Parses a JSON-encoded gallery message into a list of URL strings.
+  List<String> _parseGalleryUrls(String message) {
+    try {
+      final decoded = jsonDecode(message);
+      if (decoded is List) return decoded.whereType<String>().toList();
+    } catch (_) {}
+    return [message];
+  }
+
+  /// Renders a single chat image (outside the gradient bubble).
+  /// Tapping opens the fullscreen swipeable viewer.
+  Widget _buildChatImageMessage(String? imageUrl, bool isFromAdmin) {
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final double imgW = MediaQuery.of(context).size.width * 0.60;
+    return GestureDetector(
+      onTap: () => _openPhotoViewer(context, [imageUrl], 0),
+      child: ClipRRect(
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(16),
+          topRight: const Radius.circular(16),
+          bottomLeft: isFromAdmin ? const Radius.circular(16) : const Radius.circular(4),
+          bottomRight: isFromAdmin ? const Radius.circular(4) : const Radius.circular(16),
+        ),
+        child: Image.network(
+          imageUrl,
+          width: imgW,
+          height: imgW * 0.75,
+          fit: BoxFit.cover,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Container(
+              width: imgW,
+              height: imgW * 0.75,
+              color: Colors.grey.shade200,
+              child: Center(
+                child: CircularProgressIndicator(
+                  value: loadingProgress.expectedTotalBytes != null
+                      ? loadingProgress.cumulativeBytesLoaded /
+                          loadingProgress.expectedTotalBytes!
+                      : null,
+                  color: _primaryGradient.colors[0],
+                  strokeWidth: 2,
+                ),
+              ),
+            );
+          },
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              width: imgW,
+              height: imgW * 0.75,
+              color: Colors.grey.shade200,
+              child: Icon(Icons.broken_image, color: Colors.grey.shade400, size: 40),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  /// Renders a WhatsApp-style gallery grid for `image_gallery` messages
+  /// (outside the gradient bubble). Tapping any cell opens the fullscreen viewer.
+  Widget _buildChatGalleryGrid(List<String> urls) {
+    if (urls.isEmpty) return const SizedBox.shrink();
+    final double gridW = MediaQuery.of(context).size.width * 0.60;
+    const double gap = 2;
+
+    Widget thumb(int index, {bool showOverlay = false, int extra = 0}) {
+      final url = urls[index];
+      Widget img = Image.network(
+        url,
+        fit: BoxFit.cover,
+        loadingBuilder: (ctx, child, progress) {
+          if (progress == null) return child;
+          return Container(
+            color: Colors.grey.shade200,
+            child: Center(
+              child: CircularProgressIndicator(
+                color: _primaryGradient.colors[0],
+                strokeWidth: 2,
+              ),
+            ),
+          );
+        },
+        errorBuilder: (_, __, ___) => Container(
+          color: Colors.grey.shade200,
+          child: Icon(Icons.broken_image, color: Colors.grey.shade400),
+        ),
+      );
+      return GestureDetector(
+        onTap: () => _openPhotoViewer(context, urls, index),
+        child: showOverlay
+            ? Stack(
+                fit: StackFit.expand,
+                children: [
+                  img,
+                  Container(color: Colors.black54),
+                  Center(
+                    child: Text(
+                      '+$extra',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : img,
+      );
+    }
+
+    if (urls.length == 1) {
+      return SizedBox(
+        width: gridW,
+        height: gridW * 0.75,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: thumb(0),
+        ),
+      );
+    }
+    if (urls.length == 2) {
+      final h = gridW / 2 - gap / 2;
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: gridW,
+          child: Row(children: [
+            Expanded(child: SizedBox(height: h, child: thumb(0))),
+            SizedBox(width: gap),
+            Expanded(child: SizedBox(height: h, child: thumb(1))),
+          ]),
+        ),
+      );
+    }
+    if (urls.length == 3) {
+      final h = gridW * 0.6;
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: gridW,
+          height: h,
+          child: Row(children: [
+            Expanded(flex: 2, child: SizedBox(height: h, child: thumb(0))),
+            SizedBox(width: gap),
+            Expanded(
+              flex: 1,
+              child: Column(children: [
+                Expanded(child: thumb(1)),
+                SizedBox(height: gap),
+                Expanded(child: thumb(2)),
+              ]),
+            ),
+          ]),
+        ),
+      );
+    }
+    if (urls.length == 4) {
+      final cellW = (gridW - gap) / 2;
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: SizedBox(
+          width: gridW,
+          child: Column(children: [
+            Row(children: [
+              SizedBox(width: cellW, height: cellW, child: thumb(0)),
+              SizedBox(width: gap),
+              SizedBox(width: cellW, height: cellW, child: thumb(1)),
+            ]),
+            SizedBox(height: gap),
+            Row(children: [
+              SizedBox(width: cellW, height: cellW, child: thumb(2)),
+              SizedBox(width: gap),
+              SizedBox(width: cellW, height: cellW, child: thumb(3)),
+            ]),
+          ]),
+        ),
+      );
+    }
+
+    // 5+ images: 2-column grid, last visible cell shows "+N"
+    const int maxVisible = 6;
+    final int displayCount = urls.length > maxVisible ? maxVisible : urls.length;
+    final int extraCount = urls.length > maxVisible ? urls.length - maxVisible + 1 : 0;
+    final double cellW = (gridW - gap) / 2;
+    final List<Widget> cells = List.generate(displayCount, (i) {
+      final isLast = i == displayCount - 1 && extraCount > 0;
+      return SizedBox(
+        width: cellW,
+        height: cellW,
+        child: thumb(i, showOverlay: isLast, extra: extraCount),
+      );
+    });
+    final List<Widget> rows = [];
+    for (int i = 0; i < cells.length; i += 2) {
+      if (i > 0) rows.add(SizedBox(height: gap));
+      rows.add(Row(children: [
+        cells[i],
+        SizedBox(width: gap),
+        if (i + 1 < cells.length) cells[i + 1] else SizedBox(width: cellW),
+      ]));
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(width: gridW, child: Column(children: rows)),
+    );
   }
 
   Widget _buildImageMessage(String? imageUrl, bool isMe) {
@@ -3753,6 +4068,126 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                 ),
               );
             },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A bottom-sheet widget that previews selected images before sending.
+/// Returns `true` when the user taps "Send", `false` / null otherwise.
+class _ImagePreviewSheet extends StatelessWidget {
+  final List<PlatformFile> files;
+  final Color accentColor;
+
+  const _ImagePreviewSheet({
+    required this.files,
+    required this.accentColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        top: 12,
+        left: 16,
+        right: 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Drag handle
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          Text(
+            '${files.length} photo${files.length == 1 ? '' : 's'} selected',
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          // Scrollable thumbnail row
+          SizedBox(
+            height: 180,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: files.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              itemBuilder: (ctx, index) {
+                final file = files[index];
+                Widget imgWidget;
+                if (kIsWeb && file.bytes != null) {
+                  imgWidget = Image.memory(
+                    file.bytes!,
+                    fit: BoxFit.cover,
+                  );
+                } else if (!kIsWeb && file.path != null) {
+                  imgWidget = Image.file(
+                    File(file.path!),
+                    fit: BoxFit.cover,
+                  );
+                } else {
+                  imgWidget = Container(
+                    color: Colors.grey.shade200,
+                    child: const Icon(Icons.image, color: Colors.grey),
+                  );
+                }
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(width: 140, height: 180, child: imgWidget),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(false),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text('Cancel'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () => Navigator.of(context).pop(true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: accentColor,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  icon: const Icon(Icons.send, size: 18, color: Colors.white),
+                  label: Text(
+                    'Send ${files.length == 1 ? 'Photo' : '${files.length} Photos'}',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

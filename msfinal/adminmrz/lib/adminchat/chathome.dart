@@ -118,6 +118,8 @@ class _ChatWindowState extends State<ChatWindow> {
   // Typing indicator state
   Timer? _typingTimer;
   bool _userIsTyping = false;
+  bool _adminTypingActive = false;
+  DateTime? _lastTypingStart;
 
   // Inline reply / edit state
   Map<String, dynamic>? _replyingTo; // {messageId, message, senderid, senderName}
@@ -158,6 +160,8 @@ class _ChatWindowState extends State<ChatWindow> {
   static const Duration _kContextFindDelay = Duration(milliseconds: 80);
   static const Duration _kEnsureVisibleDuration = Duration(milliseconds: 420);
   static const int _kMinScrollDurationMs = 320;
+  static const Duration _kTypingIdleDuration = Duration(seconds: 3);
+  static const Duration _kTypingStartThrottle = Duration(milliseconds: 900);
   static const int _kMaxScrollDurationMs = 950;
   static const double _kScrollDurationMultiplier = 0.35;
   static const double _kMessageScrollAlignment = 0.45;
@@ -441,7 +445,8 @@ class _ChatWindowState extends State<ChatWindow> {
           AdminSocketService.chatRoomId(chatProvider.id?.toString() ?? '');
       if (data['chatRoomId']?.toString() != expectedRoom) return;
       if (data['userId']?.toString() == senderId.toString()) return;
-      if (!_userIsTyping) _playTypingSound();
+      if (_userIsTyping) return;
+      _playTypingSound();
       setState(() => _userIsTyping = true);
     });
 
@@ -453,6 +458,7 @@ class _ChatWindowState extends State<ChatWindow> {
           AdminSocketService.chatRoomId(chatProvider.id?.toString() ?? '');
       if (data['chatRoomId']?.toString() != expectedRoom) return;
       if (data['userId']?.toString() == senderId.toString()) return;
+      if (!_userIsTyping) return;
       setState(() => _userIsTyping = false);
     });
 
@@ -871,32 +877,55 @@ class _ChatWindowState extends State<ChatWindow> {
   // ── TYPING INDICATOR ────────────────────────────────────────────────────
 
   void _setupTypingListener(int userId) {
+    _typingTimer?.cancel();
+    _adminTypingActive = false;
     final roomId = AdminSocketService.chatRoomId(userId.toString());
     _socketService.joinRoom(roomId);
     setState(() => _userIsTyping = false);
   }
 
   void _updateAdminTypingStatus(String text, String receiverId) {
+    final trimmed = text.trim();
+    if (receiverId.isEmpty) return;
     _typingTimer?.cancel();
     final roomId = AdminSocketService.chatRoomId(receiverId);
-    final isTyping = text.isNotEmpty;
+    final isTyping = trimmed.isNotEmpty;
     if (isTyping) {
-      _socketService.sendTypingStart(roomId);
-      _typingTimer = Timer(const Duration(seconds: 3), () {
-        _clearAdminTypingStatus();
+      final now = DateTime.now();
+      final bool shouldEmitStart = !_adminTypingActive ||
+          _lastTypingStart == null ||
+          now.difference(_lastTypingStart!) >= _kTypingStartThrottle;
+      if (shouldEmitStart) {
+        _socketService.sendTypingStart(roomId);
+        _adminTypingActive = true;
+        _lastTypingStart = now;
+      }
+      _typingTimer = Timer(_kTypingIdleDuration, () {
+        _emitTypingStop(roomId);
       });
     } else {
-      _socketService.sendTypingStop(roomId);
+      _emitTypingStop(roomId);
     }
+  }
+
+  void _emitTypingStop(String roomId) {
+    _typingTimer?.cancel();
+    if (!_adminTypingActive) return;
+    _adminTypingActive = false;
+    _socketService.sendTypingStop(roomId);
   }
 
   void _clearAdminTypingStatus() {
     _typingTimer?.cancel();
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
     final receiverId = chatProvider.id?.toString();
-    if (receiverId == null || receiverId.isEmpty) return;
-    final roomId = AdminSocketService.chatRoomId(receiverId);
-    _socketService.sendTypingStop(roomId);
+    final roomId =
+        receiverId != null && receiverId.isNotEmpty ? AdminSocketService.chatRoomId(receiverId) : null;
+    final wasTyping = _adminTypingActive;
+    _adminTypingActive = false;
+    if (roomId != null && wasTyping) {
+      _socketService.sendTypingStop(roomId);
+    }
   }
 
   // Play typing sound — short, soft, Messenger-style

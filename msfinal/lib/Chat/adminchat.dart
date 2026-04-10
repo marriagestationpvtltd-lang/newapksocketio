@@ -103,6 +103,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   bool _isFirstLoad = true;
   bool _profileCardSent = false; // Track if profile card was sent
   String _currentUserImage = ''; // Store current user image
+  String _currentUserName = ''; // Store current user's full name for calls
 
   static const int _messagePageSize = 30;
 
@@ -302,7 +303,9 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         if (userDataString == null) return;
         final userData = jsonDecode(userDataString);
         final currentUserId = userData['id']?.toString() ?? '';
-        final currentUserName = userData['firstName']?.toString() ?? '';
+        final firstName = userData['firstName']?.toString() ?? '';
+        final lastName = userData['lastName']?.toString() ?? '';
+        final currentUserName = '$firstName $lastName'.trim();
 
         final List<String> ids = [currentUserId, userId];
         ids.sort();
@@ -508,8 +511,11 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       final userDataString = prefs.getString('user_data');
       if (userDataString != null) {
         final userData = jsonDecode(userDataString);
+        final firstName = userData['firstName']?.toString() ?? '';
+        final lastName = userData['lastName']?.toString() ?? '';
         setState(() {
           _currentUserImage = userData['image']?.toString() ?? '';
+          _currentUserName = '$firstName $lastName'.trim();
         });
       }
     } catch (e) {
@@ -3499,7 +3505,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                 MaterialPageRoute(
                   builder: (_) => CallScreen(
                     currentUserId: widget.senderID,
-                    currentUserName: widget.userName,
+                    currentUserName: _currentUserName.isNotEmpty ? _currentUserName : widget.senderID,
                     currentUserImage: _currentUserImage,
                     otherUserId: _adminUserId,
                     otherUserName: _adminUserName,
@@ -3520,7 +3526,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                 MaterialPageRoute(
                   builder: (_) => VideoCallScreen(
                     currentUserId: widget.senderID,
-                    currentUserName: widget.userName,
+                    currentUserName: _currentUserName.isNotEmpty ? _currentUserName : widget.senderID,
                     currentUserImage: _currentUserImage,
                     otherUserId: _adminUserId,
                     otherUserName: _adminUserName,

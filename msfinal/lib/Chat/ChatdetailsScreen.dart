@@ -1714,14 +1714,26 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 if (replyWidget != null) replyWidget,
 
                 Container(
-                  padding: (messageType == 'image' || messageType == 'image_gallery')
+                  padding: (messageType == 'image' || messageType == 'image_gallery' || messageType == 'profile_card')
                       ? EdgeInsets.zero
                       : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   constraints: BoxConstraints(
                     maxWidth: screenWidth * 0.75,
                   ),
-                  clipBehavior: (messageType == 'image' || messageType == 'image_gallery') ? Clip.antiAlias : Clip.none,
-                  decoration: BoxDecoration(
+                  clipBehavior: (messageType == 'image' || messageType == 'image_gallery' || messageType == 'profile_card') ? Clip.antiAlias : Clip.none,
+                  decoration: messageType == 'profile_card'
+                      ? BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: _accentColor.withOpacity(0.18),
+                              blurRadius: 16,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        )
+                      : BoxDecoration(
                     gradient: isMine ? _primaryGradient : _secondaryGradient,
                     borderRadius: isMine
                         ? const BorderRadius.only(
@@ -2058,6 +2070,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             ),
           ),
         );
+      case 'profile_card':
+        return _buildProfileCardWidget(text, isMine);
       default:
         return Text(
           text,
@@ -2068,6 +2082,390 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           ),
         );
     }
+  }
+
+  /// Builds a profile card widget from a JSON-encoded profile data string.
+  /// Design matches the admin chat profile card for consistency.
+  Widget _buildProfileCardWidget(String jsonText, bool isMine) {
+    Map<String, dynamic>? profileData;
+    try {
+      final decoded = jsonDecode(jsonText);
+      if (decoded is Map) profileData = Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+
+    if (profileData == null) {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: Text('👤 Profile Card',
+            style: TextStyle(color: _textColor, fontSize: 15)),
+      );
+    }
+
+    // Normalize field names (handle both admin-sent and user-sent formats)
+    final String userId = (profileData['userId'] ?? profileData['id'] ?? '').toString();
+    final String firstName = (profileData['firstName'] ?? profileData['first'] ?? '').toString();
+    final String lastName = (profileData['lastName'] ?? profileData['last'] ?? '').toString();
+    final String fullName = '$firstName $lastName'.trim();
+    final String displayName =
+        fullName.isNotEmpty ? fullName : (profileData['name']?.toString() ?? 'Unknown');
+    final String? photoUrl = profileData['profileImage']?.toString();
+    final bool hasPhoto = photoUrl != null && photoUrl.isNotEmpty;
+
+    // Privacy: use shouldBlurPhoto from the shared data
+    final bool shouldBlurPhoto = profileData['shouldBlurPhoto'] == true;
+    // For user-to-user chat, respect photo privacy
+    final bool shouldShowClear = !shouldBlurPhoto;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ── Gradient header banner ──
+          Container(
+            height: 60,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFFD81B60), Color(0xFFAD1457), Color(0xFF880E4F)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              children: [
+                Icon(Icons.favorite, color: Colors.white.withOpacity(0.7), size: 16),
+                const SizedBox(width: 6),
+                const Text(
+                  'Profile Card',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const Spacer(),
+                if (userId.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.25),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'MS-$userId',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          // ── Profile photo + name (Centered layout) ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
+            child: Column(
+              children: [
+                Transform.translate(
+                  offset: const Offset(0, -30),
+                  child: Column(
+                    children: [
+                      // Profile photo
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 3),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.15),
+                              blurRadius: 8,
+                            ),
+                          ],
+                        ),
+                        child: ClipOval(
+                          child: !shouldShowClear
+                              ? ImageFiltered(
+                                  imageFilter: ui.ImageFilter.blur(
+                                    sigmaX: PrivacyUtils.kStandardBlurSigmaX,
+                                    sigmaY: PrivacyUtils.kStandardBlurSigmaY,
+                                  ),
+                                  child: Container(
+                                    width: 80,
+                                    height: 80,
+                                    color: Colors.grey.shade200,
+                                    child: hasPhoto
+                                        ? Image.network(
+                                            photoUrl!,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) =>
+                                                Icon(Icons.person, size: 40, color: Colors.grey.shade400),
+                                          )
+                                        : Icon(Icons.person, size: 40, color: Colors.grey.shade400),
+                                  ),
+                                )
+                              : Container(
+                                  width: 80,
+                                  height: 80,
+                                  color: Colors.grey.shade200,
+                                  child: hasPhoto
+                                      ? Image.network(
+                                          photoUrl!,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) =>
+                                              Icon(Icons.person, size: 40, color: Colors.grey.shade400),
+                                        )
+                                      : Icon(Icons.person, size: 40, color: Colors.grey.shade400),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      // Name + meta
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  displayName,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                    color: _textColor,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: shouldShowClear ? Colors.green.shade100 : Colors.orange.shade100,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  shouldShowClear ? Icons.lock_open_outlined : Icons.lock_outline,
+                                  size: 12,
+                                  color: shouldShowClear ? Colors.green.shade700 : Colors.orange.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          if (profileData['age'] != null && profileData['age'] != 'N/A')
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.cake_outlined, size: 13, color: _lightTextColor),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${profileData['age']} years',
+                                  style: TextStyle(fontSize: 13, color: _lightTextColor, fontWeight: FontWeight.w500),
+                                ),
+                              ],
+                            ),
+                          if (_hasValue(profileData['location'] ?? profileData['country']))
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.location_on_outlined, size: 13, color: _lightTextColor),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      (profileData['location'] ?? profileData['country']).toString(),
+                                      style: TextStyle(fontSize: 12, color: _lightTextColor),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── Info chips ──
+                Transform.translate(
+                  offset: const Offset(0, -22),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      if (_hasValue(profileData['religion']))
+                        _buildProfileInfoChip(Icons.menu_book_outlined, profileData['religion']),
+                      if (_hasValue(profileData['community']))
+                        _buildProfileInfoChip(Icons.groups_outlined, profileData['community']),
+                      if (_hasValue(profileData['occupation']))
+                        _buildProfileInfoChip(Icons.work_outline, profileData['occupation']),
+                      if (_hasValue(profileData['education']))
+                        _buildProfileInfoChip(Icons.school_outlined, profileData['education']),
+                      if (_hasValue(profileData['height']))
+                        _buildProfileInfoChip(Icons.height, profileData['height']),
+                    ],
+                  ),
+                ),
+
+                // ── Bio ──
+                if (_hasValue(profileData['bio']) &&
+                    profileData['bio'] != 'No bio available')
+                  Transform.translate(
+                    offset: const Offset(0, -14),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD81B60).withOpacity(0.06),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '"${profileData['bio']}"',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: _lightTextColor,
+                          fontStyle: FontStyle.italic,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          // ── Divider ──
+          Divider(height: 1, color: Colors.grey.shade200),
+
+          // ── Action buttons ──
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextButton.icon(
+                    onPressed: () {
+                      if (userId.isNotEmpty && userId != widget.currentUserId) {
+                        final List<String> ids = [widget.currentUserId, userId];
+                        ids.sort();
+                        final chatRoomId = ids.join('_');
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChatDetailScreen(
+                              chatRoomId: chatRoomId,
+                              receiverId: userId,
+                              receiverName: displayName.isNotEmpty ? displayName : 'User $userId',
+                              receiverImage: photoUrl ?? '',
+                              currentUserId: widget.currentUserId,
+                              currentUserName: widget.currentUserName,
+                              currentUserImage: widget.currentUserImage,
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    icon: Icon(Icons.chat_bubble_outline,
+                        size: 16, color: const Color(0xFFD81B60)),
+                    label: const Text(
+                      'Chat',
+                      style: TextStyle(
+                        color: Color(0xFFD81B60),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+                Container(width: 1, height: 28, color: Colors.grey.shade200),
+                Expanded(
+                  child: TextButton.icon(
+                    onPressed: () {
+                      if (userId.isNotEmpty) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ProfileScreen(userId: userId),
+                          ),
+                        );
+                      }
+                    },
+                    icon: Icon(Icons.person_outline,
+                        size: 16, color: const Color(0xFFD81B60)),
+                    label: const Text(
+                      'View Profile',
+                      style: TextStyle(
+                        color: Color(0xFFD81B60),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  bool _hasValue(dynamic val) {
+    if (val == null) return false;
+    final s = val.toString().trim();
+    return s.isNotEmpty && s != 'N/A' && s != 'null' && s != 'Location not specified';
+  }
+
+  Widget _buildProfileInfoChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFD81B60).withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFD81B60).withOpacity(0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: const Color(0xFFD81B60)),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Color(0xFFD81B60),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // WhatsApp-style image gallery widget

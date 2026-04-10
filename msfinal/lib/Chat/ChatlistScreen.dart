@@ -149,7 +149,7 @@ class _ChatListScreenState extends State<ChatListScreen>
           userimage = user.profilePicture;
           pageno = user.pageno;
           userId = user.id?.toString() ?? userIdString;
-          name = user.firstName;
+          name = '${user.firstName} ${user.lastName}'.trim();
           isLoading = false;
           docstatus = user.docStatus;
         });

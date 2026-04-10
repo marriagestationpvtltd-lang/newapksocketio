@@ -487,6 +487,7 @@ class _ChatWindowState extends State<ChatWindow> {
     String? usertype;
     String? paymentStatus;
     String? memberId;
+    String? occupation;
 
     // 1. Quick lookup in already-loaded UserProvider cache (no API call).
     if (callerIdInt != null) {
@@ -501,19 +502,22 @@ class _ChatWindowState extends State<ChatWindow> {
       } catch (_) {}
     }
 
-    // 2. Fetch full profile to get memberId (and confirm usertype if not cached).
+    // 2. Fetch full profile to get memberId, occupation (and confirm usertype if not cached).
     try {
       final svc = UserDetailsService();
       final response =
           await svc.getUserDetails(callerIdInt ?? 0, 1 /* admin id */);
       memberId = response.data.personalDetail.memberId;
       usertype ??= response.data.personalDetail.userType;
+      final occ = response.data.personalDetail.occupationType;
+      if (occ.isNotEmpty && occ != 'Not available') occupation = occ;
     } catch (_) {}
 
     return {
       'usertype': usertype,
       'paymentStatus': paymentStatus,
       'memberId': memberId,
+      'occupation': occupation,
     };
   }
 
@@ -550,7 +554,7 @@ class _ChatWindowState extends State<ChatWindow> {
 
     // Notifier so the dialog can rebuild once caller details arrive.
     final callerDetailsNotifier =
-        ValueNotifier<Map<String, String?>>({'usertype': null, 'paymentStatus': null, 'memberId': null});
+        ValueNotifier<Map<String, String?>>({'usertype': null, 'paymentStatus': null, 'memberId': null, 'occupation': null});
 
     // Kick off async fetch – dialog updates when data arrives.
     _fetchCallerDetails(callerId).then((details) {
@@ -614,6 +618,7 @@ class _ChatWindowState extends State<ChatWindow> {
                 final usertype = details['usertype'];
                 final paymentStatus = details['paymentStatus'];
                 final memberId = details['memberId'];
+                final occupation = details['occupation'];
                 final isPaid = (usertype ?? '').toLowerCase() == 'paid';
 
                 return Column(
@@ -716,6 +721,16 @@ class _ChatWindowState extends State<ChatWindow> {
                         label: 'Member ID',
                         value: '…',
                         color: Colors.white38,
+                      ),
+                      const SizedBox(height: 4),
+                    ],
+                    // Profession / occupation row
+                    if (occupation != null && occupation.isNotEmpty) ...[
+                      _buildCallerDetailRow(
+                        icon: Icons.work_outline_rounded,
+                        label: 'Profession',
+                        value: occupation,
+                        color: const Color(0xFF67E8F9),
                       ),
                       const SizedBox(height: 4),
                     ],
@@ -863,9 +878,9 @@ class _ChatWindowState extends State<ChatWindow> {
     var dismissed = false;
     var remoteCallClosed = false;
 
-    // Fetch caller details for the banner (usertype / memberId).
+    // Fetch caller details for the banner (usertype / memberId / occupation).
     final bannerDetailsNotifier =
-        ValueNotifier<Map<String, String?>>({'usertype': null, 'memberId': null});
+        ValueNotifier<Map<String, String?>>({'usertype': null, 'memberId': null, 'occupation': null});
     _fetchCallerDetails(callerId).then((details) {
       if (!dismissed) bannerDetailsNotifier.value = details;
     });
@@ -934,6 +949,7 @@ class _ChatWindowState extends State<ChatWindow> {
             builder: (_, details, __) {
               final usertype = details['usertype'];
               final memberId = details['memberId'];
+              final occupation = details['occupation'];
               final isPaid = (usertype ?? '').toLowerCase() == 'paid';
               return Container(
                 padding: const EdgeInsets.symmetric(
@@ -1048,6 +1064,18 @@ class _ChatWindowState extends State<ChatWindow> {
                               'ID: $memberId',
                               style: TextStyle(
                                 color: const Color(0xFFA78BFA)
+                                    .withOpacity(0.9),
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                          if (occupation != null && occupation.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              occupation,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: const Color(0xFF67E8F9)
                                     .withOpacity(0.9),
                                 fontSize: 11,
                               ),

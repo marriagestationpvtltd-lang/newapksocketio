@@ -27,6 +27,7 @@ class CallForegroundService : Service() {
         const val ACTION_END_CALL = "END_CALL"
         const val ACTION_ACCEPT_CALL = "ACCEPT_CALL"
         const val ACTION_DECLINE_CALL = "DECLINE_CALL"
+        const val ACTION_ENABLE_AUDIO = "ENABLE_AUDIO"
 
         const val EXTRA_CALL_TYPE = "call_type"
         const val EXTRA_CALLER_NAME = "caller_name"
@@ -54,6 +55,17 @@ class CallForegroundService : Service() {
             }
             context.stopService(intent)
         }
+
+        fun enableAudioFocus(context: Context) {
+            val intent = Intent(context, CallForegroundService::class.java).apply {
+                action = ACTION_ENABLE_AUDIO
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
     }
 
     override fun onCreate() {
@@ -61,7 +73,9 @@ class CallForegroundService : Service() {
         Log.d(TAG, "CallForegroundService created")
         createNotificationChannel()
         acquireWakeLock()
-        configureAudioForCall()
+        // Audio focus is requested explicitly via ACTION_ENABLE_AUDIO once the call
+        // is actually connected, so that the ringtone is not interrupted during
+        // outgoing call ringing.
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -86,6 +100,10 @@ class CallForegroundService : Service() {
             ACTION_DECLINE_CALL -> {
                 // Handle decline call action
                 handleDeclineCall()
+            }
+            ACTION_ENABLE_AUDIO -> {
+                // Request audio focus now that the call is connected
+                configureAudioForCall()
             }
         }
 

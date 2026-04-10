@@ -460,6 +460,8 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
             print('✅ Joined channel successfully');
             setState(() => _joined = true);
             unawaited(_startForegroundService());
+            // Request audio focus once the call is confirmed connected on our side.
+            unawaited(CallForegroundServiceManager.enableAudioFocus());
             // setEnableSpeakerphone must be called after joining the channel (Agora SDK v4.x)
             unawaited(_engine.setEnableSpeakerphone(_speakerOn)
                 .catchError((e) => debugPrint('setEnableSpeakerphone error: $e')));

@@ -514,6 +514,9 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
                 autoSubscribeAudio: true,
               ));
             }
+            // Request audio focus now that call is connected (delayed to prevent
+            // the foreground service from stealing focus away from the ringtone).
+            unawaited(CallForegroundServiceManager.enableAudioFocus());
             _startCallTimer(); // Start call duration timer
             _syncOverlayState();
           },

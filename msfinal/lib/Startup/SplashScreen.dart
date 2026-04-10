@@ -55,6 +55,13 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   // Guaranteed to be set in initState before any async callback can use it.
   late Future<void> _animationCompleted;
 
+  // Completes when navigation data (prefs + optional pageNo API) is preloaded.
+  // Runs concurrently with the entrance animation so navigation can start the
+  // instant the animation finishes rather than after an extra round-trip.
+  // Initialised to a completed future so that any unexpected early call to
+  // _proceedWithNavigation never hits a LateInitializationError.
+  Future<void> _navDataFuture = Future.value();
+
   // Animation duration – the logo GIF needs ~3s to complete its cycle, so
   // keep the entrance long enough that the full animation plays before
   // navigation fires.
@@ -120,13 +127,59 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     // the entrance animations are already playing by the time we get here.
     await _checkFirstLaunch();
 
-    // Proceed to navigation immediately — waits only for the entrance animation
-    // (via _animationCompleted), never for a server response.
+    // Pre-load navigation data (prefs reads + optional pageNo API call) in
+    // parallel with the entrance animation. This way navigation is instant
+    // once the animation finishes — no sequential server round-trip after the
+    // splash screen has already played.
+    _navDataFuture = _preloadNavData();
+
+    // Proceed to navigation — waits for both the animation AND the preloaded
+    // data (via Future.wait) so they race concurrently.
     _proceedWithNavigation();
 
     // Check for app updates in background. The result never delays navigation;
     // if an update is available a dialog is shown on top of the current screen.
     _checkAppVersionInBackground();
+  }
+
+  /// Pre-loads everything needed by [_navigateBasedOnUserState] so that the
+  /// actual navigation call after the animation is effectively instantaneous.
+  ///
+  /// On first launch (no cached pageNo) this triggers the API call to
+  /// [PageService.getPageNo] and caches the result, eliminating the sequential
+  /// network round-trip that previously followed the 3-second entrance
+  /// animation.
+  Future<void> _preloadNavData() async {
+    try {
+      if (!mounted) return;
+      // Load user model data from storage (fast, local read).
+      await context.read<SignupModel>().loadUserData();
+
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('bearer_token');
+      final userDataString = prefs.getString('user_data');
+
+      if (token == null || userDataString == null) return;
+
+      final userData = jsonDecode(userDataString);
+      final userId = int.tryParse(userData["id"].toString());
+      if (userId == null) return;
+
+      // Only fetch pageNo from the server when there is no cached value.
+      // Subsequent launches already have a cached pageNo and will navigate
+      // instantly once the animation ends.
+      final cachedPageNo = prefs.getInt('cached_page_no');
+      if (cachedPageNo == null) {
+        final pageNo = await PageService.getPageNo(userId);
+        if (pageNo != null && mounted) {
+          await prefs.setInt('cached_page_no', pageNo);
+        }
+      }
+    } catch (e) {
+      // Preload errors are non-fatal — _navigateBasedOnUserState will retry
+      // any failed reads/calls itself when it runs after the animation.
+      debugPrint('Splash nav preload error (non-fatal): $e');
+    }
   }
 
   Future<void> _checkFirstLaunch() async {
@@ -612,8 +665,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
     if (!mounted) return;
 
-    // Always wait for the entrance animation so every launch feels premium.
-    await _animationCompleted;
+    // Wait for BOTH the entrance animation AND the nav-data preload to finish,
+    // running them concurrently. Navigation is therefore instant the moment the
+    // animation ends — no extra server round-trip afterwards.
+    await Future.wait([_animationCompleted, _navDataFuture]);
 
     if (!mounted) return;
 

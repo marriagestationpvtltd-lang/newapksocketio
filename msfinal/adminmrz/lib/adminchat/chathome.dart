@@ -593,7 +593,6 @@ class _ChatWindowState extends State<ChatWindow> {
     void dismissDialog(bool accepted) {
       if (dismissed) return;
       dismissed = true;
-      callerDetailsNotifier.dispose();
       final ctx = incomingCallDialogContext;
       if (ctx != null && Navigator.of(ctx, rootNavigator: true).canPop()) {
         Navigator.of(ctx, rootNavigator: true).pop(accepted);
@@ -623,6 +622,7 @@ class _ChatWindowState extends State<ChatWindow> {
       barrierDismissible: false,
       builder: (ctx) {
         incomingCallDialogContext = ctx;
+        autoRejectTimer?.cancel();
         autoRejectTimer = Timer(
           const Duration(seconds: kIncomingCallTimeoutSeconds),
           () => dismissDialog(false),
@@ -829,6 +829,7 @@ class _ChatWindowState extends State<ChatWindow> {
         );
       },
     ).then((accepted) {
+      callerDetailsNotifier.dispose();
       autoRejectTimer?.cancel();
       cancelSub?.cancel();
       endedSub?.cancel();
@@ -927,8 +928,13 @@ class _ChatWindowState extends State<ChatWindow> {
       cancelSub?.cancel();
       endedSub?.cancel();
       answeredElsewhereSub?.cancel();
-      bannerDetailsNotifier.dispose();
       _removeCallWaitingBanner();
+      // Dispose the notifier after the overlay entry has been removed from the
+      // widget tree so that any in-flight ValueListenableBuilder rebuild during
+      // the removal does not access a disposed notifier.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        bannerDetailsNotifier.dispose();
+      });
       if (accepted) {
         _socketService.emitCallAccept(
           callerId: callerId,

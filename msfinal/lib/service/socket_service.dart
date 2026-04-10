@@ -710,11 +710,15 @@ class SocketService {
     return {};
   }
 
-  /// Parse a timestamp value (String ISO8601 or DateTime) to a DateTime.
+  /// Parse a timestamp value (String ISO8601 or DateTime) to a local DateTime.
+  /// UTC timestamps from the server are converted to the device's local timezone.
   static DateTime? parseTimestamp(dynamic ts) {
     if (ts == null) return null;
-    if (ts is DateTime) return ts;
-    if (ts is String) return DateTime.tryParse(ts);
+    if (ts is DateTime) return ts.isUtc ? ts.toLocal() : ts;
+    if (ts is String) {
+      final dt = DateTime.tryParse(ts);
+      return dt?.toLocal();
+    }
     return null;
   }
 

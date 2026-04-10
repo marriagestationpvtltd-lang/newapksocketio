@@ -893,17 +893,18 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   }
 
   String _formatDateForGrouping(DateTime dt) {
+    final localDt = dt.toLocal();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
-    final d = DateTime(dt.year, dt.month, dt.day);
+    final d = DateTime(localDt.year, localDt.month, localDt.day);
     if (d == today) return 'Today';
     if (d == yesterday) return 'Yesterday';
-    return DateFormat('MMM d, yyyy').format(dt);
+    return DateFormat('MMM d, yyyy').format(localDt);
   }
 
   String _formatCallDateTime(DateTime dt) {
-    return DateFormat('MMM d, h:mm a').format(dt);
+    return DateFormat('MMM d, h:mm a').format(dt.toLocal());
   }
 
   /// Send a profile card to admin.
@@ -1251,10 +1252,11 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     final String senderId = data['senderId']?.toString() ?? data['senderid']?.toString() ?? '';
     bool isMe = senderId == _mySenderId;
     final String msgID = data['messageId']?.toString() ?? data['id']?.toString() ?? '';
-    // Parse timestamp: ISO string from Socket.IO
+    // Parse timestamp: ISO string from Socket.IO; convert UTC → device local time
     final dynamic tsRaw = data['timestamp'];
     DateTime? tsDate;
-    if (tsRaw is String) tsDate = DateTime.tryParse(tsRaw);
+    if (tsRaw is String) tsDate = DateTime.tryParse(tsRaw)?.toLocal();
+    else if (tsRaw is DateTime) tsDate = tsRaw.isUtc ? tsRaw.toLocal() : tsRaw;
     String formattedTime = tsDate != null ? DateFormat('HH:mm').format(tsDate) : '';
 
     // Check if message is read
@@ -1607,7 +1609,9 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     for (final data in _cachedMessages) {
       final tsRaw = data['timestamp'];
       if (tsRaw != null) {
-        final dt = tsRaw is String ? DateTime.tryParse(tsRaw) : null;
+        DateTime? dt;
+        if (tsRaw is String) dt = DateTime.tryParse(tsRaw)?.toLocal();
+        else if (tsRaw is DateTime) dt = tsRaw.isUtc ? tsRaw.toLocal() : tsRaw;
         if (dt != null) {
           final label = _formatDateForGrouping(dt);
           if (label != lastDateLabel) {

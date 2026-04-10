@@ -2349,8 +2349,8 @@ class _ChatWindowState extends State<ChatWindow> {
                     ),
                   ],
                 ),
-                child: TypingIndicatorWidget(
-                  dotColor: c.muted,
+                child: const TypingIndicatorWidget(
+                  dotColor: Color(0xFF6B7280),
                   dotSize: 7.0,
                 ),
               ),

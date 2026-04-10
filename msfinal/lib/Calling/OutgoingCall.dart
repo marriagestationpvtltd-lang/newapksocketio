@@ -85,9 +85,11 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
   StreamSubscription<Map<String, dynamic>>? _socketRejectedSub;
   StreamSubscription<Map<String, dynamic>>? _socketEndedSub;
   StreamSubscription<Map<String, dynamic>>? _socketRingingSub;
+  StreamSubscription<Map<String, dynamic>>? _socketUserOfflineSub;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   String? _connectionStatus;
   bool _remoteAccepted = false;
+  bool _recipientOffline = false; // true when server confirmed recipient is offline
 
   static const Duration _kConnectivityLossTimeout = Duration(seconds: 30);
   static const Duration _kOutgoingCallTimeout = Duration(seconds: 45);
@@ -137,6 +139,15 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
       if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
       if (!_isRecipientRinging && mounted) {
         setState(() => _isRecipientRinging = true);
+        _syncOverlayState();
+      }
+    });
+    // Server confirmed the recipient was offline when the call was sent.
+    _socketUserOfflineSub = SocketService().onCallUserOffline.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
+      if (!_callActive && !_ending && mounted) {
+        setState(() => _recipientOffline = true);
         _syncOverlayState();
       }
     });
@@ -262,6 +273,8 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
       statusText = 'Connected';
     } else if (_remoteAccepted) {
       statusText = 'Connecting...';
+    } else if (_recipientOffline) {
+      statusText = 'User is not online';
     } else if (_isRecipientRinging) {
       statusText = 'Ringing...';
     } else {
@@ -590,10 +603,12 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
     _socketRejectedSub?.cancel();
     _socketEndedSub?.cancel();
     _socketRingingSub?.cancel();
+    _socketUserOfflineSub?.cancel();
     _socketAcceptedSub = null;
     _socketRejectedSub = null;
     _socketEndedSub = null;
     _socketRingingSub = null;
+    _socketUserOfflineSub = null;
 
     await _stopRingtone();
 
@@ -939,9 +954,11 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
                 child: Text(
                   _remoteAccepted
                       ? 'Connecting...'
-                      : (_isRecipientRinging ? 'Ringing...' : 'Calling...'),
-                  style: const TextStyle(
-                    color: Colors.white70,
+                      : _recipientOffline
+                          ? 'User is not online'
+                          : (_isRecipientRinging ? 'Ringing...' : 'Calling...'),
+                  style: TextStyle(
+                    color: _recipientOffline ? Colors.orangeAccent : Colors.white70,
                     fontSize: 18,
                     fontWeight: FontWeight.w400,
                   ),
@@ -1203,6 +1220,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
     _socketRejectedSub?.cancel();
     _socketEndedSub?.cancel();
     _socketRingingSub?.cancel();
+    _socketUserOfflineSub?.cancel();
     _connectivitySubscription?.cancel();
     _ringtoneRestartTimer?.cancel();
     _playerStateSub?.cancel();

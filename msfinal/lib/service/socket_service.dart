@@ -51,6 +51,7 @@ class SocketService {
   final _callCancelledCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _callEndedCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _callRingingCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _callUserOfflineCtrl = StreamController<Map<String, dynamic>>.broadcast();
 
   // ── Conference call streams ───────────────────────────────────────────────
 
@@ -82,6 +83,9 @@ class SocketService {
 
   /// Emitted when the recipient's device starts ringing (Calling → Ringing).
   Stream<Map<String, dynamic>> get onCallRinging => _callRingingCtrl.stream;
+
+  /// Emitted when the recipient is offline at the time of the call_invite.
+  Stream<Map<String, dynamic>> get onCallUserOffline => _callUserOfflineCtrl.stream;
 
   // Conference call streams
   Stream<Map<String, dynamic>> get onAddedToCall => _addedToCallCtrl.stream;
@@ -193,6 +197,10 @@ class SocketService {
 
     _socket!.on('call_ringing', (data) {
       _callRingingCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_user_offline', (data) {
+      _callUserOfflineCtrl.add(_toMap(data));
     });
 
     // ── Conference call events ────────────────────────────────────────────────

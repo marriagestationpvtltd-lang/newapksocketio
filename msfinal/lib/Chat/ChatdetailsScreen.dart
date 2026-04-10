@@ -185,6 +185,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   String _photoRequestStatus = 'not_sent';
   String _privacyStatus = 'private';
 
+  bool get _isEitherBlocked => _isBlocked || _isBlockedByReceiver;
+
   // Timing constants
   static const int _kTypingTimeoutSeconds = 5;
   static const Duration _kTypingDebounceDelay = Duration(seconds: 3);
@@ -508,23 +510,30 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   Future<void> _checkBlockStatus() async {
     final prefs = await SharedPreferences.getInstance();
     final userDataString = prefs.getString('user_data');
-    if (userDataString == null) return;
+    if (userDataString == null) {
+      if (mounted) setState(() => _isLoadingBlock = false);
+      return;
+    }
 
     final userData = jsonDecode(userDataString);
     final myId = userData["id"].toString();
 
     final service = ProfileService();
-    final status = await service.getBlockStatus(
-      myId: myId,
-      userId: widget.receiverId,
-    );
+    try {
+      final status = await service.getBlockStatus(
+        myId: myId,
+        userId: widget.receiverId,
+      );
 
-    if (mounted) {
-      setState(() {
-        _isBlocked = status['is_blocked'] ?? false;
-        _isBlockedByReceiver = status['is_blocked_by'] ?? false;
-        _isLoadingBlock = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isBlocked = status['is_blocked'] ?? false;
+          _isBlockedByReceiver = status['is_blocked_by'] ?? false;
+          _isLoadingBlock = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingBlock = false);
     }
   }
 
@@ -825,7 +834,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   // SEND MESSAGE (with reply support)
   Future<void> _sendMessage() async {
-    if (_isBlocked || _isBlockedByReceiver) return;
+    if (_isEitherBlocked) return;
     final messageText = _messageController.text.trim();
     if (messageText.isEmpty) return;
 
@@ -914,7 +923,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   bool _isSendingImage = false;
 
   Future<void> _pickAndSendImages() async {
-    if (_isBlocked || _isBlockedByReceiver || _isSendingImage) return;
+    if (_isEitherBlocked || _isSendingImage) return;
     final picker = ImagePicker();
     List<XFile> picked = [];
     try {
@@ -1015,7 +1024,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   // ── VOICE MESSAGE RECORDING ──────────────────────────────────────────────
 
   Future<void> _startRecording() async {
-    if (_isBlocked || _isBlockedByReceiver || _isRecording) return;
+    if (_isEitherBlocked || _isRecording) return;
 
     // Request microphone permission (native only; web uses browser prompt)
     if (!kIsWeb) {
@@ -2789,7 +2798,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   }
 
   Widget _bottomInputBar() {
-    if (_isBlocked || _isBlockedByReceiver) {
+    if (_isEitherBlocked) {
       return Container(
         padding: EdgeInsets.only(
           left: 16,
@@ -4074,7 +4083,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           ),
           if (!kIsWeb)
             IconButton(
-              onPressed: (_isBlocked || _isBlockedByReceiver) ? null : () {
+              onPressed: (_isEitherBlocked) ? null : () {
                 // Prevent starting a new call if one is already active
                 if (CallOverlayManager().isCallActive) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -4102,11 +4111,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 );
               },
               icon: Icon(Icons.call,
-                  color: (_isBlocked || _isBlockedByReceiver) ? Colors.white38 : Colors.white),
+                  color: (_isEitherBlocked) ? Colors.white38 : Colors.white),
             ),
           if (!kIsWeb)
             IconButton(
-              onPressed: (_isBlocked || _isBlockedByReceiver) ? null : () {
+              onPressed: (_isEitherBlocked) ? null : () {
                 // Prevent starting a new call if one is already active
                 if (CallOverlayManager().isCallActive) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -4134,7 +4143,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 );
               },
               icon: Icon(Icons.videocam,
-                  color: (_isBlocked || _isBlockedByReceiver) ? Colors.white38 : Colors.white),
+                  color: (_isEitherBlocked) ? Colors.white38 : Colors.white),
             ),
           PopupMenuButton<String>(
             onSelected: (String result) {

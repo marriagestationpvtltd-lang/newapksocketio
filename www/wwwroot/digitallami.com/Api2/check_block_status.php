@@ -14,19 +14,22 @@ if ($myId <= 0 || $userId <= 0) {
     exit;
 }
 
-// Check if I blocked the other user
-$stmt = $conn->prepare("SELECT id FROM blocks WHERE blocker_id = ? AND blocked_id = ?");
-$stmt->bind_param("ii", $myId, $userId);
+// Fetch both block directions in a single query.
+$stmt = $conn->prepare("
+    SELECT
+        MAX(blocker_id = ? AND blocked_id = ?) AS is_blocked,
+        MAX(blocker_id = ? AND blocked_id = ?) AS is_blocked_by
+    FROM blocks
+    WHERE (blocker_id = ? AND blocked_id = ?)
+       OR (blocker_id = ? AND blocked_id = ?)
+");
+$stmt->bind_param("iiiiiiii", $myId, $userId, $userId, $myId, $myId, $userId, $userId, $myId);
 $stmt->execute();
-$isBlocked = $stmt->get_result()->num_rows > 0;
+$row = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
-// Check if the other user blocked me
-$stmt2 = $conn->prepare("SELECT id FROM blocks WHERE blocker_id = ? AND blocked_id = ?");
-$stmt2->bind_param("ii", $userId, $myId);
-$stmt2->execute();
-$isBlockedBy = $stmt2->get_result()->num_rows > 0;
-$stmt2->close();
+$isBlocked   = (bool)($row['is_blocked']   ?? false);
+$isBlockedBy = (bool)($row['is_blocked_by'] ?? false);
 
 echo json_encode([
     "status"        => "success",

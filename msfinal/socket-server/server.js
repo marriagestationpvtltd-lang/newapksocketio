@@ -818,7 +818,10 @@ io.on('connection', (socket) => {
 
     // ── Block check ───────────────────────────────────────────────────────
     // Drop the message silently if either party has blocked the other.
-    if (await isEitherBlocked(senderId.toString(), receiverId.toString())) return;
+    if (await isEitherBlocked(senderId.toString(), receiverId.toString())) {
+      console.log(`🚫 send_message blocked: sender=${senderId} receiver=${receiverId}`);
+      return;
+    }
 
     // Validate messageType against whitelist
     const ALLOWED_MESSAGE_TYPES = ['text', 'image', 'voice', 'video', 'file', 'call', 'doc', 'profile_card', 'image_gallery'];

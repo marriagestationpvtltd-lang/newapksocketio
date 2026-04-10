@@ -48,6 +48,7 @@ class AdminSocketService {
   final _callCancelledCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _callAnsweredElsewhereCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _callEndedCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _callBusyCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _addedToCallCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _participantAddedToCallCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _participantAcceptedCallCtrl = StreamController<Map<String, dynamic>>.broadcast();
@@ -73,6 +74,7 @@ class AdminSocketService {
   Stream<Map<String, dynamic>> get onCallCancelled => _callCancelledCtrl.stream;
   Stream<Map<String, dynamic>> get onCallAnsweredElsewhere => _callAnsweredElsewhereCtrl.stream;
   Stream<Map<String, dynamic>> get onCallEnded => _callEndedCtrl.stream;
+  Stream<Map<String, dynamic>> get onCallBusy => _callBusyCtrl.stream;
   Stream<Map<String, dynamic>> get onAddedToCall => _addedToCallCtrl.stream;
   Stream<Map<String, dynamic>> get onParticipantAddedToCall => _participantAddedToCallCtrl.stream;
   Stream<Map<String, dynamic>> get onParticipantAcceptedCall => _participantAcceptedCallCtrl.stream;
@@ -185,6 +187,10 @@ class AdminSocketService {
       _callEndedCtrl.add(_toMap(data));
     });
 
+    _socket!.on('call_busy', (data) {
+      _callBusyCtrl.add(_toMap(data));
+    });
+
     _socket!.on('added_to_call', (data) {
       _addedToCallCtrl.add(_toMap(data));
     });
@@ -228,6 +234,7 @@ class AdminSocketService {
     _callCancelledCtrl.close();
     _callAnsweredElsewhereCtrl.close();
     _callEndedCtrl.close();
+    _callBusyCtrl.close();
     _addedToCallCtrl.close();
     _participantAddedToCallCtrl.close();
     _participantAcceptedCallCtrl.close();

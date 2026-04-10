@@ -1039,8 +1039,17 @@ io.on('connection', (socket) => {
       });
     }
 
-    if (activeCallUsers.has(recipientIdStr)) {
-      // Recipient is already on another call — notify caller immediately.
+    // Check if recipient is already ringing for a pending call from another caller.
+    let recipientAlreadyRinging = false;
+    for (const [ch, call] of activePendingCalls) {
+      if (call.recipientId === recipientIdStr && ch !== channelName) {
+        recipientAlreadyRinging = true;
+        break;
+      }
+    }
+
+    if (activeCallUsers.has(recipientIdStr) || recipientAlreadyRinging) {
+      // Recipient is already on another call or currently ringing — notify caller immediately.
       if (channelName) activePendingCalls.delete(channelName);
       if (callerIdStr) {
         io.to(`user:${callerIdStr}`).emit('call_busy', {

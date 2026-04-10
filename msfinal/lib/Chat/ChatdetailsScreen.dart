@@ -3211,6 +3211,28 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     return _buildMessagesFromCache();
   }
 
+  Future<void> _refreshMessages() async {
+    try {
+      final result = await _socketService.getMessages(
+        widget.chatRoomId, page: 1, limit: _messagesPerPage,
+      );
+      if (!mounted) return;
+      final messages = List<Map<String, dynamic>>.from(
+        (result['messages'] as List? ?? []).map((m) => Map<String, dynamic>.from(m as Map)),
+      );
+      setState(() {
+        _cachedMessages = messages;
+        _hasMoreMessages = result['hasMore'] == true;
+        _currentMessagePage = 1;
+        _messagesCacheVersion++;
+      });
+      _scrollToBottom(jump: true);
+      _saveMessagesToLocalCache();
+    } catch (e) {
+      debugPrint('Error refreshing messages: $e');
+    }
+  }
+
   Future<void> _loadMoreMessages() async {
     if (_isLoadingMore || !_hasMoreMessages) return;
     setState(() => _isLoadingMore = true);
@@ -3440,17 +3462,20 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     _lastBuiltHighlightId = _highlightedMessageId;
     _lastBuiltIsLoadingMore = _isLoadingMore;
 
-    return ListView.builder(
-      reverse: false, // Keep as false for natural order
-      controller: _scrollController,
-      physics: _isHorizontalDragging
-          ? const NeverScrollableScrollPhysics()
-          : null,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
-      itemCount: messageWidgets.length,
-      itemBuilder: (context, index) {
-        return messageWidgets[index];
-      },
+    return RefreshIndicator(
+      onRefresh: _refreshMessages,
+      child: ListView.builder(
+        reverse: false, // Keep as false for natural order
+        controller: _scrollController,
+        physics: _isHorizontalDragging
+            ? const NeverScrollableScrollPhysics()
+            : const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
+        itemCount: messageWidgets.length,
+        itemBuilder: (context, index) {
+          return messageWidgets[index];
+        },
+      ),
     );
   }
 

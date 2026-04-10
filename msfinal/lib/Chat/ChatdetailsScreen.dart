@@ -191,6 +191,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   bool _isBlockedByReceiver = false; // The other user has blocked me
   bool _isLoadingBlock = true;
   String _photoRequestStatus = 'not_sent';
+  String _chatRequestStatus = 'unknown'; // 'unknown' | 'accepted' | 'pending' | 'rejected' | 'not_sent'
   String _privacyStatus = 'private';
 
   bool get _isEitherBlocked => _isBlocked || _isBlockedByReceiver;
@@ -589,6 +590,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       if (mounted) {
         setState(() {
           _photoRequestStatus = profileResponse.data.personalDetail.photoRequest;
+          _chatRequestStatus = profileResponse.data.personalDetail.chatRequest.isNotEmpty
+              ? profileResponse.data.personalDetail.chatRequest
+              : 'not_sent';
           _privacyStatus = profileResponse.data.personalDetail.privacy;
         });
       }
@@ -873,6 +877,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   // SEND MESSAGE (with reply support)
   Future<void> _sendMessage() async {
     if (_isEitherBlocked) return;
+    if (_chatRequestStatus != 'unknown' && _chatRequestStatus != 'accepted') return;
     final messageText = _messageController.text.trim();
     if (messageText.isEmpty) return;
 
@@ -968,6 +973,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   Future<void> _pickAndSendImages() async {
     if (_isEitherBlocked || _isSendingImage) return;
+    if (_chatRequestStatus != 'unknown' && _chatRequestStatus != 'accepted') return;
     final picker = ImagePicker();
     List<XFile> picked = [];
     try {
@@ -1102,6 +1108,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   Future<void> _startRecording() async {
     if (_isEitherBlocked || _isRecording) return;
+    if (_chatRequestStatus != 'unknown' && _chatRequestStatus != 'accepted') return;
 
     // Request microphone permission (native only; web uses browser prompt)
     if (!kIsWeb) {
@@ -2522,21 +2529,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   child: TextButton.icon(
                     onPressed: () {
                       if (userId.isNotEmpty && userId != widget.currentUserId) {
-                        final List<String> ids = [widget.currentUserId, userId];
-                        ids.sort();
-                        final chatRoomId = ids.join('_');
+                        // Navigate to the profile page so chat request status is
+                        // checked and the correct action button is shown.
+                        // Direct messaging without the other user's permission is
+                        // not allowed regardless of membership type.
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => ChatDetailScreen(
-                              chatRoomId: chatRoomId,
-                              receiverId: userId,
-                              receiverName: displayName.isNotEmpty ? displayName : 'User $userId',
-                              receiverImage: photoUrl ?? '',
-                              currentUserId: widget.currentUserId,
-                              currentUserName: widget.currentUserName,
-                              currentUserImage: widget.currentUserImage,
-                            ),
+                            builder: (_) => ProfileScreen(userId: userId),
                           ),
                         );
                       }
@@ -2961,6 +2961,75 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 color: Colors.red.shade400,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Chat request not yet accepted – block messaging and show a prompt.
+    // 'unknown' means the status hasn't been fetched yet; allow input in that case
+    // to avoid blocking users who legitimately opened a chat with an accepted request.
+    final bool chatRequestNotAccepted =
+        _chatRequestStatus != 'unknown' && _chatRequestStatus != 'accepted';
+    if (chatRequestNotAccepted) {
+      return Container(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 12,
+          bottom: MediaQuery.of(context).padding.bottom + 12,
+        ),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border(
+            top: BorderSide(color: Colors.grey.shade200, width: 1),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.chat_bubble_outline, color: Colors.orange.shade600, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Send a chat request to start messaging',
+                style: TextStyle(
+                  color: Colors.orange.shade700,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ProfileScreen(userId: widget.receiverId),
+                  ),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFE91E3E), Color(0xFFC2185B)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text(
+                  'Send Request',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
           ],

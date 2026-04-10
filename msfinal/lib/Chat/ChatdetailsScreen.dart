@@ -383,8 +383,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           // Show cached messages immediately; server response will replace them.
           _isFirstLoad = false;
         });
-        // Perform initial scroll only once, then unlock
-        _performInitialScroll();
+        // Pre-position to the bottom so the user sees the latest cached message
+        // while waiting for the server. Do NOT unlock yet — the definitive scroll
+        // and unlock happen after the authoritative server data arrives below.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _scrollController.hasClients) {
+            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+          }
+        });
       }
     });
 
@@ -401,7 +407,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         _currentMessagePage = 1;
         _messagesCacheVersion++;
       });
-      // Perform initial scroll only once, then unlock
+      // Scroll to the last message and unlock once the server data is authoritative.
+      // _initialScrollDone is still false here (cache no longer claims it), so this
+      // always fires and positions the list at the very last message without jumping.
       _performInitialScroll();
       _saveMessagesToLocalCache();
     }).catchError((e) {

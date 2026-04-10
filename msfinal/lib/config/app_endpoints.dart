@@ -5,7 +5,7 @@ const String kApiBaseUrl = String.fromEnvironment(
 
 const String kSocketServerBaseUrl = String.fromEnvironment(
   'SOCKET_SERVER_URL',
-  defaultValue: 'https://adminnew.marriagestation.com.np',
+  defaultValue: 'https://digitallami.com:3001',
 );
 
 const String kApi2BaseUrl = '$kApiBaseUrl/Api2';

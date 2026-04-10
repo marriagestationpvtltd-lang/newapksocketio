@@ -38,6 +38,7 @@ import '../utils/image_utils.dart';
 import '../utils/privacy_utils.dart';
 import '../utils/time_utils.dart';
 import 'package:ms2026/config/app_endpoints.dart';
+import 'widgets/typing_indicator.dart';
 
 class AdminChatScreen extends StatefulWidget {
   final String senderID;
@@ -3646,14 +3647,30 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   }
 
   Widget _buildTypingIndicator() {
-    return const Padding(
-      padding: EdgeInsets.only(left: 16, right: 16, bottom: 4),
-      child: Text(
-        'Typing...',
-        style: TextStyle(
-          fontSize: 12,
-          color: Colors.grey,
-          fontStyle: FontStyle.italic,
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(left: 12, bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          gradient: _secondaryGradient,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+            bottomLeft: Radius.circular(4),
+            bottomRight: Radius.circular(20),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.08),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: const TypingIndicatorWidget(
+          dotColor: Color(0xFF6B7280),
+          dotSize: 7.0,
         ),
       ),
     );

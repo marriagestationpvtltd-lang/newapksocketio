@@ -5188,7 +5188,6 @@ class _HoverableMessageBubbleState extends State<_HoverableMessageBubble>
         mainAxisAlignment:
             widget.isSentByMe ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
         children: [
           if (widget.isSentByMe)
             FadeTransition(
@@ -5198,7 +5197,7 @@ class _HoverableMessageBubbleState extends State<_HoverableMessageBubble>
                 child: actionMenu,
               ),
             ),
-          widget.bubble,
+          Expanded(child: widget.bubble),
           FadeTransition(
             opacity: _fadeAnimation,
             child: IgnorePointer(

@@ -26,6 +26,7 @@ import 'ChatdetailsScreen.dart';
 import 'adminchat.dart';
 import '../service/socket_service.dart';
 import 'package:ms2026/config/app_endpoints.dart';
+import '../otherprofile/otherprofileview.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -1018,6 +1019,37 @@ class _ChatListScreenState extends State<ChatListScreen>
     }
   }
 
+  Future<void> _viewProfileForRequest(
+    ProposalModel req, {
+    required bool isSentRequest,
+  }) async {
+    final rawId = isSentRequest
+        ? (req.receiverId ?? req.senderId ?? req.memberid)
+        : (req.senderId ?? req.receiverId ?? req.memberid);
+    final parsedId = int.tryParse(rawId?.toString() ?? '');
+
+    if (parsedId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Unable to open profile right now."),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => UserProfilePage(userId: parsedId),
+      ),
+    );
+
+    if (mounted) {
+      await _loadPendingChatRequests(userId);
+    }
+  }
+
 
   void _showChatRequestActionSheet(ProposalModel req) {
     final displayName =
@@ -1073,7 +1105,33 @@ class _ChatListScreenState extends State<ChatListScreen>
               'Wants to chat with you',
               style: TextStyle(fontSize: 14, color: Colors.black54),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _viewProfileForRequest(req, isSentRequest: false);
+                },
+                icon: const Icon(Icons.person_outline,
+                    color: Color(0xFF0F172A)),
+                label: const Text(
+                  'View Profile',
+                  style: TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFE0E0E0)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
             Row(
               children: [
                 Expanded(
@@ -1263,6 +1321,43 @@ class _ChatListScreenState extends State<ChatListScreen>
                     ),
                   ),
                 ),
+                const SizedBox(height: 6),
+                Semantics(
+                  label: 'View profile for ${displayName.isEmpty ? 'User' : displayName}',
+                  button: true,
+                  child: GestureDetector(
+                    onTap: () =>
+                        _viewProfileForRequest(req, isSentRequest: false),
+                    child: ExcludeSemantics(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 7),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          border:
+                              Border.all(color: const Color(0xFFE0E0E0)),
+                          color: Colors.white,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.person_outline,
+                                size: 14, color: Color(0xFF0F172A)),
+                            SizedBox(width: 6),
+                            Text(
+                              'View Profile',
+                              style: TextStyle(
+                                color: Color(0xFF0F172A),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ],
@@ -1352,21 +1447,47 @@ class _ChatListScreenState extends State<ChatListScreen>
               ),
             ),
             const SizedBox(width: 8),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1565C0).withOpacity(0.10),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'Pending',
-                style: TextStyle(
-                  color: Color(0xFF1565C0),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1565C0).withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'Pending',
+                    style: TextStyle(
+                      color: Color(0xFF1565C0),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 6),
+                TextButton.icon(
+                  onPressed: () =>
+                      _viewProfileForRequest(req, isSentRequest: true),
+                  icon: const Icon(Icons.person_outline,
+                      size: 14, color: Color(0xFF1565C0)),
+                  label: const Text(
+                    'View Profile',
+                    style: TextStyle(
+                      color: Color(0xFF1565C0),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    minimumSize: const Size(0, 32),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1430,6 +1551,30 @@ class _ChatListScreenState extends State<ChatListScreen>
               style: TextStyle(fontSize: 14, color: Color(0xFF1565C0)),
             ),
             const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _viewProfileForRequest(req, isSentRequest: true);
+                },
+                icon: const Icon(Icons.person_outline),
+                label: const Text('View Profile'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1565C0),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(

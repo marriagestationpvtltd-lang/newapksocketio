@@ -58,7 +58,9 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
   // Completes when navigation data (prefs + optional pageNo API) is preloaded.
   // Runs concurrently with the entrance animation so navigation can start the
   // instant the animation finishes rather than after an extra round-trip.
-  late Future<void> _navDataFuture;
+  // Initialised to a completed future so that any unexpected early call to
+  // _proceedWithNavigation never hits a LateInitializationError.
+  Future<void> _navDataFuture = Future.value();
 
   // Animation duration – the logo GIF needs ~3s to complete its cycle, so
   // keep the entrance long enough that the full animation plays before
@@ -173,9 +175,10 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
           await prefs.setInt('cached_page_no', pageNo);
         }
       }
-    } catch (_) {
+    } catch (e) {
       // Preload errors are non-fatal — _navigateBasedOnUserState will retry
       // any failed reads/calls itself when it runs after the animation.
+      debugPrint('Splash nav preload error (non-fatal): $e');
     }
   }
 

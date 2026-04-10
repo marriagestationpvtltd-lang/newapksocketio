@@ -54,6 +54,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   bool _ending = false;
   bool _connecting = false;
   bool _isSwitchingToVideo = false; // true while transitioning to a video call
+  bool _videoSwitchDialogActive = false; // true while the switch-to-video dialog is on screen
 
   Timer? _ringTimer;
   Timer? _callTimer;
@@ -170,6 +171,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       final channelName = data['channelName']?.toString();
       if (channelName != _channel) return;
       if (!_callActive || _ending || !mounted) return;
+      if (_videoSwitchDialogActive || _isSwitchingToVideo) return; // dialog already shown or navigating
       _showSwitchToVideoDialog(data);
     });
   }
@@ -688,6 +690,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   void _showSwitchToVideoDialog(Map<String, dynamic> data) {
     final requesterId = data['requesterId']?.toString() ?? _callerId;
     if (!mounted) return;
+    _videoSwitchDialogActive = true;
     showDialog<bool>(
       context: context,
       barrierDismissible: false,
@@ -706,6 +709,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
         ],
       ),
     ).then((accepted) {
+      _videoSwitchDialogActive = false;
       if (!mounted || _ending) return;
       if (accepted == true) {
         SocketService().emitSwitchToVideoResponse(
@@ -715,7 +719,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
           accepted: true,
         );
         _navigateToVideoCall();
-      } else {
+      } else if (accepted == false) {
         SocketService().emitSwitchToVideoResponse(
           requesterId: requesterId,
           responderId: _currentUserId,

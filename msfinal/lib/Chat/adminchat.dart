@@ -37,7 +37,6 @@ import '../otherenew/othernew.dart';
 import '../utils/image_utils.dart';
 import '../utils/privacy_utils.dart';
 import '../utils/time_utils.dart';
-import 'widgets/typing_indicator.dart';
 import 'package:ms2026/config/app_endpoints.dart';
 
 class AdminChatScreen extends StatefulWidget {
@@ -664,8 +663,8 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       if (data['chatRoomId'] != _chatRoomId) return;
       // Only show typing indicator if it's from the admin (other party)
       if (data['userId']?.toString() == _adminUserId) {
+        if (!_isAdminTyping) _playTypingSound();
         setState(() => _isAdminTyping = true);
-        _playTypingSound();
         // Auto-hide after 3 seconds if no stop event received
         _typingStopTimer?.cancel();
         _typingStopTimer = Timer(const Duration(seconds: 3), () {
@@ -685,12 +684,14 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     });
   }
 
-  // Play typing sound
+  // Play typing sound — short, soft, Messenger-style
   void _playTypingSound() async {
     try {
-      // Play a short typing sound (we'll use a simple notification sound)
-      await _typingAudioPlayer.setVolume(0.3);
-      await _typingAudioPlayer.play(AssetSource('audio/outcall.mp3'));
+      await _typingAudioPlayer.setVolume(0.2);
+      _typingAudioPlayer.play(AssetSource('audio/ring_soft.wav'));
+      Future.delayed(const Duration(milliseconds: 250), () {
+        _typingAudioPlayer.stop();
+      });
     } catch (e) {
       debugPrint('Error playing typing sound: $e');
     }
@@ -3645,48 +3646,15 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   }
 
   Widget _buildTypingIndicator() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 8),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              gradient: _secondaryGradient,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-                bottomRight: Radius.circular(20),
-                bottomLeft: Radius.circular(4),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Admin is typing',
-                  style: TextStyle(
-                    color: _textColor.withOpacity(0.7),
-                    fontSize: 13,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                TypingIndicatorWidget(
-                  dotColor: _primaryGradient.colors[0],
-                  dotSize: 6,
-                ),
-              ],
-            ),
-          ),
-        ],
+    return const Padding(
+      padding: EdgeInsets.only(left: 16, right: 16, bottom: 4),
+      child: Text(
+        'Typing...',
+        style: TextStyle(
+          fontSize: 12,
+          color: Colors.grey,
+          fontStyle: FontStyle.italic,
+        ),
       ),
     );
   }

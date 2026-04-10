@@ -45,7 +45,9 @@ class _ChatListScreenState extends State<ChatListScreen>
   String docstatus = '';
 
   List<ProposalModel> _pendingChatRequests = [];
+  List<ProposalModel> _sentChatRequests = [];
   bool _requestsLoading = true;
+  bool _sentRequestsLoading = true;
   int _totalUnreadCount = 0;
   int _totalUnreadConversations = 0;
 
@@ -191,9 +193,17 @@ class _ChatListScreenState extends State<ChatListScreen>
 
   Future<void> _loadPendingChatRequests(String uid) async {
     try {
-      if (mounted) setState(() => _requestsLoading = true);
-      final all = await ProposalService.fetchProposals(uid, 'received');
-      final pending = all
+      if (mounted) setState(() { _requestsLoading = true; _sentRequestsLoading = true; });
+      final results = await Future.wait([
+        ProposalService.fetchProposals(uid, 'received'),
+        ProposalService.fetchProposals(uid, 'sent'),
+      ]);
+      final pending = results[0]
+          .where((p) =>
+              p.requestType?.toLowerCase() == 'chat' &&
+              p.status?.toLowerCase() == 'pending')
+          .toList();
+      final sent = results[1]
           .where((p) =>
               p.requestType?.toLowerCase() == 'chat' &&
               p.status?.toLowerCase() == 'pending')
@@ -201,12 +211,14 @@ class _ChatListScreenState extends State<ChatListScreen>
       if (mounted) {
         setState(() {
           _pendingChatRequests = pending;
+          _sentChatRequests = sent;
           _requestsLoading = false;
+          _sentRequestsLoading = false;
         });
       }
     } catch (e) {
       print('Error loading chat requests: $e');
-      if (mounted) setState(() => _requestsLoading = false);
+      if (mounted) setState(() { _requestsLoading = false; _sentRequestsLoading = false; });
     }
   }
 
@@ -1259,6 +1271,251 @@ class _ChatListScreenState extends State<ChatListScreen>
     );
   }
 
+  Widget _buildSentChatRequestCard(ProposalModel req) {
+    final imageUrl = req.profilePicture?.isNotEmpty == true
+        ? req.profilePicture!
+        : 'https://static.vecteezy.com/system/resources/previews/022/997/791/non_2x/contact-person-icon-transparent-blur-glass-effect-icon-free-vector.jpg';
+    final displayName =
+        '${req.firstName ?? ''} ${req.lastName ?? ''}'.trim();
+
+    return InkWell(
+      onTap: () => _showSentChatRequestSheet(req),
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.white, Color(0xFFF8FAFC)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                PrivacyUtils.buildPrivacyAwareAvatar(
+                  imageUrl: imageUrl,
+                  privacy: req.privacy,
+                  photoRequest: req.photoRequest,
+                  radius: 28,
+                  backgroundColor: Colors.grey[200],
+                ),
+                Positioned(
+                  bottom: -4,
+                  right: -4,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1565C0),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.send,
+                        size: 12, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayName.isEmpty ? 'User' : displayName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0F172A),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  if ((req.city ?? '').isNotEmpty)
+                    Text(
+                      req.city!,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  const SizedBox(height: 3),
+                  const Text(
+                    'Chat request sent · Awaiting response',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF1565C0),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1565C0).withOpacity(0.10),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'Pending',
+                style: TextStyle(
+                  color: Color(0xFF1565C0),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSentChatRequestSheet(ProposalModel req) {
+    final displayName =
+        '${req.firstName ?? ''} ${req.lastName ?? ''}'.trim();
+    final imageUrl = req.profilePicture?.isNotEmpty == true
+        ? req.profilePicture!
+        : 'https://static.vecteezy.com/system/resources/previews/022/997/791/non_2x/contact-person-icon-transparent-blur-glass-effect-icon-free-vector.jpg';
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      backgroundColor: Colors.white,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(height: 20),
+            PrivacyUtils.buildPrivacyAwareAvatar(
+              imageUrl: imageUrl,
+              privacy: req.privacy,
+              photoRequest: req.photoRequest,
+              radius: 32,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              displayName.isEmpty ? 'User' : displayName,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+            if ((req.city ?? '').isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                req.city!,
+                style:
+                    const TextStyle(fontSize: 13, color: Colors.black54),
+              ),
+            ],
+            const SizedBox(height: 8),
+            const Text(
+              'Chat request sent · Awaiting response',
+              style: TextStyle(fontSize: 14, color: Color(0xFF1565C0)),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  await _handleCancelChatRequest(req);
+                },
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFE0E0E0)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: const Text(
+                  'Cancel Request',
+                  style: TextStyle(
+                      color: Colors.black54,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleCancelChatRequest(ProposalModel proposal) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Cancel Chat Request"),
+        content: const Text("Are you sure you want to cancel this request?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("No"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Yes, Cancel"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final success = await ProposalService.deleteProposal(
+        userId,
+        proposal.proposalId.toString(),
+      );
+      if (mounted) Navigator.pop(context);
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Chat request cancelled"),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        await _loadPendingChatRequests(userId);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Failed to cancel request"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+      );
+    }
+  }
+
 
   Widget build(BuildContext context) {
     if (isLoading) {
@@ -1516,7 +1773,7 @@ class _ChatListScreenState extends State<ChatListScreen>
         return bTime.compareTo(aTime);
       });
 
-    if (chatRooms.isEmpty && _pendingChatRequests.isEmpty && !_requestsLoading) {
+    if (chatRooms.isEmpty && _pendingChatRequests.isEmpty && _sentChatRequests.isEmpty && !_requestsLoading && !_sentRequestsLoading) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1540,31 +1797,42 @@ class _ChatListScreenState extends State<ChatListScreen>
         chatRooms.sublist(0, _displayCount.clamp(0, chatRooms.length));
 
     final int reqCount = _pendingChatRequests.length;
-    // Slots: [0] = requests header (if any requests or loading), then reqCount
-    // request rows, then an optional conversations header, then displayedRooms,
-    // then optional loading indicator at the tail.
-    final bool showRequestsHeader = _requestsLoading || reqCount > 0;
-    final bool showConversationsHeader =
-        showRequestsHeader && displayedRooms.isNotEmpty;
+    final int sentCount = _sentChatRequests.length;
 
-    // Index offsets inside the ListView
-    // 0            : requests header (if showRequestsHeader)
-    // 1..reqCount  : request rows
-    // next         : conversations header (if showConversationsHeader)
-    // next..       : chat room rows
-    // last         : loading indicator (if _isLoadingMore)
-    final int requestsHeaderIdx = showRequestsHeader ? 0 : -1;
-    final int firstRequestIdx = showRequestsHeader ? 1 : -1;
-    final int conversationsHeaderIdx = showConversationsHeader
-        ? (showRequestsHeader ? 1 + reqCount : 0)
-        : -1;
-    final int firstRoomIdx = showConversationsHeader
-        ? conversationsHeaderIdx + 1
-        : (showRequestsHeader ? 1 + reqCount : 0);
-    final int totalItems = (showRequestsHeader ? 1 + reqCount : 0) +
-        (showConversationsHeader ? 1 : 0) +
+    // Section visibility flags
+    final bool showRequestsHeader = _requestsLoading || reqCount > 0;
+    final bool showSentHeader = _sentRequestsLoading || sentCount > 0;
+    final bool showConversationsHeader =
+        (showRequestsHeader || showSentHeader) && displayedRooms.isNotEmpty;
+
+    // ── Index offsets inside the ListView ──
+    // 0                      : received requests header (if showRequestsHeader)
+    // 1..reqCount            : received request rows
+    // next                   : sent requests header (if showSentHeader)
+    // next..sentCount        : sent request rows
+    // next                   : conversations header (if showConversationsHeader)
+    // next..                 : chat room rows
+    // last                   : loading indicator (if _isLoadingMore)
+
+    int cursor = 0;
+
+    final int requestsHeaderIdx = showRequestsHeader ? cursor++ : -1;
+    if (showRequestsHeader) cursor += reqCount;
+
+    final int sentHeaderIdx = showSentHeader ? cursor++ : -1;
+    final int firstSentIdx = showSentHeader ? cursor : -1;
+    if (showSentHeader) cursor += sentCount;
+
+    final int conversationsHeaderIdx =
+        showConversationsHeader ? cursor++ : -1;
+    final int firstRoomIdx = cursor;
+
+    final int totalItems = firstRoomIdx +
         displayedRooms.length +
         (_isLoadingMore ? 1 : 0);
+
+    // Precompute first request index for received section
+    final int firstRequestIdx = showRequestsHeader ? 1 : -1;
 
     return Container(
       color: Colors.white,
@@ -1572,9 +1840,10 @@ class _ChatListScreenState extends State<ChatListScreen>
         controller: _scrollController,
         itemCount: totalItems,
         separatorBuilder: (_, index) {
-          // No divider between the requests header and first request row,
-          // or between the conversations header and first room row.
           if (showRequestsHeader && index == requestsHeaderIdx) {
+            return const SizedBox.shrink();
+          }
+          if (showSentHeader && index == sentHeaderIdx) {
             return const SizedBox.shrink();
           }
           if (showConversationsHeader && index == conversationsHeaderIdx) {
@@ -1584,7 +1853,7 @@ class _ChatListScreenState extends State<ChatListScreen>
               indent: 72, height: 1, color: Color(0xFFE0E0E0));
         },
         itemBuilder: (context, index) {
-          // ── Requests header ──
+          // ── Received requests header ──
           if (showRequestsHeader && index == requestsHeaderIdx) {
             return Semantics(
               header: true,
@@ -1616,12 +1885,53 @@ class _ChatListScreenState extends State<ChatListScreen>
             );
           }
 
-          // ── Request rows ──
+          // ── Received request rows ──
           if (showRequestsHeader &&
               index >= firstRequestIdx &&
               index < firstRequestIdx + reqCount) {
             return _buildChatRequestCard(
                 _pendingChatRequests[index - firstRequestIdx]);
+          }
+
+          // ── Sent requests header ──
+          if (showSentHeader && index == sentHeaderIdx) {
+            return Semantics(
+              header: true,
+              label: _sentRequestsLoading
+                  ? 'Loading sent chat requests'
+                  : 'Sent Chat Requests section, $sentCount requests',
+              child: Container(
+                color: const Color(0xFF1565C0).withOpacity(0.06),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: _sentRequestsLoading
+                    ? const LinearProgressIndicator()
+                    : Row(
+                        children: [
+                          const Icon(Icons.send,
+                              color: Color(0xFF1565C0), size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Sent Requests ($sentCount)',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1565C0),
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            );
+          }
+
+          // ── Sent request rows ──
+          if (showSentHeader &&
+              firstSentIdx >= 0 &&
+              index >= firstSentIdx &&
+              index < firstSentIdx + sentCount) {
+            return _buildSentChatRequestCard(
+                _sentChatRequests[index - firstSentIdx]);
           }
 
           // ── Conversations header ──

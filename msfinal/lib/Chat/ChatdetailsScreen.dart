@@ -302,7 +302,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   // ── Local message cache helpers ───────────────────────────────────────────
 
-  /// Converts a message map to a JSON-serialisable form (DateTime → ISO string).
+  /// Converts a message map to a JSON-serializable form (DateTime → ISO string).
   Map<String, dynamic> _serializeMessage(Map<String, dynamic> msg) {
     final m = Map<String, dynamic>.from(msg);
     if (m['timestamp'] is DateTime) {
@@ -311,12 +311,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     return m;
   }
 
-  /// Saves the most recent [_messagesPerPage] messages to SharedPreferences.
+  // Maximum number of messages to persist in the local cache.
+  // Kept separate from _messagesPerPage so pagination and cache sizes can be
+  // tuned independently.
+  static const int _maxCachedMessages = 30;
+
+  /// Saves the most recent [_maxCachedMessages] messages to SharedPreferences.
   Future<void> _saveMessagesToLocalCache() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final toSave = _cachedMessages.length > _messagesPerPage
-          ? _cachedMessages.sublist(_cachedMessages.length - _messagesPerPage)
+      final toSave = _cachedMessages.length > _maxCachedMessages
+          ? _cachedMessages.sublist(_cachedMessages.length - _maxCachedMessages)
           : _cachedMessages;
       final encoded = jsonEncode(toSave.map(_serializeMessage).toList());
       await prefs.setString('chat_msgs_${widget.chatRoomId}', encoded);
@@ -359,8 +364,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         setState(() {
           _cachedMessages = cached;
           _messagesCacheVersion++;
-          // Keep _isFirstLoad=true so the skeleton shows until server data arrives,
-          // but mark _isFirstLoad false here to remove the full-screen loader.
+          // Show cached messages immediately; server response will replace them.
           _isFirstLoad = false;
         });
         _scrollToBottom(jump: true);

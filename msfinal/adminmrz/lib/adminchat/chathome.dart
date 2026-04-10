@@ -3096,6 +3096,7 @@ class _ChatWindowState extends State<ChatWindow> {
 
       // Normalize field names: handle both admin-sent and user-sent formats
       final String? pId = profileData['id']?.toString() ?? profileData['userId']?.toString();
+      final int? pIdValue = int.tryParse(pId ?? '');
       final String pFirst = profileData['first']?.toString() ?? profileData['firstName']?.toString() ?? '';
       final String pLast = profileData['last']?.toString() ?? profileData['lastName']?.toString() ?? '';
       final String pCountry = profileData['country']?.toString() ?? profileData['location']?.toString() ?? '';
@@ -3401,8 +3402,10 @@ class _ChatWindowState extends State<ChatWindow> {
                                   setState(() {
                                     Provider.of<ChatProvider>(context, listen: false)
                                         .updateName("${pLast}  ${pFirst}");
-                                    Provider.of<ChatProvider>(context, listen: false)
-                                        .updateidd(pId);
+                                    if (pIdValue != null) {
+                                      Provider.of<ChatProvider>(context, listen: false)
+                                          .updateidd(pIdValue);
+                                    }
                                   });
                                 },
                                 child: Container(

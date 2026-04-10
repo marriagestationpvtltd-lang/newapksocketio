@@ -399,6 +399,21 @@ app.delete('/api/calls/user/:userId', async (req, res) => {
 const userSockets    = new Map(); // userId → socketId
 const userActiveChatRoom = new Map(); // userId → chatRoomId | null
 
+// Tracks calls that have been sent but not yet answered/rejected/cancelled.
+// channelName → { callerId, recipientId, data, createdAt }
+// Used to re-deliver incoming_call when recipient connects while call is active.
+const activePendingCalls = new Map();
+const PENDING_CALL_TTL_MS = 60000; // 60 seconds — matches FCM notification lifetime
+
+function _cleanExpiredPendingCalls() {
+  const now = Date.now();
+  for (const [channelName, call] of activePendingCalls) {
+    if (now - call.createdAt > PENDING_CALL_TTL_MS) {
+      activePendingCalls.delete(channelName);
+    }
+  }
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // DB helpers
 // ──────────────────────────────────────────────────────────────────────────────
@@ -713,6 +728,17 @@ io.on('connection', (socket) => {
 
     socket.emit('authenticated', { success: true, userId: authenticatedUserId });
     console.log(`✅ Authenticated: userId=${authenticatedUserId}`);
+
+    // Re-deliver any pending calls that arrived while this user was offline.
+    // Only calls younger than PENDING_CALL_TTL_MS are considered still active.
+    _cleanExpiredPendingCalls();
+    const now = Date.now();
+    for (const [channelName, call] of activePendingCalls) {
+      if (call.recipientId === authenticatedUserId && now - call.createdAt <= PENDING_CALL_TTL_MS) {
+        socket.emit('incoming_call', call.data);
+        console.log(`📞 Re-delivered pending call to userId=${authenticatedUserId}, channel=${channelName}`);
+      }
+    }
   });
 
   // ── join_room ─────────────────────────────────────────────────────────────
@@ -986,19 +1012,48 @@ io.on('connection', (socket) => {
   socket.on('call_invite', (data) => {
     const { recipientId, callerId, ...rest } = data || {};
     if (!recipientId) return;
-    io.to(`user:${recipientId.toString()}`).emit('incoming_call', {
+
+    const recipientIdStr = recipientId.toString();
+    const callerIdStr    = callerId ? callerId.toString() : undefined;
+
+    const callPayload = {
       ...rest,
-      callerId: callerId ? callerId.toString() : undefined,
-      recipientId: recipientId.toString(),
-    });
-    // If the recipient is currently connected via socket, notify the caller
-    // immediately that the device is ringing (Calling → Ringing transition).
-    if (callerId && userSockets.has(recipientId.toString())) {
-      io.to(`user:${callerId.toString()}`).emit('call_ringing', {
-        channelName: rest.channelName,
-        recipientId: recipientId.toString(),
-        callerId: callerId.toString(),
+      callerId:    callerIdStr,
+      recipientId: recipientIdStr,
+    };
+
+    // Store as a pending call so we can re-deliver it if the recipient comes
+    // online before the call times out on the caller side.
+    const channelName = (rest.channelName || '').toString().trim();
+    if (channelName) {
+      activePendingCalls.set(channelName, {
+        callerId:    callerIdStr,
+        recipientId: recipientIdStr,
+        data:        callPayload,
+        createdAt:   Date.now(),
       });
+    }
+
+    if (userSockets.has(recipientIdStr)) {
+      // Recipient is online — deliver the call and confirm ringing to caller.
+      io.to(`user:${recipientIdStr}`).emit('incoming_call', callPayload);
+      if (callerIdStr) {
+        io.to(`user:${callerIdStr}`).emit('call_ringing', {
+          channelName: channelName,
+          recipientId: recipientIdStr,
+          callerId:    callerIdStr,
+        });
+      }
+    } else {
+      // Recipient is offline — notify the caller immediately so they can show
+      // an appropriate message (FCM push has already been sent by the client).
+      if (callerIdStr) {
+        io.to(`user:${callerIdStr}`).emit('call_user_offline', {
+          channelName:  channelName,
+          callerId:     callerIdStr,
+          recipientId:  recipientIdStr,
+        });
+      }
     }
   });
 
@@ -1020,6 +1075,7 @@ io.on('connection', (socket) => {
   socket.on('call_accept', (data) => {
     const { callerId, ...rest } = data || {};
     if (!callerId) return;
+    if (rest.channelName) activePendingCalls.delete(rest.channelName);
     io.to(`user:${callerId.toString()}`).emit('call_accepted', {
       ...rest,
       callerId: callerId.toString(),
@@ -1031,6 +1087,7 @@ io.on('connection', (socket) => {
   socket.on('call_reject', (data) => {
     const { callerId, ...rest } = data || {};
     if (!callerId) return;
+    if (rest.channelName) activePendingCalls.delete(rest.channelName);
     io.to(`user:${callerId.toString()}`).emit('call_rejected', {
       ...rest,
       callerId: callerId.toString(),
@@ -1042,6 +1099,7 @@ io.on('connection', (socket) => {
   socket.on('call_cancel', (data) => {
     const { recipientId, ...rest } = data || {};
     if (!recipientId) return;
+    if (rest.channelName) activePendingCalls.delete(rest.channelName);
     io.to(`user:${recipientId.toString()}`).emit('call_cancelled', {
       ...rest,
       recipientId: recipientId.toString(),
@@ -1052,6 +1110,7 @@ io.on('connection', (socket) => {
   // Either party emits this to notify the other the call has ended.
   socket.on('call_end', (data) => {
     const { callerId, recipientId, ...rest } = data || {};
+    if (rest.channelName) activePendingCalls.delete(rest.channelName);
     if (callerId) {
       io.to(`user:${callerId.toString()}`).emit('call_ended', {
         ...rest, callerId, recipientId,

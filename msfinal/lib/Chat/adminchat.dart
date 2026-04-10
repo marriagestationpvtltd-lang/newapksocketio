@@ -119,6 +119,10 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   bool _streamLoading = true;
   bool _streamHasError = false;
 
+  // Scroll lock during message loading to prevent screen shaking
+  bool _scrollLocked = true;
+  bool _initialScrollDone = false;
+
   // Admin online status
   bool _adminOnline = false;
   DateTime? _adminLastSeen;
@@ -758,6 +762,9 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   }
 
   void _scrollToBottom({bool animate = true}) {
+    // Don't auto-scroll if scroll is locked during initial load
+    if (_scrollLocked) return;
+
     if (_scrollController.hasClients) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_scrollController.hasClients) return;
@@ -792,6 +799,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         _streamHasError = false;
         _currentPage = 1;
         _hasMoreMessages = true;
+        _scrollLocked = true;
       });
     }
     try {
@@ -821,7 +829,8 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         }
       });
       if (reset) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom(animate: false));
+        // Perform initial scroll only once, then unlock
+        _performInitialScroll();
       }
       // After loading, join room and mark read
       _socketService.joinRoom(_chatRoomId);
@@ -833,9 +842,36 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         setState(() {
           _streamHasError = true;
           _streamLoading = false;
+          _scrollLocked = false;
         });
       }
     }
+  }
+
+  /// Performs the initial scroll to bottom only once, then unlocks scrolling.
+  /// This prevents screen shaking from multiple scroll attempts.
+  void _performInitialScroll() {
+    if (_initialScrollDone) return;
+    _initialScrollDone = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        // Wait for layout to settle before unlocking
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _scrollLocked = false);
+        });
+      } else {
+        // Controller not yet attached; retry after layout
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted && _scrollController.hasClients) {
+            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+          }
+          if (mounted) setState(() => _scrollLocked = false);
+        });
+      }
+    });
   }
 
   Future<void> _loadMoreMessages() async {
@@ -843,6 +879,9 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     setState(() => _isLoadingMore = true);
     final prevOffset = _scrollController.hasClients
         ? _scrollController.position.pixels
+        : 0.0;
+    final prevMaxExtent = _scrollController.hasClients
+        ? _scrollController.position.maxScrollExtent
         : 0.0;
     _currentPage++;
     try {
@@ -863,10 +902,11 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         _hasMoreMessages = hasMore;
         _isLoadingMore = false;
       });
+      // Preserve scroll position by adjusting for new content added at top
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients &&
-            _scrollController.position.maxScrollExtent >= prevOffset) {
-          _scrollController.jumpTo(prevOffset);
+        if (_scrollController.hasClients) {
+          final newMaxExtent = _scrollController.position.maxScrollExtent;
+          _scrollController.jumpTo(prevOffset + (newMaxExtent - prevMaxExtent));
         }
       });
     } catch (e) {
@@ -3678,6 +3718,8 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       ),
       child: ListView(
         controller: _scrollController,
+        // Use ClampingScrollPhysics to prevent bounce effect that causes shaking
+        physics: const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
         padding: const EdgeInsets.only(top: 16, bottom: 12),
         children: [
           if (_isLoadingMore)

@@ -777,7 +777,7 @@ io.on('connection', (socket) => {
     if (!chatRoomId || !senderId || !receiverId) return;
 
     // Validate messageType against whitelist
-    const ALLOWED_MESSAGE_TYPES = ['text', 'image', 'voice', 'video', 'file'];
+    const ALLOWED_MESSAGE_TYPES = ['text', 'image', 'voice', 'video', 'file', 'call'];
     const safeMessageType = ALLOWED_MESSAGE_TYPES.includes(messageType) ? messageType : 'text';
 
     // Enforce message length limit (64 KB)

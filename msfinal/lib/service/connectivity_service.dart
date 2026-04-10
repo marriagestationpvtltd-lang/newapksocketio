@@ -11,7 +11,7 @@ class ConnectivityService extends ChangeNotifier {
   final Connectivity _connectivity = Connectivity();
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
-  List<ConnectivityResult> _connectionStatus = [ConnectivityResult.none];
+  List<ConnectivityResult> _connectionStatus = [];
   bool _hasInternet = true;
   bool _isChecking = false;
 
@@ -19,8 +19,14 @@ class ConnectivityService extends ChangeNotifier {
   bool get hasInternet => _hasInternet;
   bool get isWifiConnected => _connectionStatus.contains(ConnectivityResult.wifi);
   bool get isMobileConnected => _connectionStatus.contains(ConnectivityResult.mobile);
-  bool get isConnected => _hasInternet && _connectionStatus.isNotEmpty &&
-      !_connectionStatus.contains(ConnectivityResult.none);
+
+  /// Returns true when connected.  Before [initialize] completes we treat the
+  /// state as "undetermined" and optimistically report connected so that the
+  /// connectivity banner never flickers offline→online on a normal launch.
+  bool get isConnected {
+    if (_connectionStatus.isEmpty) return true; // not yet initialised
+    return _hasInternet && !_connectionStatus.contains(ConnectivityResult.none);
+  }
 
   /// Initialize connectivity monitoring
   Future<void> initialize() async {
@@ -44,6 +50,11 @@ class ConnectivityService extends ChangeNotifier {
     } catch (e) {
       if (kDebugMode) {
         print('❌ Connectivity service initialization error: $e');
+      }
+      // Populate the status list so isConnected no longer returns the
+      // optimistic "not yet initialised" value.
+      if (_connectionStatus.isEmpty) {
+        _connectionStatus = [ConnectivityResult.none];
       }
       _hasInternet = false;
       notifyListeners();

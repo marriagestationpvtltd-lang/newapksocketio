@@ -174,31 +174,32 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
     );
 
     // ── Logo ────────────────────────────────────────────────────────────────
-    // Start semi-visible (0.7) so the logo is immediately visible on the very
-    // first Flutter frame — seamless continuity from the native splash logo.
-    // Then polishes up to full opacity in the first 35% of the entrance.
-    _logoOpacity = Tween<double>(begin: 0.7, end: 1.0).animate(
+    // Start at full opacity (1.0) so the logo is immediately visible on the
+    // very first Flutter frame — seamless continuity from the native splash.
+    // The GIF is pre-cached in didChangeDependencies so the asset is decoded
+    // before build() renders it, preventing a blank white frame.
+    _logoOpacity = Tween<double>(begin: 1.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _entranceController!,
         curve: const Interval(0.0, 0.35, curve: Curves.easeIn),
       ),
     );
-    // Drops in from slightly above + elastic bounce (0 – 70%)
+    // Drops in from slightly above — smooth deceleration, no elastic bounce
     _logoSlideIn = Tween<Offset>(
       begin: const Offset(0, -0.12),
       end: Offset.zero,
     ).animate(
       CurvedAnimation(
         parent: _entranceController!,
-        curve: const Interval(0.0, 0.70, curve: Curves.elasticOut),
+        curve: const Interval(0.0, 0.70, curve: Curves.easeOutCubic),
       ),
     );
-    // Scales from 0.7 → 1.0 so the logo is already clearly visible on the
-    // first frame (brand continuity with the native splash ic_launcher).
-    _logoScale = Tween<double>(begin: 0.7, end: 1.0).animate(
+    // Scales from 0.85 → 1.0 with a smooth easeOutCubic so there is no
+    // overshoot that would make the logo appear to "suddenly jump large".
+    _logoScale = Tween<double>(begin: 0.85, end: 1.0).animate(
       CurvedAnimation(
         parent: _entranceController!,
-        curve: const Interval(0.0, 0.70, curve: Curves.elasticOut),
+        curve: const Interval(0.0, 0.70, curve: Curves.easeOutCubic),
       ),
     );
 
@@ -277,6 +278,14 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
         curve: const Interval(0.35, 1.0, curve: Curves.easeOut),
       ),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Pre-decode the splash GIF so there is no blank white frame between the
+    // native splash and the first Flutter frame that contains the logo.
+    precacheImage(const AssetImage('assets/images/Mslogo.gif'), context);
   }
 
   @override

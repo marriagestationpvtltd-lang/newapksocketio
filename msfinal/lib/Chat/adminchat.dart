@@ -229,6 +229,10 @@ class _AdminChatScreenState extends State<AdminChatScreen>
           _socketService.joinRoom(_chatRoomId);
           _socketService.setActiveChat(_mySenderId, _chatRoomId);
           _loadMessages(reset: true);
+          // Re-check admin online status now that the socket is up.
+          // getUserStatus() returned false immediately when called earlier
+          // because the socket wasn't connected yet.
+          _startAdminStatusListener();
         }
       });
       // Timeout fallback: if socket doesn't connect within 15s, show error
@@ -555,6 +559,9 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         partnerUserId: _otherPartyId,
       );
       _socketService.setActiveChat(_mySenderId, _chatRoomId);
+      // Refresh admin online status on resume (status may have changed while
+      // the app was in the background).
+      _startAdminStatusListener();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.detached ||

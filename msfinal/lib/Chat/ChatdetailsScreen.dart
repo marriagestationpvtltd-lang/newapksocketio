@@ -1339,17 +1339,29 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
   }
   void _scrollToBottom({bool jump = false}) {
+    void doScroll() {
+      if (!mounted || !_scrollController.hasClients) return;
+      if (jump) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      } else {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients && _scrollController.position.maxScrollExtent > 0) {
-        if (jump) {
-          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-        } else {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        }
+      if (!mounted) return;
+      if (_scrollController.hasClients) {
+        doScroll();
+        // Schedule a second scroll for the next frame to handle cases where
+        // the list hasn't finished measuring all items in the first frame.
+        WidgetsBinding.instance.addPostFrameCallback((_) => doScroll());
+      } else {
+        // Controller not yet attached to a scroll view; retry after a short delay.
+        Future.delayed(const Duration(milliseconds: 50), doScroll);
       }
     });
   }
@@ -3452,17 +3464,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
     return RefreshIndicator(
       onRefresh: _refreshMessages,
-      child: ListView.builder(
-        reverse: false, // Keep as false for natural order
+      child: ListView(
         controller: _scrollController,
         physics: _isHorizontalDragging
             ? const NeverScrollableScrollPhysics()
             : const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
-        itemCount: messageWidgets.length,
-        itemBuilder: (context, index) {
-          return messageWidgets[index];
-        },
+        children: messageWidgets,
       ),
     );
   }

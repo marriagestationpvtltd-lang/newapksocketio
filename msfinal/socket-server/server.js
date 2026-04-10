@@ -223,8 +223,9 @@ const io     = new Server(server, {
     origin: ALLOWED_ORIGINS.includes('*') ? '*' : ALLOWED_ORIGINS,
     methods: ['GET', 'POST'],
   },
-  pingTimeout:  60000,
-  pingInterval: 25000,
+  pingTimeout:       60000,
+  pingInterval:      25000,
+  maxHttpBufferSize: 1e6,  // 1 MB — prevents large-payload DoS attacks
 });
 
 app.use(cors());

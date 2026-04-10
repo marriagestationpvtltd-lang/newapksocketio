@@ -5602,10 +5602,17 @@ class _ChatWindowState extends State<ChatWindow> {
   @override
   void dispose() {
     _removeCallOverlay();
+    _typingTimer?.cancel();
     _typingStopTimer?.cancel();
     _replyHighlightTimer?.cancel();
     _floatingDateTimer?.cancel();
     _floatingDateNotifier.dispose();
+    _newMsgSub?.cancel();
+    _editedMsgSub?.cancel();
+    _deletedMsgSub?.cancel();
+    _unsentMsgSub?.cancel();
+    _likedMsgSub?.cancel();
+    _readMsgSub?.cancel();
     _typingStartSub?.cancel();
     _typingStopSub?.cancel();
     _incomingCallSub?.cancel();

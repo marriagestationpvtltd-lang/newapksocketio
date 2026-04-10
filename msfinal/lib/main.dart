@@ -1069,9 +1069,13 @@ void main() async {
     // require request.auth != null are satisfied. Firebase Auth caches the
     // anonymous credential after the first call, so this is only slow on a
     // brand-new install.
-    FirebaseAuth.instance.signInAnonymously().catchError((Object e) {
-      debugPrint('⚠️ Firebase anonymous sign-in failed: $e');
-    });
+    () async {
+      try {
+        await FirebaseAuth.instance.signInAnonymously();
+      } catch (e) {
+        debugPrint('⚠️ Firebase anonymous sign-in failed: $e');
+      }
+    }();
 
     // Initialise local notifications after the first frame so channel creation
     // and plugin setup don't add to the cold-start time.

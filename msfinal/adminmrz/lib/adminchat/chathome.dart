@@ -441,8 +441,8 @@ class _ChatWindowState extends State<ChatWindow> {
           AdminSocketService.chatRoomId(chatProvider.id?.toString() ?? '');
       if (data['chatRoomId']?.toString() != expectedRoom) return;
       if (data['userId']?.toString() == senderId.toString()) return;
+      if (!_userIsTyping) _playTypingSound();
       setState(() => _userIsTyping = true);
-      _playTypingSound();
     });
 
     _typingStopSub?.cancel();
@@ -899,12 +899,15 @@ class _ChatWindowState extends State<ChatWindow> {
     _socketService.sendTypingStop(roomId);
   }
 
-  // Play typing sound
+  // Play typing sound — short, soft, Messenger-style
   void _playTypingSound() async {
     try {
-      await _typingAudioPlayer.setVolume(0.3);
-      await _typingAudioPlayer.setAsset('assets/audio/outcall.mp3');
-      await _typingAudioPlayer.play();
+      await _typingAudioPlayer.setVolume(0.2);
+      await _typingAudioPlayer.setAsset('assets/audio/ring_soft.wav');
+      _typingAudioPlayer.play();
+      Future.delayed(const Duration(milliseconds: 250), () {
+        _typingAudioPlayer.stop();
+      });
     } catch (e) {
       print('Error playing typing sound: $e');
     }
@@ -1972,18 +1975,14 @@ class _ChatWindowState extends State<ChatWindow> {
                           margin: const EdgeInsets.only(right: 4),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: _userIsTyping ? c.primary : (chatProvider.online ? c.online : c.muted),
+                            color: chatProvider.online ? c.online : c.muted,
                           ),
                         ),
                         Text(
-                          _userIsTyping
-                              ? "typing..."
-                              : (chatProvider.online ? "Online" : "Offline"),
+                          chatProvider.online ? "Online" : "Offline",
                           style: TextStyle(
                             fontSize: 11,
-                            color: _userIsTyping
-                                ? c.primary
-                                : (chatProvider.online ? c.online : c.muted),
+                            color: chatProvider.online ? c.online : c.muted,
                           ),
                         ),
                         if (chatProvider.id != null)
@@ -2327,6 +2326,22 @@ class _ChatWindowState extends State<ChatWindow> {
           ],
         ),
           ),
+          if (_userIsTyping)
+            Padding(
+              padding: const EdgeInsets.only(left: 12, right: 12, bottom: 4),
+              child: Row(
+                children: [
+                  Text(
+                    'Typing...',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: c.muted,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           _buildMessageInput(chatProvider),
         ],
       ),

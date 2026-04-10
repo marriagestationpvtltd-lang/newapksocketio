@@ -35,7 +35,6 @@ import '../otherenew/othernew.dart';
 import '../otherenew/service.dart';
 import '../pushnotification/pushservice.dart';
 import 'call_overlay_manager.dart';
-import 'widgets/typing_indicator.dart';
 import '../constant/constant.dart';
 import '../utils/time_utils.dart';
 import '../utils/image_utils.dart';
@@ -3419,6 +3418,22 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                     child: _buildMessagesList(),
                   ),
                 ),
+                if (_isReceiverTyping)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 16, right: 16, bottom: 4),
+                    child: Row(
+                      children: const [
+                        Text(
+                          'Typing...',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 _bottomSection(),
               ],
             ),
@@ -3533,18 +3548,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                         fontWeight: FontWeight.w600,
                         fontSize: 17),
                   ),
-                  if (_isReceiverTyping)
-                    Row(
-                      children: [
-                        TypingIndicatorWidget(dotColor: Colors.white, dotSize: 6),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'is typing...',
-                          style: TextStyle(color: Colors.white70, fontSize: 12),
-                        ),
-                      ],
-                    )
-                  else if (_isOtherUserOnline)
+                  if (_isOtherUserOnline)
                     const Text(
                       "online",
                       style: TextStyle(color: Colors.white70, fontSize: 13),

@@ -2813,31 +2813,29 @@ class _ChatWindowState extends State<ChatWindow> {
 
     if (type == 'call') {
       final callBubble = statusMessage != null
-          ? Align(
-              alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
-              child: Column(
-                crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                children: [
-                  if (replyPreview != null) replyPreview,
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                    margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
-                    decoration: BoxDecoration(
-                      color: isSentByMe ? kPrimary : Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      displayedMessage,
-                      style: TextStyle(
-                        color: isSentByMe ? Colors.white : kText,
-                        fontSize: 13,
-                        fontStyle: FontStyle.italic,
-                      ),
+          ? Column(
+              crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (replyPreview != null) replyPreview,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
+                  decoration: BoxDecoration(
+                    color: isSentByMe ? kPrimary : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    displayedMessage,
+                    style: TextStyle(
+                      color: isSentByMe ? Colors.white : kText,
+                      fontSize: 13,
+                      fontStyle: FontStyle.italic,
                     ),
                   ),
-                  footer(),
-                ],
-              ),
+                ),
+                footer(),
+              ],
             )
           : _buildCallBubble(
               callType ?? 'audio',
@@ -2858,11 +2856,10 @@ class _ChatWindowState extends State<ChatWindow> {
     }
 
     if (type == 'image' && imageUrl != null) {
-      final bubble = Align(
-        alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: Column(
-          crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
+      final bubble = Column(
+        crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
             if (replyPreview != null) replyPreview,
             if (statusMessage != null)
               Container(
@@ -2918,8 +2915,7 @@ class _ChatWindowState extends State<ChatWindow> {
                 ),
               ),
             footer(),
-          ],
-        ),
+        ],
       );
 
       return _buildMessageWithActions(
@@ -2951,11 +2947,10 @@ class _ChatWindowState extends State<ChatWindow> {
 
       Widget galleryWidget = _buildAdminGalleryGrid(galleryUrls);
 
-      final bubble = Align(
-        alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: Column(
-          crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
+      final bubble = Column(
+        crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
             if (replyPreview != null) replyPreview,
             Container(
               margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
@@ -2969,8 +2964,7 @@ class _ChatWindowState extends State<ChatWindow> {
               ),
             ),
             footer(),
-          ],
-        ),
+        ],
       );
 
       return _buildMessageWithActions(
@@ -2996,11 +2990,10 @@ class _ChatWindowState extends State<ChatWindow> {
           : 0;
       final displayTime = '${(displaySecs ~/ 60).toString().padLeft(2, '0')}:${(displaySecs % 60).toString().padLeft(2, '0')}';
 
-      final bubble = Align(
-        alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: Column(
-          crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
+      final bubble = Column(
+        crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
             if (replyPreview != null) replyPreview,
             if (statusMessage != null)
               Container(
@@ -3081,8 +3074,7 @@ class _ChatWindowState extends State<ChatWindow> {
                 ),
               ),
             footer(),
-          ],
-        ),
+        ],
       );
 
       return _buildMessageWithActions(
@@ -3117,11 +3109,10 @@ class _ChatWindowState extends State<ChatWindow> {
         matchColor = const Color(0xFF78909C);
       }
 
-      final bubble = Align(
-        alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: Column(
-          crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
+      final bubble = Column(
+        crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
             if (replyPreview != null) replyPreview,
             if (statusMessage != null)
               Container(
@@ -3433,7 +3424,6 @@ class _ChatWindowState extends State<ChatWindow> {
               ),
             footer(),
           ],
-        ),
       );
 
       return _buildMessageWithActions(
@@ -3446,53 +3436,51 @@ class _ChatWindowState extends State<ChatWindow> {
       );
     }
 
-    final bubble = Align(
-      alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.24),
-        child: Column(
-          crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-              margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
-              decoration: BoxDecoration(
-                color: isSentByMe ? kPrimary : Colors.white,
-                borderRadius: isSentByMe
-                    ? const BorderRadius.only(
-                        topLeft: Radius.circular(18),
-                        topRight: Radius.circular(18),
-                        bottomLeft: Radius.circular(18),
-                        bottomRight: Radius.circular(4),
-                      )
-                    : const BorderRadius.only(
-                        topLeft: Radius.circular(4),
-                        topRight: Radius.circular(18),
-                        bottomLeft: Radius.circular(18),
-                        bottomRight: Radius.circular(18),
-                      ),
-                boxShadow: isSentByMe
-                    ? null
-                    : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 1))],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (replyPreview != null) replyPreview,
-                  Text(
-                    displayedMessage,
-                    style: TextStyle(
-                      color: isSentByMe ? Colors.white : kText,
-                      fontSize: 13,
-                      fontStyle: statusMessage != null ? FontStyle.italic : FontStyle.normal,
+    final bubble = ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.24),
+      child: Column(
+        crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
+            decoration: BoxDecoration(
+              color: isSentByMe ? kPrimary : Colors.white,
+              borderRadius: isSentByMe
+                  ? const BorderRadius.only(
+                      topLeft: Radius.circular(18),
+                      topRight: Radius.circular(18),
+                      bottomLeft: Radius.circular(18),
+                      bottomRight: Radius.circular(4),
+                    )
+                  : const BorderRadius.only(
+                      topLeft: Radius.circular(4),
+                      topRight: Radius.circular(18),
+                      bottomLeft: Radius.circular(18),
+                      bottomRight: Radius.circular(18),
                     ),
-                  ),
-                ],
-              ),
+              boxShadow: isSentByMe
+                  ? null
+                  : [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 1))],
             ),
-            footer(),
-          ],
-        ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (replyPreview != null) replyPreview,
+                Text(
+                  displayedMessage,
+                  style: TextStyle(
+                    color: isSentByMe ? Colors.white : kText,
+                    fontSize: 13,
+                    fontStyle: statusMessage != null ? FontStyle.italic : FontStyle.normal,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          footer(),
+        ],
       ),
     );
 
@@ -3514,7 +3502,12 @@ class _ChatWindowState extends State<ChatWindow> {
     required String? messageId,
     required Map<String, dynamic>? replyPayload,
   }) {
-    if (messageId == null || replyPayload == null) return bubble;
+    if (messageId == null || replyPayload == null) {
+      return Align(
+        alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: bubble,
+      );
+    }
 
     return _HoverableMessageBubble(
       bubble: bubble,
@@ -3873,46 +3866,44 @@ class _ChatWindowState extends State<ChatWindow> {
             : (isVideo ? Icons.videocam_outlined : Icons.phone_outlined);
     final String dur = durationSeconds > 0 ? ' • ${_formatCallDuration(durationSeconds)}' : '';
 
-    return Align(
-      alignment: isSentByMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Column(
-        crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          if (replyPreview != null) replyPreview,
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: isBusy ? Colors.orange.shade50 : (isMissed ? Colors.red.shade50 : const Color(0xFFFCE4EC)),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isBusy ? Colors.orange.shade200 : (isMissed ? Colors.red.shade200 : const Color(0xFFFFCDD2)),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, color: color, size: 18),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '$label$dur',
-                      style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
-                    ),
-                    Text(
-                      DateFormat('hh:mm a').format(timestamp),
-                      style: const TextStyle(fontSize: 10, color: kMuted),
-                    ),
-                  ],
-                ),
-              ],
+    return Column(
+      crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (replyPreview != null) replyPreview,
+        Container(
+          margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: isBusy ? Colors.orange.shade50 : (isMissed ? Colors.red.shade50 : const Color(0xFFFCE4EC)),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isBusy ? Colors.orange.shade200 : (isMissed ? Colors.red.shade200 : const Color(0xFFFFCDD2)),
+              width: 1,
             ),
           ),
-        ],
-      ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: color, size: 18),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$label$dur',
+                    style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    DateFormat('hh:mm a').format(timestamp),
+                    style: const TextStyle(fontSize: 10, color: kMuted),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -5197,14 +5188,15 @@ class _HoverableMessageBubbleState extends State<_HoverableMessageBubble>
                 child: actionMenu,
               ),
             ),
-          Expanded(child: widget.bubble),
-          FadeTransition(
-            opacity: _fadeAnimation,
-            child: IgnorePointer(
-              ignoring: !_isHovered,
-              child: widget.isSentByMe ? const SizedBox.shrink() : actionMenu,
+          Flexible(child: widget.bubble),
+          if (!widget.isSentByMe)
+            FadeTransition(
+              opacity: _fadeAnimation,
+              child: IgnorePointer(
+                ignoring: !_isHovered,
+                child: actionMenu,
+              ),
             ),
-          ),
         ],
       ),
     );

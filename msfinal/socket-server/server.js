@@ -1116,6 +1116,15 @@ io.on('connection', (socket) => {
       callerId: callerStr,
       ...(recipientId ? { recipientId: recipientStr } : {}),
     });
+    // Notify any other sessions of the same recipient (e.g. admin logged in on
+    // a second browser/computer) so they can dismiss their incoming call dialog.
+    if (recipientStr) {
+      socket.to(`user:${recipientStr}`).emit('call_answered_elsewhere', {
+        ...rest,
+        callerId: callerStr,
+        recipientId: recipientStr,
+      });
+    }
   });
 
   // ── call_reject ───────────────────────────────────────────────────────────

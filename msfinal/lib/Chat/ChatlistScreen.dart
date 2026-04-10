@@ -1205,19 +1205,21 @@ class _ChatListScreenState extends State<ChatListScreen>
                   button: true,
                   child: GestureDetector(
                     onTap: () => _handleAcceptChatRequest(req),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF90E18),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Text(
-                        'Accept',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                    child: ExcludeSemantics(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF90E18),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Text(
+                          'Accept',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
@@ -1229,19 +1231,21 @@ class _ChatListScreenState extends State<ChatListScreen>
                   button: true,
                   child: GestureDetector(
                     onTap: () => _handleRejectChatRequest(req),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Text(
-                        'Reject',
-                        style: TextStyle(
-                          color: Colors.black54,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                    child: ExcludeSemantics(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade200,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: const Text(
+                          'Reject',
+                          style: TextStyle(
+                            color: Colors.black54,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
@@ -1582,27 +1586,33 @@ class _ChatListScreenState extends State<ChatListScreen>
         itemBuilder: (context, index) {
           // ── Requests header ──
           if (showRequestsHeader && index == requestsHeaderIdx) {
-            return Container(
-              color: const Color(0xFFF90E18).withOpacity(0.06),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: _requestsLoading
-                  ? const LinearProgressIndicator()
-                  : Row(
-                      children: [
-                        const Icon(Icons.mark_chat_unread,
-                            color: Color(0xFFF90E18), size: 18),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Chat Requests ($reqCount)',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFFF90E18),
+            return Semantics(
+              header: true,
+              label: _requestsLoading
+                  ? 'Loading chat requests'
+                  : 'Chat Requests section, $reqCount requests',
+              child: Container(
+                color: const Color(0xFFF90E18).withOpacity(0.06),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: _requestsLoading
+                    ? const LinearProgressIndicator()
+                    : Row(
+                        children: [
+                          const Icon(Icons.mark_chat_unread,
+                              color: Color(0xFFF90E18), size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Chat Requests ($reqCount)',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFFF90E18),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
+                        ],
+                      ),
+              ),
             );
           }
 
@@ -1616,16 +1626,20 @@ class _ChatListScreenState extends State<ChatListScreen>
 
           // ── Conversations header ──
           if (showConversationsHeader && index == conversationsHeaderIdx) {
-            return Container(
-              color: Colors.grey.shade50,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: const Text(
-                'Conversations',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black54,
+            return Semantics(
+              header: true,
+              label: 'Conversations section',
+              child: Container(
+                color: Colors.grey.shade50,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: const Text(
+                  'Conversations',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black54,
+                  ),
                 ),
               ),
             );

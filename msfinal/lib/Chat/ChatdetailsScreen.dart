@@ -3419,19 +3419,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   ),
                 ),
                 if (_isReceiverTyping)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 16, right: 16, bottom: 4),
-                    child: Row(
-                      children: const [
-                        Text(
-                          'Typing...',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
+                  const Padding(
+                    padding: EdgeInsets.only(left: 16, right: 16, bottom: 4),
+                    child: Text(
+                      'Typing...',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                   ),
                 _bottomSection(),

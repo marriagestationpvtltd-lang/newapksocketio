@@ -2329,17 +2329,13 @@ class _ChatWindowState extends State<ChatWindow> {
           if (_userIsTyping)
             Padding(
               padding: const EdgeInsets.only(left: 12, right: 12, bottom: 4),
-              child: Row(
-                children: [
-                  Text(
-                    'Typing...',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: c.muted,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ],
+              child: Text(
+                'Typing...',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: c.muted,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
             ),
           _buildMessageInput(chatProvider),

@@ -3646,19 +3646,15 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   }
 
   Widget _buildTypingIndicator() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 16, right: 16, bottom: 4),
-      child: Row(
-        children: const [
-          Text(
-            'Typing...',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey,
-              fontStyle: FontStyle.italic,
-            ),
-          ),
-        ],
+    return const Padding(
+      padding: EdgeInsets.only(left: 16, right: 16, bottom: 4),
+      child: Text(
+        'Typing...',
+        style: TextStyle(
+          fontSize: 12,
+          color: Colors.grey,
+          fontStyle: FontStyle.italic,
+        ),
       ),
     );
   }

@@ -789,7 +789,8 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
         }
       },
       child: Scaffold(
-        body: Container(
+        body: AnimatedContainer(
+          duration: const Duration(milliseconds: 500),
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
@@ -819,9 +820,14 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
                     ),
                   ),
                 Expanded(
-                  child: _callActive
-                      ? _buildActiveCallUI()
-                      : (_connecting ? _buildConnectingUI() : _buildIncomingCallUI()),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    transitionBuilder: (child, animation) =>
+                        FadeTransition(opacity: animation, child: child),
+                    child: _callActive
+                        ? _buildActiveCallUI()
+                        : (_connecting ? _buildConnectingUI() : _buildIncomingCallUI()),
+                  ),
                 ),
               ],
             ),
@@ -833,6 +839,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
 
   Widget _buildConnectingUI() {
     return Column(
+      key: const ValueKey('connecting'),
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         const SizedBox(height: 40),
@@ -842,28 +849,33 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                width: 120,
-                height: 120,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFF00E5FF),
-                      Color(0xFF2979FF),
+              // Pulsing avatar — same size as incoming UI for visual continuity
+              _PulseWidget(
+                child: Container(
+                  width: 140,
+                  height: 140,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color(0xFF00E5FF),
+                        Color(0xFF2979FF),
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF2979FF).withOpacity(0.5),
+                        blurRadius: 30,
+                        spreadRadius: 10,
+                      ),
                     ],
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF2979FF).withOpacity(0.5),
-                      blurRadius: 30,
-                      spreadRadius: 10,
-                    ),
-                  ],
+                  child: const Center(
+                    child: Icon(Icons.phone_in_talk, color: Colors.white, size: 70),
+                  ),
                 ),
-                child: const Icon(Icons.phone_in_talk, color: Colors.white, size: 60),
               ),
               const SizedBox(height: 32),
               Padding(
@@ -881,16 +893,26 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
                   maxLines: 2,
                 ),
               ),
-              const SizedBox(height: 16),
-              const SizedBox(
-                width: 36,
-                height: 36,
-                child: CircularProgressIndicator(color: Colors.white70, strokeWidth: 3),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Connecting...',
-                style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.w400),
+              const SizedBox(height: 24),
+              // Spinner and label inline — clearly shows activity
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(color: Colors.white70, strokeWidth: 2),
+                  ),
+                  SizedBox(width: 12),
+                  Text(
+                    'Connecting...',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -911,6 +933,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
 
   Widget _buildIncomingCallUI() {
     return Column(
+      key: const ValueKey('incoming'),
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         const SizedBox(height: 40),
@@ -1060,6 +1083,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
 
   Widget _buildActiveCallUI() {
     return Column(
+      key: const ValueKey('active'),
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         const SizedBox(height: 60),
@@ -1324,5 +1348,71 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     } catch (e) {
       debugPrint('Error stopping call foreground service: $e');
     }
+  }
+}
+
+/// A widget that wraps its [child] with a repeating radial pulse animation.
+/// The ring expands outward from the child while fading, giving a "live"
+/// indicator that clearly shows the app is active (not frozen).
+class _PulseWidget extends StatefulWidget {
+  final Widget child;
+  const _PulseWidget({required this.child});
+
+  @override
+  State<_PulseWidget> createState() => _PulseWidgetState();
+}
+
+class _PulseWidgetState extends State<_PulseWidget>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat();
+    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            Transform.scale(
+              scale: 1.05 + (_animation.value * 0.45),
+              child: Opacity(
+                opacity: (1.0 - _animation.value) * 0.55,
+                child: Container(
+                  width: 140,
+                  height: 140,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFF2979FF),
+                      width: 2,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            child!,
+          ],
+        );
+      },
+      child: widget.child,
+    );
   }
 }

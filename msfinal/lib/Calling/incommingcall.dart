@@ -146,9 +146,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       if (type == 'call_cancelled' || type == 'call_ended') {
         final channelName = data['channelName']?.toString();
         if (channelName == _channel) {
-          if (_remoteUid == null) {
-            _end();
-          }
+          if (!_ending) _endCall();
         }
       }
     });
@@ -156,14 +154,14 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     // Socket.IO path (real-time for online users)
     _socketCancelSubscription = SocketService().onCallCancelled.listen((data) {
       final channelName = data['channelName']?.toString();
-      if (channelName == _channel && _remoteUid == null) {
-        _end();
+      if (channelName == _channel) {
+        if (!_ending) _endCall();
       }
     });
     _socketEndedSubscription = SocketService().onCallEnded.listen((data) {
       final channelName = data['channelName']?.toString();
       if (channelName == _channel) {
-        _end();
+        if (!_ending) _endCall();
       }
     });
 

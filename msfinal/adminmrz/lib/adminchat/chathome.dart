@@ -4107,7 +4107,7 @@ class _ChatWindowState extends State<ChatWindow> {
             )
           else
             Container(
-              width: MediaQuery.of(context).size.width * 0.22,
+              width: MediaQuery.of(context).size.width * 0.72,
               margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
               decoration: BoxDecoration(
                 color: const Color(0xFFFFFDE7),
@@ -4139,10 +4139,10 @@ class _ChatWindowState extends State<ChatWindow> {
                       ),
                     ),
                     child: Row(
-                      children: const [
-                        Icon(Icons.flag_rounded, color: Colors.white, size: 15),
-                        SizedBox(width: 6),
-                        Text(
+                      children: [
+                        const Icon(Icons.flag_rounded, color: Colors.white, size: 15),
+                        const SizedBox(width: 6),
+                        const Text(
                           'PROFILE REPORTED',
                           style: TextStyle(
                             color: Colors.white,
@@ -4214,12 +4214,12 @@ class _ChatWindowState extends State<ChatWindow> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Report Reason',
+                          'REPORT REASON',
                           style: TextStyle(
                             fontSize: 10,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w700,
                             color: Color(0xFFF57F17),
-                            letterSpacing: 0.4,
+                            letterSpacing: 0.6,
                           ),
                         ),
                         const SizedBox(height: 3),

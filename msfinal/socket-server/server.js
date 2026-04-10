@@ -1044,9 +1044,9 @@ io.on('connection', (socket) => {
       if (channelName) activePendingCalls.delete(channelName);
       if (callerIdStr) {
         io.to(`user:${callerIdStr}`).emit('call_busy', {
-          channelName:  channelName,
-          callerId:     callerIdStr,
-          recipientId:  recipientIdStr,
+          channelName: channelName,
+          callerId: callerIdStr,
+          recipientId: recipientIdStr,
         });
       }
     } else if (userSockets.has(recipientIdStr)) {

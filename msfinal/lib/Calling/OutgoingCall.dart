@@ -738,13 +738,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
         if (scaffoldCtx != null) {
           ScaffoldMessenger.of(scaffoldCtx).showSnackBar(
             SnackBar(
-              content: Text(
-                  _recipientBusy
-                      ? 'User is busy, please try again later'
-                      : wasDeclined
-                          ? 'Call declined'
-                          : (wasNoAnswer ? 'No answer' : 'Call ended'),
-                ),
+              content: Text(_buildCallEndMessage(wasDeclined: wasDeclined, wasNoAnswer: wasNoAnswer)),
               duration: const Duration(seconds: 3),
             ),
           );
@@ -766,6 +760,13 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
       Navigator.of(context).pop();
     }
     unawaited(_stopForegroundService());
+  }
+
+  String _buildCallEndMessage({required bool wasDeclined, required bool wasNoAnswer}) {
+    if (_recipientBusy) return 'User is busy, please try again later';
+    if (wasDeclined) return 'Call declined';
+    if (wasNoAnswer) return 'No answer';
+    return 'Call ended';
   }
 
   // ================= SWITCH TO VIDEO =================

@@ -355,6 +355,7 @@ class _ChatWindowState extends State<ChatWindow> {
           }
         }
       });
+      _saveAdminMessagesToCache(expectedRoom);
       // Mark messages sent by user as seen by admin
       final bool isByUser = data['senderid'] != senderId.toString();
       if (isByUser) _socketService.markRead(raw['chatRoomId']?.toString() ?? expectedRoom);
@@ -368,6 +369,8 @@ class _ChatWindowState extends State<ChatWindow> {
       if (!mounted) return;
       final String msgId = data['messageId']?.toString() ?? '';
       if (msgId.isEmpty) return;
+      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+      final String roomId = AdminSocketService.chatRoomId(chatProvider.id?.toString() ?? '');
       setState(() {
         final idx = _messages.indexWhere((m) => m['messageId'] == msgId);
         if (idx >= 0) {
@@ -379,6 +382,7 @@ class _ChatWindowState extends State<ChatWindow> {
           _syncFilteredMessages();
         }
       });
+      _saveAdminMessagesToCache(roomId);
     });
 
     _deletedMsgSub?.cancel();
@@ -386,6 +390,8 @@ class _ChatWindowState extends State<ChatWindow> {
       if (!mounted) return;
       final String msgId = data['messageId']?.toString() ?? '';
       if (msgId.isEmpty) return;
+      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+      final String roomId = AdminSocketService.chatRoomId(chatProvider.id?.toString() ?? '');
       setState(() {
         final idx = _messages.indexWhere((m) => m['messageId'] == msgId);
         if (idx >= 0) {
@@ -399,6 +405,7 @@ class _ChatWindowState extends State<ChatWindow> {
           _syncFilteredMessages();
         }
       });
+      _saveAdminMessagesToCache(roomId);
     });
 
     _unsentMsgSub?.cancel();
@@ -406,6 +413,8 @@ class _ChatWindowState extends State<ChatWindow> {
       if (!mounted) return;
       final String msgId = data['messageId']?.toString() ?? '';
       if (msgId.isEmpty) return;
+      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+      final String roomId = AdminSocketService.chatRoomId(chatProvider.id?.toString() ?? '');
       setState(() {
         final idx = _messages.indexWhere((m) => m['messageId'] == msgId);
         if (idx >= 0) {
@@ -419,6 +428,7 @@ class _ChatWindowState extends State<ChatWindow> {
           _syncFilteredMessages();
         }
       });
+      _saveAdminMessagesToCache(roomId);
     });
 
     _likedMsgSub?.cancel();
@@ -1247,6 +1257,47 @@ class _ChatWindowState extends State<ChatWindow> {
     Overlay.of(context).insert(_callOverlayEntry!);
   }
 
+  // ── Local message cache helpers ───────────────────────────────────────────
+
+  /// Maximum number of messages to persist in the local cache per room.
+  static const int _maxCachedAdminMessages = 30;
+
+  /// Returns the SharedPreferences key for the given room's message cache.
+  static String _adminCacheKey(String roomId) => 'admin_chat_msgs_$roomId';
+
+  /// Saves the most recent [_maxCachedAdminMessages] messages to SharedPreferences.
+  Future<void> _saveAdminMessagesToCache(String roomId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final toSave = _messages.length > _maxCachedAdminMessages
+          ? _messages.sublist(_messages.length - _maxCachedAdminMessages)
+          : _messages;
+      final encoded = jsonEncode(toSave);
+      await prefs.setString(_adminCacheKey(roomId), encoded);
+    } catch (e) {
+      debugPrint('Failed to save admin messages to local cache: $e');
+    }
+  }
+
+  /// Loads previously cached messages from SharedPreferences.
+  /// Returns an empty list when no cache exists or on error.
+  Future<List<Map<String, dynamic>>> _loadAdminMessagesFromCache(String roomId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_adminCacheKey(roomId));
+      if (raw == null) return [];
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      return decoded
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+    } catch (e) {
+      debugPrint('Failed to load admin messages from local cache: $e');
+      return [];
+    }
+  }
+
+  // ── Message loading ───────────────────────────────────────────────────────
+
   /// Load a page of messages from the server.
   Future<void> _loadMessages({bool reset = false}) async {
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
@@ -1263,6 +1314,17 @@ class _ChatWindowState extends State<ChatWindow> {
       });
       _socketService.joinRoom(roomId);
       _socketService.setActiveChat(roomId);
+
+      // Show cached messages immediately so the chat is usable at once.
+      final cached = await _loadAdminMessagesFromCache(roomId);
+      if (!mounted) return;
+      if (cached.isNotEmpty && _messages.isEmpty) {
+        setState(() {
+          _messages = cached;
+          _isInitialLoad = false;
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+      }
     }
 
     setState(() => _isLoadingMore = !reset);
@@ -1315,6 +1377,7 @@ class _ChatWindowState extends State<ChatWindow> {
 
       if (reset) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        _saveAdminMessagesToCache(roomId);
       }
       _socketService.markRead(roomId);
     } catch (e) {

@@ -2359,7 +2359,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 Expanded(
                   child: TextButton.icon(
                     onPressed: () {
-                      if (userId.isNotEmpty) {
+                      if (userId.isNotEmpty && userId != widget.currentUserId) {
                         final List<String> ids = [widget.currentUserId, userId];
                         ids.sort();
                         final chatRoomId = ids.join('_');

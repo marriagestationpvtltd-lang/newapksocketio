@@ -329,7 +329,7 @@ app.put('/api/calls/:callId', async (req, res) => {
           SET end_time = UTC_TIMESTAMP(),
               duration = GREATEST(0, TIMESTAMPDIFF(SECOND, start_time, UTC_TIMESTAMP())),
               status   = ?
-        WHERE call_id = ?`,
+        WHERE call_id = ? AND end_time IS NULL`,
       [safeStatus, callId],
     );
     res.json({ success: true });

@@ -61,7 +61,9 @@ class CallForegroundService : Service() {
         Log.d(TAG, "CallForegroundService created")
         createNotificationChannel()
         acquireWakeLock()
-        configureAudioForCall()
+        // Audio focus is managed by Agora (enableAudio() in onUserJoined).
+        // Requesting focus here would steal it from the ringtone player while
+        // the outgoing call is still ringing, causing the tone to cut out.
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -291,7 +293,6 @@ class CallForegroundService : Service() {
 
     private fun stopForegroundService() {
         Log.d(TAG, "Stopping foreground service")
-        resetAudioConfiguration()
         releaseWakeLock()
         stopForeground(true)
         stopSelf()
@@ -303,7 +304,6 @@ class CallForegroundService : Service() {
 
     override fun onDestroy() {
         Log.d(TAG, "CallForegroundService destroyed")
-        resetAudioConfiguration()
         releaseWakeLock()
         super.onDestroy()
     }

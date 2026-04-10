@@ -291,6 +291,11 @@ class _CallScreenState extends State<CallScreen>
         channelProfile: ChannelProfileType.channelProfileCommunication,
       ));
 
+      // Agora enables audio by default after initialize(). Explicitly disable it
+      // so the SDK does not take audio focus (and kill the ringtone) before the
+      // remote peer joins. It is re-enabled in onUserJoined.
+      await _engine.disableAudio();
+
       _engine.registerEventHandler(
         RtcEngineEventHandler(
           onUserJoined: (_, uid, __) async {

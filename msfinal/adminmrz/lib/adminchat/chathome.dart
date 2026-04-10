@@ -3832,15 +3832,20 @@ class _ChatWindowState extends State<ChatWindow> {
       {Widget? replyPreview}) {
     const kPrimary = Color(0xFFD81B60);
     const kMuted = Color(0xFF64748B);
-    final bool isMissed = status == 'missed';
+    final bool isBusy = status == 'busy';
+    final bool isMissed = isBusy || status == 'missed';
     final bool isVideo = callType == 'video';
-    final Color color = isMissed ? Colors.red : kPrimary;
-    final String label = isMissed
-        ? (isVideo ? 'Missed Video Call' : 'Missed Call')
-        : (isVideo ? 'Video Call' : 'Audio Call');
-    final IconData icon = isMissed
-        ? (isVideo ? Icons.videocam_off_outlined : Icons.phone_missed)
-        : (isVideo ? Icons.videocam_outlined : Icons.phone_outlined);
+    final Color color = isBusy ? Colors.orange : (isMissed ? Colors.red : kPrimary);
+    final String label = isBusy
+        ? 'User is busy'
+        : isMissed
+            ? (isVideo ? 'Missed Video Call' : 'Missed Call')
+            : (isVideo ? 'Video Call' : 'Audio Call');
+    final IconData icon = isBusy
+        ? Icons.phone_locked
+        : isMissed
+            ? (isVideo ? Icons.videocam_off_outlined : Icons.phone_missed)
+            : (isVideo ? Icons.videocam_outlined : Icons.phone_outlined);
     final String dur = durationSeconds > 0 ? ' • ${_formatCallDuration(durationSeconds)}' : '';
 
     return Align(
@@ -3853,10 +3858,10 @@ class _ChatWindowState extends State<ChatWindow> {
             margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: isMissed ? Colors.red.shade50 : const Color(0xFFFCE4EC),
+              color: isBusy ? Colors.orange.shade50 : (isMissed ? Colors.red.shade50 : const Color(0xFFFCE4EC)),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: isMissed ? Colors.red.shade200 : const Color(0xFFFFCDD2),
+                color: isBusy ? Colors.orange.shade200 : (isMissed ? Colors.red.shade200 : const Color(0xFFFFCDD2)),
                 width: 1,
               ),
             ),

@@ -31,6 +31,9 @@ class VideoCallScreen extends StatefulWidget {
   final String? chatRoomId; // For writing inline call message to chat
   final bool isAdminChat; // True when called from AdminChatScreen
   final String? adminChatReceiverId; // Receiver ID for admin chat call messages
+  /// When set, use this channel name instead of generating a new one.
+  /// Used when upgrading an audio call to video (same Agora channel).
+  final String? forcedChannelName;
 
   const VideoCallScreen({
     super.key,
@@ -44,6 +47,7 @@ class VideoCallScreen extends StatefulWidget {
     this.chatRoomId,
     this.isAdminChat = false,
     this.adminChatReceiverId,
+    this.forcedChannelName,
   });
 
   @override
@@ -71,6 +75,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   bool _isCallRinging = true; // ringing state: false once remote joins
   bool _isRecipientRinging = false; // true when recipient device is ringing
   bool _recipientOffline = false; // true when server confirmed recipient is offline
+  bool _recipientBusy = false;     // true when server confirmed recipient is busy
   bool _foregroundServiceStarted = false;
 
   Timer? _timeoutTimer;
@@ -83,6 +88,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   StreamSubscription<Map<String, dynamic>>? _socketEndedSub;
   StreamSubscription<Map<String, dynamic>>? _socketRingingSub;
   StreamSubscription<Map<String, dynamic>>? _socketUserOfflineSub;
+  StreamSubscription<Map<String, dynamic>>? _socketBusySub;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   String? _connectionStatus;
 
@@ -269,6 +275,34 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
         _syncOverlayState();
       }
     });
+    // Server confirmed the recipient is busy on another call.
+    _socketBusySub = SocketService().onCallBusy.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
+      if (!_ending && mounted) {
+        setState(() => _recipientBusy = true);
+        _syncOverlayState();
+        unawaited(_stopRingtone());
+        // Log "User is busy" message to chat history
+        if (widget.chatRoomId != null && widget.chatRoomId!.isNotEmpty) {
+          unawaited(CallHistoryService.logCallMessageInChat(
+            callerId: widget.currentUserId,
+            callType: 'video',
+            callStatus: 'busy',
+            duration: 0,
+            chatRoomId: widget.chatRoomId,
+            isAdminChat: widget.isAdminChat,
+            adminChatSenderId: widget.isAdminChat ? widget.currentUserId : null,
+            adminChatReceiverId: widget.isAdminChat ? widget.adminChatReceiverId : null,
+            messageDocId: _channel.isNotEmpty ? 'call_busy_$_channel' : null,
+          ));
+        }
+        // Auto-end after a short delay so the user sees the busy message
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!_ending) _endCall();
+        });
+      }
+    });
   }
 
   void _handleVideoCallResponseData(Map<String, dynamic> data) {
@@ -393,6 +427,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     final String statusText;
     if (_callActive) {
       statusText = 'Connected';
+    } else if (_recipientBusy) {
+      statusText = 'User is busy, please try again later';
     } else if (_remoteAccepted) {
       statusText = 'Connecting video...';
     } else if (_recipientOffline) {
@@ -413,6 +449,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
 
   String _getOutgoingStatusText({bool isVideoConnect = false}) {
     if (_callActive) return 'Connected';
+    if (_recipientBusy) return 'User is busy, please try again later';
     if (_remoteAccepted) return isVideoConnect ? 'Connecting video...' : 'Connecting...';
     if (_recipientOffline) return 'User is not online';
     if (_isRecipientRinging) return 'Ringing...';
@@ -452,7 +489,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
         return;
       }
 
-      if (widget.isOutgoingCall) {
+      // Skip ringtone for audio→video upgrades (call already connected)
+      if (widget.isOutgoingCall && widget.forcedChannelName == null) {
         await _ensureCallToneSettingsLoaded();
         await _playRingtone();
       }
@@ -460,14 +498,18 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
       // ✅ UID FIRST
       _localUid = Random().nextInt(999999);
 
-      // ✅ CHANNEL FIRST
-      _channel =
-      'videocall_${widget.currentUserId.substring(0, min(4, widget.currentUserId.length))}'
-          '_${widget.otherUserId.substring(0, min(4, widget.otherUserId.length))}'
-          '_${DateTime.now().millisecondsSinceEpoch}';
+      // ✅ CHANNEL FIRST — use forced channel for audio→video upgrades
+      if (widget.forcedChannelName != null && widget.forcedChannelName!.isNotEmpty) {
+        _channel = widget.forcedChannelName!;
+      } else {
+        _channel =
+        'videocall_${widget.currentUserId.substring(0, min(4, widget.currentUserId.length))}'
+            '_${widget.otherUserId.substring(0, min(4, widget.otherUserId.length))}'
+            '_${DateTime.now().millisecondsSinceEpoch}';
 
-      if (_channel.length > 64) {
-        _channel = _channel.substring(0, 64);
+        if (_channel.length > 64) {
+          _channel = _channel.substring(0, 64);
+        }
       }
 
       _initializeOverlay();
@@ -479,7 +521,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
       );
 
       // ✅ SEND NOTIFICATION AFTER CHANNEL EXISTS
-      if (widget.isOutgoingCall) {
+      // Skip invite/notification when this is an audio→video upgrade (forcedChannelName set).
+      if (widget.isOutgoingCall && widget.forcedChannelName == null) {
         // Socket.IO (instant delivery for online users)
         SocketService().emitCallInvite(
           recipientId: widget.otherUserId,
@@ -686,17 +729,20 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     _socketEndedSub?.cancel();
     _socketRingingSub?.cancel();
     _socketUserOfflineSub?.cancel();
+    _socketBusySub?.cancel();
     _socketAcceptedSub = null;
     _socketRejectedSub = null;
     _socketEndedSub = null;
     _socketRingingSub = null;
     _socketUserOfflineSub = null;
+    _socketBusySub = null;
 
     // Always stop ringtone when ending call
     await _stopRingtone();
 
-    // Update call history and write inline call message to chat (outgoing only)
-    if (_callHistoryId != null && _callHistoryId!.isNotEmpty) {
+    // Update call history and write inline call message to chat (outgoing only).
+    // Skip when recipient was busy — the busy listener already logged the message.
+    if (_callHistoryId != null && _callHistoryId!.isNotEmpty && !_recipientBusy) {
       CallStatus callStatus;
       if (_callActive && _remoteUid != null) {
         callStatus = CallStatus.completed;
@@ -727,7 +773,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
       }
     }
 
-    // Send end/cancel via Socket.IO (fast) + FCM (fallback)
+    // Send end/cancel via Socket.IO (fast) + FCM (fallback).
+    // Skip cancel when recipient was busy — no screen to dismiss.
     if (_callActive) {
       SocketService().emitCallEnd(
         callerId: widget.currentUserId,
@@ -743,7 +790,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
         duration: _duration.inSeconds,
         channelName: _channel,
       ));
-    } else if (!_callActive && widget.isOutgoingCall && _channel.isNotEmpty) {
+    } else if (!_callActive && !_recipientBusy && widget.isOutgoingCall && _channel.isNotEmpty) {
       SocketService().emitCallCancel(
         recipientId: widget.otherUserId,
         callerId: widget.currentUserId,
@@ -949,7 +996,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
                         const SizedBox(height: 10),
                         Text(
                           _getOutgoingStatusText(isVideoConnect: true),
-                          style: TextStyle(color: _recipientOffline ? Colors.orangeAccent : Colors.white70),
+                          style: TextStyle(color: (_recipientOffline || _recipientBusy) ? Colors.orangeAccent : Colors.white70),
                         ),
                       ],
                     ),
@@ -1278,6 +1325,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     _socketEndedSub?.cancel();
     _socketRingingSub?.cancel();
     _socketUserOfflineSub?.cancel();
+    _socketBusySub?.cancel();
     _connectivitySubscription?.cancel();
     _controlsHideTimer?.cancel();
     _ringtoneRestartTimer?.cancel();

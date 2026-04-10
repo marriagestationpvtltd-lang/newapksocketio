@@ -18,6 +18,7 @@ import 'tokengenerator.dart';
 import 'call_history_model.dart';
 import 'call_history_service.dart';
 import 'call_foreground_service.dart';
+import 'videocall.dart';
 import 'widgets/connection_status_overlay.dart';
 
 class CallScreen extends StatefulWidget {
@@ -86,10 +87,14 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
   StreamSubscription<Map<String, dynamic>>? _socketEndedSub;
   StreamSubscription<Map<String, dynamic>>? _socketRingingSub;
   StreamSubscription<Map<String, dynamic>>? _socketUserOfflineSub;
+  StreamSubscription<Map<String, dynamic>>? _socketBusySub;
+  StreamSubscription<Map<String, dynamic>>? _socketSwitchToVideoResponseSub;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   String? _connectionStatus;
   bool _remoteAccepted = false;
   bool _recipientOffline = false; // true when server confirmed recipient is offline
+  bool _recipientBusy = false;    // true when server confirmed recipient is on another call
+  bool _isSwitchingToVideo = false; // true while awaiting switch-to-video response
 
   static const Duration _kConnectivityLossTimeout = Duration(seconds: 30);
   static const Duration _kOutgoingCallTimeout = Duration(seconds: 45);
@@ -149,6 +154,49 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
       if (!_callActive && !_ending && mounted) {
         setState(() => _recipientOffline = true);
         _syncOverlayState();
+      }
+    });
+    // Server confirmed the recipient is busy on another call.
+    _socketBusySub = SocketService().onCallBusy.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
+      if (!_ending && mounted) {
+        setState(() => _recipientBusy = true);
+        _syncOverlayState();
+        unawaited(_stopRingtone());
+        // Log "User is busy" message to chat history
+        if (widget.chatRoomId != null && widget.chatRoomId!.isNotEmpty) {
+          unawaited(CallHistoryService.logCallMessageInChat(
+            callerId: widget.currentUserId,
+            callType: 'audio',
+            callStatus: 'busy',
+            duration: 0,
+            chatRoomId: widget.chatRoomId,
+            isAdminChat: widget.isAdminChat,
+            adminChatSenderId: widget.isAdminChat ? widget.currentUserId : null,
+            adminChatReceiverId: widget.isAdminChat ? widget.adminChatReceiverId : null,
+            messageDocId: _channel.isNotEmpty ? 'call_busy_$_channel' : null,
+          ));
+        }
+        // Auto-end after a short delay so the user sees the busy message
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!_ending) _endCall();
+        });
+      }
+    });
+    // Response to switch-to-video request
+    _socketSwitchToVideoResponseSub = SocketService().onSwitchToVideoResponse.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
+      final accepted = data['accepted'] == true || data['accepted'] == 'true';
+      if (!mounted) return;
+      if (accepted && _callActive && !_ending) {
+        _navigateToVideoCall();
+      } else if (!accepted) {
+        setState(() => _isSwitchingToVideo = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Video switch declined'), duration: Duration(seconds: 2)),
+        );
       }
     });
   }
@@ -268,7 +316,11 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
   }
 
   String _getOutgoingStatusText() {
-    if (_callActive) return 'Connected';
+    if (_callActive) {
+      if (_isSwitchingToVideo) return 'Switching to video...';
+      return 'Connected';
+    }
+    if (_recipientBusy) return 'User is busy, please try again later';
     if (_remoteAccepted) return 'Connecting...';
     if (_recipientOffline) return 'User is not online';
     if (_isRecipientRinging) return 'Ringing...';
@@ -603,16 +655,21 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
     _socketEndedSub?.cancel();
     _socketRingingSub?.cancel();
     _socketUserOfflineSub?.cancel();
+    _socketBusySub?.cancel();
+    _socketSwitchToVideoResponseSub?.cancel();
     _socketAcceptedSub = null;
     _socketRejectedSub = null;
     _socketEndedSub = null;
     _socketRingingSub = null;
     _socketUserOfflineSub = null;
+    _socketBusySub = null;
+    _socketSwitchToVideoResponseSub = null;
 
     await _stopRingtone();
 
-    // If the call was never answered, notify the receiver to dismiss their incoming call screen
-    if (!_callActive && widget.isOutgoingCall && _channel.isNotEmpty) {
+    // If the call was never answered, notify the receiver to dismiss their incoming call screen.
+    // Skip cancel when recipient was busy — no screen to dismiss.
+    if (!_callActive && !_recipientBusy && widget.isOutgoingCall && _channel.isNotEmpty) {
       // Socket.IO (instant for online users)
       SocketService().emitCallCancel(
         recipientId: widget.otherUserId,
@@ -639,8 +696,9 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
       );
     }
 
-    // Update call history record and write inline call message to chat (outgoing only)
-    if (widget.isOutgoingCall && _callHistoryId != null && _callHistoryId!.isNotEmpty) {
+    // Update call history record and write inline call message to chat (outgoing only).
+    // Skip when recipient was busy — the busy listener already logged the message.
+    if (widget.isOutgoingCall && _callHistoryId != null && _callHistoryId!.isNotEmpty && !_recipientBusy) {
       final callStatus = _callActive
           ? CallStatus.completed
           : wasDeclined
@@ -681,8 +739,12 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
           ScaffoldMessenger.of(scaffoldCtx).showSnackBar(
             SnackBar(
               content: Text(
-                wasDeclined ? 'Call declined' : (wasNoAnswer ? 'No answer' : 'Call ended'),
-              ),
+                  _recipientBusy
+                      ? 'User is busy, please try again later'
+                      : wasDeclined
+                          ? 'Call declined'
+                          : (wasNoAnswer ? 'No answer' : 'Call ended'),
+                ),
               duration: const Duration(seconds: 3),
             ),
           );
@@ -704,6 +766,70 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
       Navigator.of(context).pop();
     }
     unawaited(_stopForegroundService());
+  }
+
+  // ================= SWITCH TO VIDEO =================
+  /// Sends a switch-to-video request to the other party.
+  void _requestSwitchToVideo() {
+    if (!_callActive || _isSwitchingToVideo || _ending) return;
+    setState(() => _isSwitchingToVideo = true);
+    _syncOverlayState();
+    SocketService().emitSwitchToVideoRequest(
+      recipientId: widget.otherUserId,
+      requesterId: widget.currentUserId,
+      channelName: _channel,
+    );
+  }
+
+  /// Called when the other party accepts the switch.  Leaves the current
+  /// Agora audio channel and opens the VideoCallScreen with the same channel.
+  Future<void> _navigateToVideoCall() async {
+    if (_ending) return;
+    // Cancel all subscriptions so the audio call doesn't interfere with the
+    // new video call.
+    _callTimer?.cancel();
+    _timeoutTimer?.cancel();
+    _responseSubscription?.cancel();
+    _socketAcceptedSub?.cancel();
+    _socketRejectedSub?.cancel();
+    _socketEndedSub?.cancel();
+    _socketRingingSub?.cancel();
+    _socketUserOfflineSub?.cancel();
+    _socketBusySub?.cancel();
+    _socketSwitchToVideoResponseSub?.cancel();
+
+    // Leave audio Agora channel so the video screen can join with video enabled.
+    try {
+      if (_joined) await _engine.leaveChannel();
+      if (_engineInitialized) await _engine.release();
+    } catch (e) {
+      debugPrint('Error releasing audio engine for video switch: $e');
+    }
+
+    CallOverlayManager().reset();
+    unawaited(_stopForegroundService());
+
+    if (!mounted) return;
+    // Navigate to VideoCallScreen, replacing the current route.
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: activeCallRouteName),
+        fullscreenDialog: true,
+        builder: (_) => VideoCallScreen(
+          currentUserId: widget.currentUserId,
+          currentUserName: widget.currentUserName,
+          currentUserImage: widget.currentUserImage,
+          otherUserId: widget.otherUserId,
+          otherUserName: widget.otherUserName,
+          otherUserImage: widget.otherUserImage,
+          isOutgoingCall: true,
+          chatRoomId: widget.chatRoomId,
+          isAdminChat: widget.isAdminChat,
+          adminChatReceiverId: widget.adminChatReceiverId,
+          forcedChannelName: _channel,
+        ),
+      ),
+    );
   }
 
   /// Releases the Agora engine; safe to call fire-and-forget from dispose().
@@ -1062,26 +1188,61 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildActiveControls() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        _modernControlBtn(
-          icon: _micMuted ? Icons.mic_off : Icons.mic,
-          color: _micMuted ? const Color(0xFFFF9800) : Colors.white,
-          onPressed: _toggleMute,
-          active: !_micMuted,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            _modernControlBtn(
+              icon: _micMuted ? Icons.mic_off : Icons.mic,
+              color: _micMuted ? const Color(0xFFFF9800) : Colors.white,
+              onPressed: _toggleMute,
+              active: !_micMuted,
+            ),
+            _modernCallBtn(
+              icon: Icons.call_end,
+              color: const Color(0xFFF44336),
+              onPressed: _endCall,
+              size: 72,
+            ),
+            _modernControlBtn(
+              icon: _speakerOn ? Icons.volume_up : Icons.volume_off,
+              color: _speakerOn ? const Color(0xFF2196F3) : Colors.white,
+              onPressed: _toggleSpeaker,
+              active: _speakerOn,
+            ),
+          ],
         ),
-        _modernCallBtn(
-          icon: Icons.call_end,
-          color: const Color(0xFFF44336),
-          onPressed: _endCall,
-          size: 72,
-        ),
-        _modernControlBtn(
-          icon: _speakerOn ? Icons.volume_up : Icons.volume_off,
-          color: _speakerOn ? const Color(0xFF2196F3) : Colors.white,
-          onPressed: _toggleSpeaker,
-          active: _speakerOn,
+        const SizedBox(height: 16),
+        // Switch to Video button (only shown during an active connected call)
+        GestureDetector(
+          onTap: _isSwitchingToVideo ? null : _requestSwitchToVideo,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+            decoration: BoxDecoration(
+              color: _isSwitchingToVideo
+                  ? Colors.white.withOpacity(0.1)
+                  : Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white38),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _isSwitchingToVideo ? Icons.hourglass_empty : Icons.videocam,
+                  color: Colors.white70,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _isSwitchingToVideo ? 'Waiting for response...' : 'Switch to Video',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+              ],
+            ),
+          ),
         ),
       ],
     );

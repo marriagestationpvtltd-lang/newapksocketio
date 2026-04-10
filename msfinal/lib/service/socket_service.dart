@@ -52,6 +52,12 @@ class SocketService {
   final _callEndedCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _callRingingCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _callUserOfflineCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _callBusyCtrl = StreamController<Map<String, dynamic>>.broadcast();
+
+  // ── Audio-to-video switch streams ─────────────────────────────────────────
+
+  final _switchToVideoRequestCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _switchToVideoResponseCtrl = StreamController<Map<String, dynamic>>.broadcast();
 
   // ── Conference call streams ───────────────────────────────────────────────
 
@@ -86,6 +92,16 @@ class SocketService {
 
   /// Emitted when the recipient is offline at the time of the call_invite.
   Stream<Map<String, dynamic>> get onCallUserOffline => _callUserOfflineCtrl.stream;
+
+  /// Emitted when the recipient is already in another active call.
+  Stream<Map<String, dynamic>> get onCallBusy => _callBusyCtrl.stream;
+
+  // Audio-to-video switch streams
+  /// Emitted when the other party requests to upgrade the call to video.
+  Stream<Map<String, dynamic>> get onSwitchToVideoRequest => _switchToVideoRequestCtrl.stream;
+
+  /// Emitted when the other party responds to a switch-to-video request.
+  Stream<Map<String, dynamic>> get onSwitchToVideoResponse => _switchToVideoResponseCtrl.stream;
 
   // Conference call streams
   Stream<Map<String, dynamic>> get onAddedToCall => _addedToCallCtrl.stream;
@@ -201,6 +217,19 @@ class SocketService {
 
     _socket!.on('call_user_offline', (data) {
       _callUserOfflineCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_busy', (data) {
+      _callBusyCtrl.add(_toMap(data));
+    });
+
+    // ── Audio-to-video switch events ─────────────────────────────────────────
+    _socket!.on('switch_to_video_request', (data) {
+      _switchToVideoRequestCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('switch_to_video_response', (data) {
+      _switchToVideoResponseCtrl.add(_toMap(data));
     });
 
     // ── Conference call events ────────────────────────────────────────────────
@@ -460,6 +489,34 @@ class SocketService {
   }
 
   // ── Conference call emit methods ──────────────────────────────────────────
+
+  /// Request to upgrade the current audio call to a video call.
+  void emitSwitchToVideoRequest({
+    required String recipientId,
+    required String requesterId,
+    required String channelName,
+  }) {
+    _socket?.emit('switch_to_video_request', {
+      'recipientId': recipientId,
+      'requesterId': requesterId,
+      'channelName': channelName,
+    });
+  }
+
+  /// Respond to a switch-to-video request (accept or decline).
+  void emitSwitchToVideoResponse({
+    required String requesterId,
+    required String responderId,
+    required String channelName,
+    required bool accepted,
+  }) {
+    _socket?.emit('switch_to_video_response', {
+      'requesterId': requesterId,
+      'responderId': responderId,
+      'channelName': channelName,
+      'accepted': accepted,
+    });
+  }
 
   /// User accepts a conference call invitation (when added by admin).
   void emitParticipantCallAccept({

@@ -1628,9 +1628,12 @@ class _AdminChatScreenState extends State<AdminChatScreen>
 
   Widget _buildReportMessageCard(
       Map<String, dynamic> data, bool isFromAdmin, String formattedTime) {
-    final reportReason = data['reportReason'] ?? '';
-    final reportedUserName = data['reportedUserName'] ?? '';
-    final reportedUserId = data['reportedUserId'] ?? '';
+    final reportReason = data['reportReason']?.toString() ?? '';
+    final reportedUserName = data['reportedUserName']?.toString() ?? '';
+    final reportedUserId = data['reportedUserId']?.toString() ?? '';
+    final initials = reportedUserName.isNotEmpty
+        ? reportedUserName.trim().split(' ').map((w) => w.isEmpty ? '' : w[0].toUpperCase()).take(2).join()
+        : '?';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
@@ -1638,10 +1641,10 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         alignment: isFromAdmin ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
           constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.80),
+              maxWidth: MediaQuery.of(context).size.width * 0.78),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFF3E0),
-            border: Border.all(color: Colors.orange.shade300, width: 1.2),
+            color: const Color(0xFFFFFDE7),
+            border: Border.all(color: const Color(0xFFF9A825), width: 1.2),
             borderRadius: BorderRadius.only(
               topLeft: const Radius.circular(16),
               topRight: const Radius.circular(16),
@@ -1652,74 +1655,139 @@ class _AdminChatScreenState extends State<AdminChatScreen>
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.orange.withOpacity(0.12),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
+                color: Colors.amber.withOpacity(0.20),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
               ),
             ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header banner
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade400,
-                  borderRadius: const BorderRadius.only(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Color(0xFFF9A825), Color(0xFFF57F17)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.only(
                     topLeft: Radius.circular(14),
                     topRight: Radius.circular(14),
                   ),
                 ),
                 child: const Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.flag, color: Colors.white, size: 16),
+                    Icon(Icons.flag_rounded, color: Colors.white, size: 16),
                     SizedBox(width: 6),
                     Text(
-                      'Profile Report',
+                      'PROFILE REPORTED',
                       style: TextStyle(
                         color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                        letterSpacing: 0.8,
                       ),
                     ),
                   ],
                 ),
               ),
+              // Reported user section
               Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    if (reportedUserName.isNotEmpty)
-                      Text(
-                        'Reported: $reportedUserName (ID: $reportedUserId)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade700,
-                          fontStyle: FontStyle.italic,
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor: const Color(0xFFF9A825),
+                      child: Text(
+                        initials,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
                         ),
                       ),
-                    if (reportedUserName.isNotEmpty) const SizedBox(height: 4),
-                    Text(
-                      'Reason: $reportReason',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF4A3000),
-                        fontWeight: FontWeight.w500,
-                      ),
                     ),
-                    const SizedBox(height: 6),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(
-                        formattedTime,
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.grey.shade600),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (reportedUserName.isNotEmpty)
+                            Text(
+                              reportedUserName,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF4A3000),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          if (reportedUserId.isNotEmpty)
+                            Text(
+                              'User ID: $reportedUserId',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ],
+                ),
+              ),
+              // Divider
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Divider(
+                  color: const Color(0xFFF9A825).withOpacity(0.4),
+                  height: 1,
+                ),
+              ),
+              // Reason section
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'REPORT REASON',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFF57F17),
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      reportReason.isNotEmpty ? reportReason : 'No reason provided',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF4A3000),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.only(right: 12, bottom: 8),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    formattedTime,
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.grey.shade600),
+                  ),
                 ),
               ),
             ],

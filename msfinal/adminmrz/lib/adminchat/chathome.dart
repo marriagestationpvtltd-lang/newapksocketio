@@ -123,10 +123,10 @@ class _ChatWindowState extends State<ChatWindow> {
 
   // Typing indicator state
   Timer? _typingStopTimer;
+  Timer? _typingTimer;
   bool _adminTypingActive = false;
   String? _activeTypingRoomId;
   bool _userIsTyping = false;
-  bool _adminTypingActive = false;
   DateTime? _lastTypingStart;
 
   // Inline reply / edit state
@@ -1417,6 +1417,17 @@ class _ChatWindowState extends State<ChatWindow> {
     _adminTypingActive = false;
     if (roomId != null && wasTyping) {
       _socketService.sendTypingStop(roomId);
+    }
+  }
+
+  // Ensure the typing sound asset is loaded into [_typingAudioPlayer].
+  Future<void> _ensureTypingSoundLoaded() async {
+    if (_typingSoundLoaded) return;
+    try {
+      await _typingAudioPlayer.setAsset('assets/audio/outcall.mp3');
+      _typingSoundLoaded = true;
+    } catch (e) {
+      debugPrint('Failed to load typing sound: $e');
     }
   }
 

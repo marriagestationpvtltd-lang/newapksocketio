@@ -28,6 +28,7 @@ import 'package:flutter/foundation.dart' show Uint8List, kIsWeb;
 import 'chat_theme.dart';
 import 'widgets/typing_indicator.dart';
 import 'left.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'dart:html' as html;
 import 'dart:js' as js;
 import 'package:flutter/scheduler.dart';
@@ -3495,16 +3496,12 @@ class _ChatWindowState extends State<ChatWindow> {
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      imageUrl,
+                    child: CachedNetworkImage(
+                      imageUrl: imageUrl,
                       width: MediaQuery.of(context).size.width * 0.24,
                       fit: BoxFit.cover,
-                      cacheWidth: (MediaQuery.of(context).size.width * 0.24).toInt(),
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return const Center(child: CircularProgressIndicator(color: kPrimary));
-                      },
-                      errorBuilder: (context, error, stackTrace) {
+                      placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: kPrimary)),
+                      errorWidget: (context, url, error) {
                         return Column(
                           children: [
                             const Text('Error loading image'),
@@ -3874,10 +3871,10 @@ class _ChatWindowState extends State<ChatWindow> {
                                   child: ClipOval(
                                     child: profileData['profileImage'] != null &&
                                             profileData['profileImage'].toString().isNotEmpty
-                                        ? Image.network(
-                                            profileData['profileImage'],
+                                        ? CachedNetworkImage(
+                                            imageUrl: profileData['profileImage'],
                                             fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) => Container(
+                                            errorWidget: (_, __, ___) => Container(
                                               color: const Color(0xFFF8BBD9),
                                               child: const Icon(Icons.person_rounded, size: 28, color: Color(0xFFD81B60)),
                                             ),
@@ -4256,12 +4253,12 @@ class _ChatWindowState extends State<ChatWindow> {
                       topRight: Radius.circular(10),
                       bottomRight: Radius.circular(10),
                     ),
-                    child: Image.network(
-                      imageUrl!,
+                    child: CachedNetworkImage(
+                      imageUrl: imageUrl!,
                       width: 50,
                       height: 54,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
+                      errorWidget: (_, __, ___) => Container(
                         width: 50,
                         height: 54,
                         color: Colors.grey.shade300,
@@ -4299,17 +4296,14 @@ class _ChatWindowState extends State<ChatWindow> {
 
     Widget thumb(int index, {bool showOverlay = false, int extra = 0}) {
       final url = urls[index];
-      Widget img = Image.network(
-        url,
+      Widget img = CachedNetworkImage(
+        imageUrl: url,
         fit: BoxFit.cover,
-        loadingBuilder: (ctx, child, progress) {
-          if (progress == null) return child;
-          return Container(
-            color: Colors.grey.shade200,
-            child: const Center(child: CircularProgressIndicator(color: adminPrimary, strokeWidth: 2)),
-          );
-        },
-        errorBuilder: (_, __, ___) => Container(
+        placeholder: (ctx, url) => Container(
+          color: Colors.grey.shade200,
+          child: const Center(child: CircularProgressIndicator(color: adminPrimary, strokeWidth: 2)),
+        ),
+        errorWidget: (_, __, ___) => Container(
           color: Colors.grey.shade300,
           child: Icon(Icons.broken_image, color: Colors.grey.shade500),
         ),
@@ -4863,12 +4857,12 @@ class _ChatWindowState extends State<ChatWindow> {
             const SizedBox(width: 6),
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: Image.network(
-                replyImageUrl!,
+              child: CachedNetworkImage(
+                imageUrl: replyImageUrl!,
                 width: 44,
                 height: 44,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
+                errorWidget: (_, __, ___) =>
                     Icon(Icons.image, size: 44, color: Colors.grey.shade400),
               ),
             ),
@@ -6377,10 +6371,10 @@ class _ZoomablePageImageState extends State<_ZoomablePageImage> {
       onInteractionUpdate: _onInteractionUpdate,
       onInteractionEnd: _onInteractionEnd,
       child: Center(
-        child: Image.network(
-          widget.url,
+        child: CachedNetworkImage(
+          imageUrl: widget.url,
           fit: BoxFit.contain,
-          errorBuilder: (_, __, ___) => const Icon(
+          errorWidget: (_, __, ___) => const Icon(
             Icons.broken_image,
             color: Colors.white54,
             size: 64,
@@ -6625,10 +6619,10 @@ class _AdminUserProfileSheet extends StatelessWidget {
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              Image.network(
-                                sharedPhotos[i].url,
+                              CachedNetworkImage(
+                                imageUrl: sharedPhotos[i].url,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Icon(
+                                errorWidget: (_, __, ___) => const Icon(
                                   Icons.photo,
                                   color: Colors.grey,
                                   size: 30,
@@ -6915,10 +6909,10 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
                   scaleEnabled: true,
                   boundaryMargin: const EdgeInsets.all(double.infinity),
                   child: Center(
-                    child: Image.network(
-                      _photos[i].url,
+                    child: CachedNetworkImage(
+                      imageUrl: _photos[i].url,
                       fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const Icon(
+                      errorWidget: (_, __, ___) => const Icon(
                         Icons.broken_image,
                         color: Colors.white54,
                         size: 64,
@@ -7048,10 +7042,10 @@ class _AdminPhotoViewerPageState extends State<_AdminPhotoViewerPage> {
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(5),
-                          child: Image.network(
-                            _photos[i].url,
+                          child: CachedNetworkImage(
+                            imageUrl: _photos[i].url,
                             fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => const Icon(
+                            errorWidget: (_, __, ___) => const Icon(
                               Icons.broken_image,
                               color: Colors.white54,
                               size: 24,
@@ -7165,10 +7159,10 @@ class _AdminGalleryGridPageState extends State<_AdminGalleryGridPage> {
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(4),
-                      child: Image.network(
-                        widget.photos[i].url,
+                      child: CachedNetworkImage(
+                        imageUrl: widget.photos[i].url,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Icon(
+                        errorWidget: (_, __, ___) => Icon(
                           Icons.broken_image,
                           color: Colors.grey[400],
                           size: 40,

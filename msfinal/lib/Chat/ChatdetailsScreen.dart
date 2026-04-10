@@ -40,6 +40,7 @@ import '../utils/time_utils.dart';
 import '../utils/image_utils.dart';
 import '../utils/privacy_utils.dart';
 import 'widgets/typing_indicator.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ChatDetailScreen extends StatefulWidget {
   final String chatRoomId;
@@ -1928,12 +1929,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               children: [
                 ImageFiltered(
                   imageFilter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                  child: Image.network(
-                    text,
+                  child: CachedNetworkImage(
+                    imageUrl: text,
                     width: imgWidth,
                     height: imgWidth * _kImageAspectRatio,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
+                    errorWidget: (context, url, error) => Container(
                       color: Colors.grey[300],
                     ),
                   ),
@@ -1984,10 +1985,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 child: Stack(
                   children: [
                     InteractiveViewer(
-                      child: Image.network(
-                        text,
+                      child: CachedNetworkImage(
+                        imageUrl: text,
                         fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) => const Center(
+                        errorWidget: (context, url, error) => const Center(
                           child: Icon(Icons.broken_image, color: Colors.white54, size: 64),
                         ),
                       ),
@@ -2011,24 +2012,19 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               minWidth: _kImageMinWidth,
               maxHeight: _kImageMaxHeight,
             ),
-            child: Image.network(
-              text,
+            child: CachedNetworkImage(
+              imageUrl: text,
               fit: BoxFit.cover,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return SizedBox(
-                  width: imgWidth,
-                  height: imgWidth * _kImageAspectRatio,
-                  child: Center(
-                    child: CircularProgressIndicator(
-                      value: loadingProgress.expectedTotalBytes != null
-                          ? loadingProgress.cumulativeBytesLoaded /
-                          loadingProgress.expectedTotalBytes!
-                          : null,
-                    ),
-                  ),
-                );
-              },
+              placeholder: (context, url) => SizedBox(
+                width: imgWidth,
+                height: imgWidth * _kImageAspectRatio,
+                child: const Center(child: CircularProgressIndicator()),
+              ),
+              errorWidget: (context, url, error) => SizedBox(
+                width: imgWidth,
+                height: imgWidth * _kImageAspectRatio,
+                child: Center(child: Icon(Icons.broken_image, color: Colors.grey.shade400)),
+              ),
             ),
           ),
         );
@@ -2227,10 +2223,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                                     height: 80,
                                     color: Colors.grey.shade200,
                                     child: hasPhoto
-                                        ? Image.network(
-                                            photoUrl!,
+                                        ? CachedNetworkImage(
+                                            imageUrl: photoUrl!,
                                             fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) =>
+                                            errorWidget: (_, __, ___) =>
                                                 Icon(Icons.person, size: 40, color: Colors.grey.shade400),
                                           )
                                         : Icon(Icons.person, size: 40, color: Colors.grey.shade400),
@@ -2241,10 +2237,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                                   height: 80,
                                   color: Colors.grey.shade200,
                                   child: hasPhoto
-                                      ? Image.network(
-                                          photoUrl!,
+                                      ? CachedNetworkImage(
+                                          imageUrl: photoUrl!,
                                           fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) =>
+                                          errorWidget: (_, __, ___) =>
                                               Icon(Icons.person, size: 40, color: Colors.grey.shade400),
                                         )
                                       : Icon(Icons.person, size: 40, color: Colors.grey.shade400),
@@ -2527,24 +2523,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
     Widget buildThumb(int index, {bool showOverlay = false, int extra = 0}) {
       final url = urls[index];
-      Widget img = Image.network(
-        url,
+      Widget img = CachedNetworkImage(
+        imageUrl: url,
         fit: BoxFit.cover,
-        loadingBuilder: (ctx, child, progress) {
-          if (progress == null) return child;
-          return Container(
-            color: Colors.grey.shade200,
-            child: Center(
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                value: progress.expectedTotalBytes != null
-                    ? progress.cumulativeBytesLoaded / progress.expectedTotalBytes!
-                    : null,
-              ),
-            ),
-          );
-        },
-        errorBuilder: (_, __, ___) => Container(
+        placeholder: (ctx, url) => Container(
+          color: Colors.grey.shade200,
+          child: const Center(
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+        errorWidget: (_, __, ___) => Container(
           color: Colors.grey.shade300,
           child: Icon(Icons.broken_image, color: Colors.grey.shade500),
         ),
@@ -2681,7 +2669,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           minWidth: _kImageMinWidth,
           maxHeight: _kImageMaxHeight,
         ),
-        child: Image.network(url, fit: BoxFit.cover),
+        child: CachedNetworkImage(imageUrl: url, fit: BoxFit.cover),
       ),
     );
   }
@@ -4858,8 +4846,8 @@ class _ChatUserProfileSheet extends StatelessWidget {
                                   ? Stack(
                                       fit: StackFit.expand,
                                       children: [
-                                        Image.network(
-                                          photo.url,
+                                        CachedNetworkImage(
+                                          imageUrl: photo.url,
                                           fit: BoxFit.cover,
                                         ),
                                         BackdropFilter(
@@ -4876,10 +4864,10 @@ class _ChatUserProfileSheet extends StatelessWidget {
                                         ),
                                       ],
                                     )
-                                  : Image.network(
-                                      photo.url,
+                                  : CachedNetworkImage(
+                                      imageUrl: photo.url,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => const Icon(
+                                      errorWidget: (_, __, ___) => const Icon(
                                         Icons.photo,
                                         color: Colors.grey,
                                         size: 30,
@@ -4999,10 +4987,10 @@ class _GalleryViewerDialogState extends State<_GalleryViewerDialog> {
             onPageChanged: (i) => setState(() => _current = i),
             itemBuilder: (ctx, i) => InteractiveViewer(
               child: Center(
-                child: Image.network(
-                  widget.urls[i],
+                child: CachedNetworkImage(
+                  imageUrl: widget.urls[i],
                   fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => const Icon(
+                  errorWidget: (_, __, ___) => const Icon(
                     Icons.broken_image,
                     color: Colors.white54,
                     size: 64,

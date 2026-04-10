@@ -39,6 +39,7 @@ import '../utils/privacy_utils.dart';
 import '../utils/time_utils.dart';
 import 'package:ms2026/config/app_endpoints.dart';
 import 'widgets/typing_indicator.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class AdminChatScreen extends StatefulWidget {
   final String senderID;
@@ -2140,12 +2141,12 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                 topRight: Radius.circular(12),
                 bottomRight: Radius.circular(12),
               ),
-              child: Image.network(
-                imageUrl!,
+              child: CachedNetworkImage(
+                imageUrl: imageUrl!,
                 width: 56,
                 height: 64,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
+                errorWidget: (_, __, ___) => Container(
                   width: 56,
                   height: 64,
                   color: Colors.grey.shade300,
@@ -2322,37 +2323,28 @@ class _AdminChatScreenState extends State<AdminChatScreen>
           bottomLeft: isFromAdmin ? const Radius.circular(16) : const Radius.circular(4),
           bottomRight: isFromAdmin ? const Radius.circular(4) : const Radius.circular(16),
         ),
-        child: Image.network(
-          imageUrl,
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
           width: imgW,
           height: imgW * 0.75,
           fit: BoxFit.cover,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return Container(
-              width: imgW,
-              height: imgW * 0.75,
-              color: Colors.grey.shade200,
-              child: Center(
-                child: CircularProgressIndicator(
-                  value: loadingProgress.expectedTotalBytes != null
-                      ? loadingProgress.cumulativeBytesLoaded /
-                          loadingProgress.expectedTotalBytes!
-                      : null,
-                  color: _primaryGradient.colors[0],
-                  strokeWidth: 2,
-                ),
+          placeholder: (context, url) => Container(
+            width: imgW,
+            height: imgW * 0.75,
+            color: Colors.grey.shade200,
+            child: Center(
+              child: CircularProgressIndicator(
+                color: _primaryGradient.colors[0],
+                strokeWidth: 2,
               ),
-            );
-          },
-          errorBuilder: (context, error, stackTrace) {
-            return Container(
-              width: imgW,
-              height: imgW * 0.75,
-              color: Colors.grey.shade200,
-              child: Icon(Icons.broken_image, color: Colors.grey.shade400, size: 40),
-            );
-          },
+            ),
+          ),
+          errorWidget: (context, url, error) => Container(
+            width: imgW,
+            height: imgW * 0.75,
+            color: Colors.grey.shade200,
+            child: Icon(Icons.broken_image, color: Colors.grey.shade400, size: 40),
+          ),
         ),
       ),
     );
@@ -2367,22 +2359,19 @@ class _AdminChatScreenState extends State<AdminChatScreen>
 
     Widget thumb(int index, {bool showOverlay = false, int extra = 0}) {
       final url = urls[index];
-      Widget img = Image.network(
-        url,
+      Widget img = CachedNetworkImage(
+        imageUrl: url,
         fit: BoxFit.cover,
-        loadingBuilder: (ctx, child, progress) {
-          if (progress == null) return child;
-          return Container(
-            color: Colors.grey.shade200,
-            child: Center(
-              child: CircularProgressIndicator(
-                color: _primaryGradient.colors[0],
-                strokeWidth: 2,
-              ),
+        placeholder: (ctx, url) => Container(
+          color: Colors.grey.shade200,
+          child: Center(
+            child: CircularProgressIndicator(
+              color: _primaryGradient.colors[0],
+              strokeWidth: 2,
             ),
-          );
-        },
-        errorBuilder: (_, __, ___) => Container(
+          ),
+        ),
+        errorWidget: (_, __, ___) => Container(
           color: Colors.grey.shade200,
           child: Icon(Icons.broken_image, color: Colors.grey.shade400),
         ),
@@ -2529,42 +2518,31 @@ class _AdminChatScreenState extends State<AdminChatScreen>
             )
           ],
         ),
-        child: Image.network(
-          imageUrl,
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
           width: 220,
           height: 160,
           fit: BoxFit.cover,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return Container(
-              width: 220,
-              height: 160,
-              decoration: BoxDecoration(
-                gradient: _secondaryGradient,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Center(
-                child: CircularProgressIndicator(
-                  value: loadingProgress.expectedTotalBytes != null
-                      ? loadingProgress.cumulativeBytesLoaded /
-                          loadingProgress.expectedTotalBytes!
-                      : null,
-                  color: _accentColor,
-                ),
-              ),
-            );
-          },
-          errorBuilder: (context, error, stackTrace) {
-            return Container(
-              width: 220,
-              height: 160,
-              decoration: BoxDecoration(
-                gradient: _secondaryGradient,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(Icons.broken_image, color: _lightTextColor, size: 40),
-            );
-          },
+          placeholder: (context, url) => Container(
+            width: 220,
+            height: 160,
+            decoration: BoxDecoration(
+              gradient: _secondaryGradient,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Center(
+              child: CircularProgressIndicator(color: _accentColor),
+            ),
+          ),
+          errorWidget: (context, url, error) => Container(
+            width: 220,
+            height: 160,
+            decoration: BoxDecoration(
+              gradient: _secondaryGradient,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(Icons.broken_image, color: _lightTextColor, size: 40),
+          ),
         ),
       ),
     );
@@ -2720,10 +2698,10 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                                         height: 80,
                                         color: Colors.grey.shade200,
                                         child: hasPhoto
-                                            ? Image.network(
-                                                photoUrl!,
+                                            ? CachedNetworkImage(
+                                                imageUrl: photoUrl!,
                                                 fit: BoxFit.cover,
-                                                errorBuilder: (_, __, ___) =>
+                                                errorWidget: (_, __, ___) =>
                                                     Icon(Icons.person, size: 40, color: Colors.grey.shade400),
                                               )
                                             : Icon(Icons.person, size: 40, color: Colors.grey.shade400),
@@ -2734,10 +2712,10 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                                       height: 80,
                                       color: Colors.grey.shade200,
                                       child: hasPhoto
-                                          ? Image.network(
-                                              photoUrl!,
+                                          ? CachedNetworkImage(
+                                              imageUrl: photoUrl!,
                                               fit: BoxFit.cover,
-                                              errorBuilder: (_, __, ___) =>
+                                              errorWidget: (_, __, ___) =>
                                                   Icon(Icons.person, size: 40, color: Colors.grey.shade400),
                                             )
                                           : Icon(Icons.person, size: 40, color: Colors.grey.shade400),
@@ -3039,19 +3017,19 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                           sigmaX: PrivacyUtils.kStandardBlurSigmaX,
                           sigmaY: PrivacyUtils.kStandardBlurSigmaY,
                         ),
-                        child: Image.network(
-                          images[index],
+                        child: CachedNetworkImage(
+                          imageUrl: images[index],
                           fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
+                          errorWidget: (_, __, ___) => Container(
                             color: Colors.grey.shade200,
                             child: Icon(Icons.image, size: 20, color: Colors.grey.shade400),
                           ),
                         ),
                       )
-                    : Image.network(
-                        images[index],
+                    : CachedNetworkImage(
+                        imageUrl: images[index],
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
+                        errorWidget: (_, __, ___) => Container(
                           color: Colors.grey.shade200,
                           child: Icon(Icons.image, size: 20, color: Colors.grey.shade400),
                         ),
@@ -3285,16 +3263,13 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                       onTap: () {},
                       child: Center(
                         child: InteractiveViewer(
-                          child: Image.network(
-                            images[i],
+                          child: CachedNetworkImage(
+                            imageUrl: images[i],
                             fit: BoxFit.contain,
-                            loadingBuilder: (_, child, progress) =>
-                                progress == null
-                                    ? child
-                                    : const Center(
-                                        child: CircularProgressIndicator(
-                                            color: Colors.white)),
-                            errorBuilder: (_, __, ___) => const Icon(
+                            placeholder: (_, __) => const Center(
+                              child: CircularProgressIndicator(color: Colors.white),
+                            ),
+                            errorWidget: (_, __, ___) => const Icon(
                                 Icons.broken_image,
                                 color: Colors.white54,
                                 size: 64),
@@ -3769,12 +3744,12 @@ class _AdminChatScreenState extends State<AdminChatScreen>
           if (imageUrl != null && imageUrl.isNotEmpty) ...[
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: Image.network(
-                imageUrl,
+              child: CachedNetworkImage(
+                imageUrl: imageUrl,
                 width: 40,
                 height: 40,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
+                errorWidget: (_, __, ___) =>
                     Icon(Icons.image, size: 40, color: _lightTextColor),
               ),
             ),

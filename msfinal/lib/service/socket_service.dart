@@ -53,6 +53,7 @@ class SocketService {
   final _callRingingCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _callUserOfflineCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _callBusyCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _callBlockedCtrl = StreamController<Map<String, dynamic>>.broadcast();
 
   // ── Audio-to-video switch streams ─────────────────────────────────────────
 
@@ -95,6 +96,9 @@ class SocketService {
 
   /// Emitted when the recipient is already in another active call.
   Stream<Map<String, dynamic>> get onCallBusy => _callBusyCtrl.stream;
+
+  /// Emitted when the call is rejected because either party has blocked the other.
+  Stream<Map<String, dynamic>> get onCallBlocked => _callBlockedCtrl.stream;
 
   // Audio-to-video switch streams
   /// Emitted when the other party requests to upgrade the call to video.
@@ -221,6 +225,10 @@ class SocketService {
 
     _socket!.on('call_busy', (data) {
       _callBusyCtrl.add(_toMap(data));
+    });
+
+    _socket!.on('call_blocked', (data) {
+      _callBlockedCtrl.add(_toMap(data));
     });
 
     // ── Audio-to-video switch events ─────────────────────────────────────────
@@ -728,5 +736,7 @@ class SocketService {
     _callCancelledCtrl.close();
     _callEndedCtrl.close();
     _callRingingCtrl.close();
+    _callBusyCtrl.close();
+    _callBlockedCtrl.close();
   }
 }

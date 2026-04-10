@@ -179,7 +179,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   String? _hoveredMessageId;
 
   // Block / photo-privacy state
-  bool _isBlocked = false;
+  bool _isBlocked = false;       // I have blocked the other user
+  bool _isBlockedByReceiver = false; // The other user has blocked me
   bool _isLoadingBlock = true;
   String _photoRequestStatus = 'not_sent';
   String _privacyStatus = 'private';
@@ -513,14 +514,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     final myId = userData["id"].toString();
 
     final service = ProfileService();
-    final isBlocked = await service.isUserBlocked(
+    final status = await service.getBlockStatus(
       myId: myId,
       userId: widget.receiverId,
     );
 
     if (mounted) {
       setState(() {
-        _isBlocked = isBlocked;
+        _isBlocked = status['is_blocked'] ?? false;
+        _isBlockedByReceiver = status['is_blocked_by'] ?? false;
+        _isLoadingBlock = false;
       });
     }
   }
@@ -822,8 +825,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   // SEND MESSAGE (with reply support)
   Future<void> _sendMessage() async {
-    if (_isBlocked) return;
-    if (_isSending) return;
+    if (_isBlocked || _isBlockedByReceiver) return;
     final messageText = _messageController.text.trim();
     if (messageText.isEmpty) return;
 
@@ -912,7 +914,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   bool _isSendingImage = false;
 
   Future<void> _pickAndSendImages() async {
-    if (_isBlocked || _isSendingImage) return;
+    if (_isBlocked || _isBlockedByReceiver || _isSendingImage) return;
     final picker = ImagePicker();
     List<XFile> picked = [];
     try {
@@ -1013,7 +1015,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   // ── VOICE MESSAGE RECORDING ──────────────────────────────────────────────
 
   Future<void> _startRecording() async {
-    if (_isBlocked || _isRecording) return;
+    if (_isBlocked || _isBlockedByReceiver || _isRecording) return;
 
     // Request microphone permission (native only; web uses browser prompt)
     if (!kIsWeb) {
@@ -2787,7 +2789,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   }
 
   Widget _bottomInputBar() {
-    if (_isBlocked) {
+    if (_isBlocked || _isBlockedByReceiver) {
       return Container(
         padding: EdgeInsets.only(
           left: 16,
@@ -2807,7 +2809,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             Icon(Icons.block, color: Colors.red.shade400, size: 18),
             const SizedBox(width: 8),
             Text(
-              'You have blocked this user',
+              _isBlocked
+                  ? 'You have blocked this user'
+                  : 'You cannot message this user',
               style: TextStyle(
                 color: Colors.red.shade400,
                 fontSize: 14,
@@ -4070,7 +4074,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           ),
           if (!kIsWeb)
             IconButton(
-              onPressed: () {
+              onPressed: (_isBlocked || _isBlockedByReceiver) ? null : () {
                 // Prevent starting a new call if one is already active
                 if (CallOverlayManager().isCallActive) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -4097,11 +4101,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   ),
                 );
               },
-              icon: const Icon(Icons.call, color: Colors.white),
+              icon: Icon(Icons.call,
+                  color: (_isBlocked || _isBlockedByReceiver) ? Colors.white38 : Colors.white),
             ),
           if (!kIsWeb)
             IconButton(
-              onPressed: () {
+              onPressed: (_isBlocked || _isBlockedByReceiver) ? null : () {
                 // Prevent starting a new call if one is already active
                 if (CallOverlayManager().isCallActive) {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -4128,7 +4133,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                   ),
                 );
               },
-              icon: const Icon(Icons.videocam, color: Colors.white),
+              icon: Icon(Icons.videocam,
+                  color: (_isBlocked || _isBlockedByReceiver) ? Colors.white38 : Colors.white),
             ),
           PopupMenuButton<String>(
             onSelected: (String result) {

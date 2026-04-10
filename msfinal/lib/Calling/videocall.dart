@@ -89,6 +89,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   StreamSubscription<Map<String, dynamic>>? _socketRingingSub;
   StreamSubscription<Map<String, dynamic>>? _socketUserOfflineSub;
   StreamSubscription<Map<String, dynamic>>? _socketBusySub;
+  StreamSubscription<Map<String, dynamic>>? _socketBlockedSub;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   String? _connectionStatus;
 
@@ -301,6 +302,15 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
         Future.delayed(const Duration(seconds: 2), () {
           if (!_ending) _endCall();
         });
+      }
+    });
+    // Server rejected the call because either party has blocked the other.
+    _socketBlockedSub = SocketService().onCallBlocked.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
+      if (!_ending && mounted) {
+        unawaited(_stopRingtone());
+        _endCall();
       }
     });
   }
@@ -730,12 +740,14 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     _socketRingingSub?.cancel();
     _socketUserOfflineSub?.cancel();
     _socketBusySub?.cancel();
+    _socketBlockedSub?.cancel();
     _socketAcceptedSub = null;
     _socketRejectedSub = null;
     _socketEndedSub = null;
     _socketRingingSub = null;
     _socketUserOfflineSub = null;
     _socketBusySub = null;
+    _socketBlockedSub = null;
 
     // Always stop ringtone when ending call
     await _stopRingtone();
@@ -1326,6 +1338,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     _socketRingingSub?.cancel();
     _socketUserOfflineSub?.cancel();
     _socketBusySub?.cancel();
+    _socketBlockedSub?.cancel();
     _connectivitySubscription?.cancel();
     _controlsHideTimer?.cancel();
     _ringtoneRestartTimer?.cancel();

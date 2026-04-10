@@ -383,8 +383,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           // Show cached messages immediately; server response will replace them.
           _isFirstLoad = false;
         });
-        // Perform initial scroll only once, then unlock
-        _performInitialScroll();
+        // Pre-position to the bottom so the user sees the latest cached message
+        // while waiting for the server. Do NOT unlock yet — the definitive scroll
+        // and unlock happen after the authoritative server data arrives below.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _scrollController.hasClients) {
+            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+          }
+        });
       }
     });
 
@@ -401,7 +407,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         _currentMessagePage = 1;
         _messagesCacheVersion++;
       });
-      // Perform initial scroll only once, then unlock
+      // Scroll to the last message and unlock once the server data is authoritative.
+      // _initialScrollDone is still false here (cache no longer claims it), so this
+      // always fires and positions the list at the very last message without jumping.
       _performInitialScroll();
       _saveMessagesToLocalCache();
     }).catchError((e) {
@@ -427,7 +435,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       final existingIdx = _cachedMessages.indexWhere(
         (m) => m['messageId']?.toString() == newMsg['messageId']?.toString(),
       );
-      final shouldScroll = _forceScrollToBottom || _isNearBottom();
+
+      // Only auto-scroll for genuinely new messages (not server echoes of our own
+      // optimistically-added messages). An in-place update (existingIdx >= 0) means
+      // we already added and scrolled for this message optimistically.
+      final isNewMessage = existingIdx < 0;
+      final shouldScroll = isNewMessage && (_forceScrollToBottom || _isNearBottom());
 
       setState(() {
         if (existingIdx >= 0) {
@@ -873,7 +886,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       final bool receiverViewingThisChat = _isReceiverViewingThisChat;
 
       // Prepare message data
-      final messageData = {
+      final messageData = <String, dynamic>{
         'messageId': messageId,
         'senderId': widget.currentUserId,
         'receiverId': widget.receiverId,
@@ -903,9 +916,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       _cancelReply();
       _cancelEdit();
 
-      // Force scroll to bottom after own message
-      _forceScrollToBottom = true;
-      _scrollToBottom();
+      // Optimistic UI: add message immediately so the list grows exactly once.
+      // The server echo will find this entry by messageId (existingIdx >= 0) and
+      // update it in-place (read/delivered status) without appending a duplicate
+      // or resetting the scroll position.
+      setState(() {
+        _cachedMessages.add(Map<String, dynamic>.from(messageData));
+        _messagesCacheVersion++;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
       // Send via Socket.IO
       _socketService.sendMessage(
@@ -986,21 +1005,37 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       );
 
       if (!mounted) return;
-      _forceScrollToBottom = true;
-      _scrollToBottom();
 
       final validUrls = urls.whereType<String>().toList();
       if (validUrls.isEmpty) return;
 
+      final timestamp = DateTime.now();
       if (validUrls.length == 1) {
-        // Single image — send as normal 'image' message
+        // Single image — optimistic UI then send
+        final messageId = _uuid.v4();
+        setState(() {
+          _cachedMessages.add({
+            'messageId': messageId,
+            'senderId': widget.currentUserId,
+            'receiverId': widget.receiverId,
+            'message': validUrls.first,
+            'messageType': 'image',
+            'timestamp': timestamp,
+            'isRead': receiverViewingThisChat,
+            'isDelivered': receiverViewingThisChat,
+            'isDeletedForSender': false,
+            'isDeletedForReceiver': false,
+          });
+          _messagesCacheVersion++;
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
         _socketService.sendMessage(
           chatRoomId:        widget.chatRoomId,
           senderId:          widget.currentUserId,
           receiverId:        widget.receiverId,
           message:           validUrls.first,
           messageType:       'image',
-          messageId:         _uuid.v4(),
+          messageId:         messageId,
           isReceiverViewing: receiverViewingThisChat,
           user1Name:         widget.currentUserName,
           user2Name:         widget.receiverName,
@@ -1008,14 +1043,31 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           user2Image:        widget.receiverImage,
         );
       } else {
-        // Multiple images — send as a single 'image_gallery' message
+        // Multiple images — optimistic UI then send
+        final messageId = _uuid.v4();
+        setState(() {
+          _cachedMessages.add({
+            'messageId': messageId,
+            'senderId': widget.currentUserId,
+            'receiverId': widget.receiverId,
+            'message': jsonEncode(validUrls),
+            'messageType': 'image_gallery',
+            'timestamp': timestamp,
+            'isRead': receiverViewingThisChat,
+            'isDelivered': receiverViewingThisChat,
+            'isDeletedForSender': false,
+            'isDeletedForReceiver': false,
+          });
+          _messagesCacheVersion++;
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
         _socketService.sendMessage(
           chatRoomId:        widget.chatRoomId,
           senderId:          widget.currentUserId,
           receiverId:        widget.receiverId,
           message:           jsonEncode(validUrls),
           messageType:       'image_gallery',
-          messageId:         _uuid.v4(),
+          messageId:         messageId,
           isReceiverViewing: receiverViewingThisChat,
           user1Name:         widget.currentUserName,
           user2Name:         widget.receiverName,
@@ -1151,8 +1203,24 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         chatRoomId: widget.chatRoomId,
       );
 
-      _forceScrollToBottom = true;
-      _scrollToBottom();
+      // Optimistic UI: add the voice message immediately so the list grows once.
+      setState(() {
+        _cachedMessages.add({
+          'messageId': messageId,
+          'senderId': widget.currentUserId,
+          'receiverId': widget.receiverId,
+          'message': voiceUrl,
+          'messageType': 'voice',
+          'timestamp': DateTime.now(),
+          'isRead': receiverViewingThisChat,
+          'isDelivered': receiverViewingThisChat,
+          'isDeletedForSender': false,
+          'isDeletedForReceiver': false,
+          'duration': _recordDuration,
+        });
+        _messagesCacheVersion++;
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
       _socketService.sendMessage(
         chatRoomId:        widget.chatRoomId,
@@ -1397,13 +1465,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       }
     }
 
+    // A single post-frame callback is sufficient. ListView (non-lazy) measures all
+    // children in a single pass so the maxScrollExtent is correct by the first frame.
+    // The previous double-callback caused visible double-jumping.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (_scrollController.hasClients) {
         doScroll();
-        // Schedule a second scroll for the next frame to handle cases where
-        // the list hasn't finished measuring all items in the first frame.
-        WidgetsBinding.instance.addPostFrameCallback((_) => doScroll());
       } else {
         // Controller not yet attached to a scroll view; retry after a short delay.
         Future.delayed(const Duration(milliseconds: 50), doScroll);
@@ -3414,11 +3482,21 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         _lastBuiltHighlightId == _highlightedMessageId &&
         _lastBuiltIsLoadingMore == _isLoadingMore;
 
+    // IMPORTANT: always return the SAME widget-type hierarchy (RefreshIndicator > ListView)
+    // regardless of whether we use the cache or not. Changing the widget type at the same
+    // tree position causes Flutter to unmount/remount the ListView, which resets the scroll
+    // position and causes the visible "shaking" on every incoming/sent message.
     if (canUseCache) {
-      return ListView(
-        controller: _scrollController,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
-        children: _cachedMessageWidgets!,
+      return RefreshIndicator(
+        onRefresh: _refreshMessages,
+        child: ListView(
+          controller: _scrollController,
+          physics: _isHorizontalDragging
+              ? const NeverScrollableScrollPhysics()
+              : const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
+          children: _cachedMessageWidgets!,
+        ),
       );
     }
 

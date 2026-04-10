@@ -592,7 +592,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
             _syncOverlayState();
           },
           onUserOffline: (_, __, ___) {
-            _endCall();
+            if (!_isSwitchingToVideo) _endCall();
           },
           onError: (code, msg) {
             debugPrint('Agora error: $code $msg');

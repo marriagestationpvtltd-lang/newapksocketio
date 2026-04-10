@@ -53,6 +53,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   bool _foregroundServiceStarted = false;
   bool _ending = false;
   bool _connecting = false;
+  bool _isSwitchingToVideo = false; // true while transitioning to a video call
 
   Timer? _ringTimer;
   Timer? _callTimer;
@@ -481,7 +482,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
             _syncOverlayState();
           },
           onUserOffline: (_, __, ___) {
-            _endCall();
+            if (!_isSwitchingToVideo) _endCall();
           },
           onError: (c, m) {
             debugPrint('Agora error $c $m');
@@ -730,6 +731,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   /// Navigate to IncomingVideoCallScreen on the same Agora channel.
   Future<void> _navigateToVideoCall() async {
     if (_ending) return;
+    _isSwitchingToVideo = true; // Prevent onUserOffline from ending the call
     // Cancel all subscriptions to avoid interference.
     _ringTimer?.cancel();
     _callTimer?.cancel();

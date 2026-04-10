@@ -283,6 +283,18 @@ class _ChatWindowState extends State<ChatWindow> {
       }
     }
 
+    // Parse report payload
+    Map<String, dynamic>? reportData;
+    if (msgType == 'report') {
+      try {
+        final decoded = jsonDecode(rawMessage) as Map<String, dynamic>;
+        reportData = decoded;
+        displayMessage = '🚩 Profile Report';
+      } catch (_) {
+        displayMessage = '🚩 Profile Report';
+      }
+    }
+
     // Treat a message as deleted if it is deleted for both or either side
     // (admin sees all messages in the room).
     final bool deleted = msg['isDeletedForSender'] == true ||
@@ -308,6 +320,7 @@ class _ChatWindowState extends State<ChatWindow> {
       if (callStatus != null) 'callStatus': callStatus,
       'callDuration': callDuration,
       if (profileData != null) 'profileData': profileData,
+      if (reportData != null) 'reportData': reportData,
     };
   }
 
@@ -1580,6 +1593,8 @@ class _ChatWindowState extends State<ChatWindow> {
         return '🎤 Voice message';
       case 'profile_card':
         return '👤 Profile shared';
+      case 'report':
+        return '🚩 Profile Report';
       case 'call':
         return _callLabel(
           data['callType']?.toString() ?? 'audio',
@@ -2881,6 +2896,9 @@ class _ChatWindowState extends State<ChatWindow> {
                                     canEdit,
                                     canMutate,
                                     replyPayload,
+                                    data.containsKey('reportData')
+                                        ? data['reportData'] as Map<String, dynamic>
+                                        : null,
                                   ),
                                 ),
                               ),
@@ -3374,7 +3392,8 @@ class _ChatWindowState extends State<ChatWindow> {
       bool unsent = false,
       bool canEdit = false,
       bool canMutate = false,
-      Map<String, dynamic>? replyPayload]) {
+      Map<String, dynamic>? replyPayload,
+      Map<String, dynamic>? reportData]) {
     const kPrimary = Color(0xFFD81B60);
     const kText = Color(0xFF1E293B);
     const kMuted = Color(0xFF64748B);
@@ -4047,6 +4066,185 @@ class _ChatWindowState extends State<ChatWindow> {
 
       return _buildMessageWithActions(
         bubble: bubble,
+        isSentByMe: isSentByMe,
+        canEdit: false,
+        canMutate: canMutate,
+        messageId: messageId,
+        replyPayload: replyPayload,
+      );
+    }
+
+    if (type == 'report') {
+      final rd = reportData ?? {};
+      final reportReason = rd['reportReason']?.toString() ?? '';
+      final reportedUserName = rd['reportedUserName']?.toString() ?? '';
+      final reportedUserId = rd['reportedUserId']?.toString() ?? '';
+      final initials = reportedUserName.isNotEmpty
+          ? reportedUserName.trim().split(' ').map((w) => w.isEmpty ? '' : w[0].toUpperCase()).take(2).join()
+          : '?';
+
+      final reportBubble = Column(
+        crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (replyPreview != null) replyPreview,
+          if (statusMessage != null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 6),
+              decoration: BoxDecoration(
+                color: isSentByMe ? kPrimary : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                displayedMessage,
+                style: TextStyle(
+                  color: isSentByMe ? Colors.white : kText,
+                  fontSize: 13,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            )
+          else
+            Container(
+              width: MediaQuery.of(context).size.width * 0.22,
+              margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFFDE7),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFF9A825), width: 1.2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.amber.withOpacity(0.18),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFFF9A825), Color(0xFFF57F17)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(15),
+                        topRight: Radius.circular(15),
+                      ),
+                    ),
+                    child: Row(
+                      children: const [
+                        Icon(Icons.flag_rounded, color: Colors.white, size: 15),
+                        SizedBox(width: 6),
+                        Text(
+                          'PROFILE REPORTED',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 11,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Reported user card
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        CircleAvatar(
+                          radius: 22,
+                          backgroundColor: const Color(0xFFF9A825),
+                          child: Text(
+                            initials,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (reportedUserName.isNotEmpty)
+                                Text(
+                                  reportedUserName,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF4A3000),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              if (reportedUserId.isNotEmpty)
+                                Text(
+                                  'User ID: $reportedUserId',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Divider
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Divider(color: const Color(0xFFF9A825).withOpacity(0.4), height: 1),
+                  ),
+                  // Reason
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Report Reason',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFF57F17),
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          reportReason.isNotEmpty ? reportReason : 'No reason provided',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF4A3000),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  footer(),
+                  const SizedBox(height: 4),
+                ],
+              ),
+            ),
+        ],
+      );
+
+      return _buildMessageWithActions(
+        bubble: reportBubble,
         isSentByMe: isSentByMe,
         canEdit: false,
         canMutate: canMutate,

@@ -2583,9 +2583,9 @@ class _AdminChatScreenState extends State<AdminChatScreen>
             privacy: privacy, photoRequest: photoRequest)
         : !shouldBlurPhotoFallback;
 
-    final String userId = profileData['userId']?.toString() ?? '';
-    final String firstName = profileData['firstName']?.toString() ?? '';
-    final String lastName = profileData['lastName']?.toString() ?? '';
+    final String userId = (profileData['userId'] ?? profileData['id'] ?? '').toString();
+    final String firstName = (profileData['firstName'] ?? profileData['first'] ?? '').toString();
+    final String lastName = (profileData['lastName'] ?? profileData['last'] ?? '').toString();
     final String fullName = '$firstName $lastName'.trim();
     final String displayName =
         fullName.isNotEmpty ? fullName : (profileData['name']?.toString() ?? 'Unknown');
@@ -2785,9 +2785,9 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                                   ),
                                 ],
                               ),
-                            if (profileData['location'] != null &&
-                                profileData['location'].toString().isNotEmpty &&
-                                profileData['location'] != 'Location not specified')
+                            if ((profileData['location'] ?? profileData['country']) != null &&
+                                (profileData['location'] ?? profileData['country']).toString().isNotEmpty &&
+                                (profileData['location'] ?? profileData['country']) != 'Location not specified')
                               Padding(
                                 padding: const EdgeInsets.only(top: 4),
                                 child: Row(
@@ -2797,7 +2797,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                                     const SizedBox(width: 4),
                                     Flexible(
                                       child: Text(
-                                        profileData['location'],
+                                        (profileData['location'] ?? profileData['country']).toString(),
                                         style: TextStyle(fontSize: 12, color: _lightTextColor),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,

@@ -5713,7 +5713,7 @@ class _ChatWindowState extends State<ChatWindow> {
                 title: const Text("Forward", style: TextStyle(fontSize: 14)),
                 onTap: () {
                   Navigator.pop(context);
-                  _forwardImage(imagePayload, msgType!);
+                  _forwardImage(imagePayload!, msgType ?? 'image');
                 },
               ),
             if (isSentByMe && canEdit) ...[

@@ -70,7 +70,7 @@ try {
     // 🔍 CHECK ONLY SAME TYPE
     // ===============================
     $checkStmt = $pdo->prepare("
-        SELECT id 
+        SELECT id, status, updated_at
         FROM proposals 
         WHERE sender_id = :sender_id 
         AND receiver_id = :receiver_id 
@@ -89,6 +89,20 @@ try {
     // ===============================
     if ($checkStmt->rowCount() > 0) {
         $row = $checkStmt->fetch(PDO::FETCH_ASSOC);
+
+        // Block re-send within 12 hours of rejection
+        if ($row['status'] === 'rejected' && !empty($row['updated_at'])) {
+            $rejectedAt = strtotime($row['updated_at']);
+            $hoursSinceRejection = (time() - $rejectedAt) / 3600;
+            if ($hoursSinceRejection < 12) {
+                $remainingHours = ceil(12 - $hoursSinceRejection);
+                echo json_encode([
+                    "success" => false,
+                    "message" => "You can try again after $remainingHours hour(s)"
+                ]);
+                exit;
+            }
+        }
 
         $updateStmt = $pdo->prepare("
             UPDATE proposals 

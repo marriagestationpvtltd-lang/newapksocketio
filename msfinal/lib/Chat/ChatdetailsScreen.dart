@@ -300,9 +300,74 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     }
   }
 
+  // ── Local message cache helpers ───────────────────────────────────────────
+
+  /// Converts a message map to a JSON-serialisable form (DateTime → ISO string).
+  Map<String, dynamic> _serializeMessage(Map<String, dynamic> msg) {
+    final m = Map<String, dynamic>.from(msg);
+    if (m['timestamp'] is DateTime) {
+      m['timestamp'] = (m['timestamp'] as DateTime).toIso8601String();
+    }
+    return m;
+  }
+
+  /// Saves the most recent [_messagesPerPage] messages to SharedPreferences.
+  Future<void> _saveMessagesToLocalCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final toSave = _cachedMessages.length > _messagesPerPage
+          ? _cachedMessages.sublist(_cachedMessages.length - _messagesPerPage)
+          : _cachedMessages;
+      final encoded = jsonEncode(toSave.map(_serializeMessage).toList());
+      await prefs.setString('chat_msgs_${widget.chatRoomId}', encoded);
+    } catch (e) {
+      debugPrint('Failed to save messages to local cache: $e');
+    }
+  }
+
+  /// Loads previously cached messages from SharedPreferences.
+  /// Returns an empty list when no cache exists or on error.
+  Future<List<Map<String, dynamic>>> _loadMessagesFromLocalCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('chat_msgs_${widget.chatRoomId}');
+      if (raw == null) return [];
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      return decoded.map((item) {
+        final m = Map<String, dynamic>.from(item as Map);
+        // Re-parse ISO string timestamps back to DateTime
+        if (m['timestamp'] is String) {
+          final dt = DateTime.tryParse(m['timestamp'] as String);
+          if (dt != null) m['timestamp'] = dt;
+        }
+        return m;
+      }).toList();
+    } catch (e) {
+      debugPrint('Failed to load messages from local cache: $e');
+      return [];
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+
   void _listenToMessages() {
-    // Load initial page via Socket.IO request-response
+    // Show locally cached messages immediately so the screen is usable at once
     _socketService.joinRoom(widget.chatRoomId);
+    _loadMessagesFromLocalCache().then((cached) {
+      if (!mounted) return;
+      if (cached.isNotEmpty && _isFirstLoad) {
+        setState(() {
+          _cachedMessages = cached;
+          _messagesCacheVersion++;
+          // Keep _isFirstLoad=true so the skeleton shows until server data arrives,
+          // but mark _isFirstLoad false here to remove the full-screen loader.
+          _isFirstLoad = false;
+        });
+        _scrollToBottom(jump: true);
+      }
+    });
+
+    // Load initial page via Socket.IO request-response
     _socketService.getMessages(widget.chatRoomId, page: 1, limit: _messagesPerPage).then((result) {
       if (!mounted) return;
       final messages = List<Map<String, dynamic>>.from(
@@ -316,6 +381,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         _messagesCacheVersion++;
       });
       _scrollToBottom(jump: true);
+      _saveMessagesToLocalCache();
     }).catchError((e) {
       debugPrint('Error loading messages: $e');
       if (mounted) setState(() => _isFirstLoad = false);
@@ -350,6 +416,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       if (shouldScroll) {
         WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
       }
+      _saveMessagesToLocalCache();
     });
 
     // Listen for edits and deletes
@@ -369,6 +436,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           };
           _messagesCacheVersion++;
         });
+        _saveMessagesToLocalCache();
       }
     });
 
@@ -387,6 +455,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             };
             _messagesCacheVersion++;
           });
+          _saveMessagesToLocalCache();
         }
       } else {
         final idx = _cachedMessages.indexWhere((m) => m['messageId']?.toString() == msgId);
@@ -400,6 +469,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             };
             _messagesCacheVersion++;
           });
+          _saveMessagesToLocalCache();
         }
       }
     });

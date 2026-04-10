@@ -2468,6 +2468,11 @@ class _ChatWindowState extends State<ChatWindow> {
       _messageIndexMap.clear();
       _replyHighlightTimer?.cancel();
       _highlightedMessageId = null;
+      // Clear any active reply / edit state so the input bar starts fresh.
+      _replyingTo = null;
+      _editingMessageId = null;
+      _editingOriginalText = '';
+      _messageController.clear();
       // Re-fetch match details for the newly selected user
       if (chatProvider.id != null) Future.microtask(_fetchMatchDetails);
       // Reset user-typing state and subscribe to new user's typing status.
@@ -3548,6 +3553,7 @@ class _ChatWindowState extends State<ChatWindow> {
         canMutate: canMutate,
         messageId: messageId,
         replyPayload: replyPayload,
+        onForward: () => _forwardImage(imageUrl, 'image'),
       );
     }
 
@@ -3597,6 +3603,7 @@ class _ChatWindowState extends State<ChatWindow> {
         canMutate: canMutate,
         messageId: messageId,
         replyPayload: replyPayload,
+        onForward: () => _forwardImage(message, 'image_gallery'),
       );
     }
 
@@ -4316,6 +4323,7 @@ class _ChatWindowState extends State<ChatWindow> {
     required bool canMutate,
     required String? messageId,
     required Map<String, dynamic>? replyPayload,
+    VoidCallback? onForward,
   }) {
     if (messageId == null || replyPayload == null) {
       return Align(
@@ -4341,6 +4349,7 @@ class _ChatWindowState extends State<ChatWindow> {
           canEdit ? () => _startEdit(messageId, replyPayload['message']?.toString() ?? '') : null,
       onDelete: canMutate ? () => _deleteMessage(messageId) : null,
       onUnsend: canMutate ? () => _unsendMessage(messageId) : null,
+      onForward: onForward,
     );
   }
 
@@ -5668,6 +5677,14 @@ class _ChatWindowState extends State<ChatWindow> {
     required bool canEdit,
     required bool canMutate,
   }) {
+    final String? msgType = replyPayload['type']?.toString();
+    final bool isImageMsg = msgType == 'image' || msgType == 'image_gallery';
+    // For single images the URL lives in imageUrl; for galleries it's the raw
+    // JSON array stored in message by _messagePreviewText's default branch.
+    final String? imagePayload = msgType == 'image'
+        ? replyPayload['imageUrl']?.toString()
+        : (msgType == 'image_gallery' ? replyPayload['message']?.toString() : null);
+    final bool canForward = isImageMsg && imagePayload != null && imagePayload.isNotEmpty;
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -5690,6 +5707,15 @@ class _ChatWindowState extends State<ChatWindow> {
                 );
               },
             ),
+            if (canForward)
+              ListTile(
+                leading: const Icon(Icons.forward_rounded, size: 20, color: Color(0xFF10B981)),
+                title: const Text("Forward", style: TextStyle(fontSize: 14)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _forwardImage(imagePayload, msgType!);
+                },
+              ),
             if (isSentByMe && canEdit) ...[
               ListTile(
                 leading: const Icon(Icons.edit, size: 20, color: Color(0xFF0EA5E9)),
@@ -5771,6 +5797,67 @@ class _ChatWindowState extends State<ChatWindow> {
         );
       }
     });
+  }
+
+  // ── FORWARD IMAGE ────────────────────────────────────────────────────────
+
+  /// Shows a user-picker dialog and forwards [imagePayload] (a URL for single
+  /// images or a JSON array for galleries) to the selected user's chat room
+  /// without re-uploading the image bytes.
+  Future<void> _forwardImage(String imagePayload, String messageType) async {
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final List<Map<String, String>> users = List<Map<String, String>>.from(chatProvider.chatList);
+    if (users.isEmpty) return;
+
+    final selectedUser = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => _ForwardUserPickerDialog(users: users),
+    );
+
+    if (selectedUser == null) return;
+
+    final String targetId = selectedUser['id'] ?? '';
+    final String targetName = selectedUser['namee'] ?? 'User';
+    final String targetAvatar = selectedUser['profile_picture'] ?? '';
+    if (targetId.isEmpty) return;
+
+    try {
+      final connected = await _socketService.ensureConnected();
+      if (!connected) throw Exception('Socket not connected');
+
+      _socketService.sendMessage(
+        chatRoomId: AdminSocketService.chatRoomId(targetId),
+        receiverId: targetId,
+        message: imagePayload,
+        messageType: messageType,
+        messageId: 'fwd_${DateTime.now().millisecondsSinceEpoch}_$senderId',
+        receiverName: targetName,
+        receiverImage: targetAvatar,
+      );
+
+      await NotificationService.sendChatNotification(
+        recipientUserId: targetId,
+        senderName: "Admin",
+        senderId: '1',
+        message: '📷 Photo',
+        extraData: {
+          'chatId': targetId,
+          'screen': 'chat',
+        },
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Photo forwarded to $targetName')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to forward photo: $e')),
+        );
+      }
+    }
   }
 
   // ── INLINE REPLY / EDIT ─────────────────────────────────────────────────
@@ -5928,6 +6015,7 @@ class _HoverableMessageBubble extends StatefulWidget {
     this.onEdit,
     this.onDelete,
     this.onUnsend,
+    this.onForward,
     this.canEdit = false,
     this.canDelete = false,
     this.canUnsend = false,
@@ -5939,6 +6027,7 @@ class _HoverableMessageBubble extends StatefulWidget {
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
   final VoidCallback? onUnsend;
+  final VoidCallback? onForward;
   final bool canEdit;
   final bool canDelete;
   final bool canUnsend;
@@ -5986,6 +6075,7 @@ class _HoverableMessageBubbleState extends State<_HoverableMessageBubble>
       onEdit: widget.onEdit,
       onDelete: widget.onDelete,
       onUnsend: widget.onUnsend,
+      onForward: widget.onForward,
       canEdit: widget.canEdit,
       canDelete: widget.canDelete,
       canUnsend: widget.canUnsend,
@@ -6029,6 +6119,7 @@ class _MessageActionMenu extends StatelessWidget {
     this.onEdit,
     this.onDelete,
     this.onUnsend,
+    this.onForward,
     this.canEdit = false,
     this.canDelete = false,
     this.canUnsend = false,
@@ -6038,6 +6129,7 @@ class _MessageActionMenu extends StatelessWidget {
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
   final VoidCallback? onUnsend;
+  final VoidCallback? onForward;
   final bool canEdit;
   final bool canDelete;
   final bool canUnsend;
@@ -6074,10 +6166,15 @@ class _MessageActionMenu extends StatelessWidget {
           case _MsgAction.unsend:
             onUnsend?.call();
             break;
+          case _MsgAction.forward:
+            onForward?.call();
+            break;
         }
       },
       itemBuilder: (context) => [
         _menuItem(_MsgAction.reply, Icons.reply_rounded, 'Reply', kPrimary),
+        if (onForward != null)
+          _menuItem(_MsgAction.forward, Icons.forward_rounded, 'Forward', const Color(0xFF10B981)),
         if (canEdit)
           _menuItem(_MsgAction.edit, Icons.edit_outlined, 'Edit', const Color(0xFF0EA5E9)),
         if (canDelete)
@@ -6108,7 +6205,7 @@ class _MessageActionMenu extends StatelessWidget {
   }
 }
 
-enum _MsgAction { reply, edit, delete, unsend }
+enum _MsgAction { reply, edit, delete, unsend, forward }
 
 // ---------------------------------------------------------------------------
 // Data class grouping chat messages by calendar date.
@@ -7372,6 +7469,130 @@ class _AdminGalleryGridPageState extends State<_AdminGalleryGridPage> {
                 );
               },
             ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Forward image user-picker dialog
+// ---------------------------------------------------------------------------
+class _ForwardUserPickerDialog extends StatefulWidget {
+  const _ForwardUserPickerDialog({required this.users});
+
+  final List<Map<String, String>> users;
+
+  @override
+  State<_ForwardUserPickerDialog> createState() => _ForwardUserPickerDialogState();
+}
+
+class _ForwardUserPickerDialogState extends State<_ForwardUserPickerDialog> {
+  String _search = '';
+
+  @override
+  Widget build(BuildContext context) {
+    const kPrimary = Color(0xFFD81B60);
+    final filtered = _search.isEmpty
+        ? widget.users
+        : widget.users
+            .where((u) =>
+                (u['namee'] ?? '').toLowerCase().contains(_search.toLowerCase()))
+            .toList();
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: SizedBox(
+        width: 340,
+        height: 480,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.forward_rounded, color: kPrimary, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Forward Photo To',
+                      style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1E293B)),
+                    ),
+                  ),
+                  IconButton(
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    icon: const Icon(Icons.close, size: 18, color: Color(0xFF94A3B8)),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: TextField(
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Search users…',
+                  hintStyle: const TextStyle(fontSize: 13),
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                ),
+                onChanged: (v) => setState(() => _search = v),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: filtered.isEmpty
+                  ? const Center(
+                      child: Text('No users found',
+                          style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13)))
+                  : ListView.builder(
+                      itemCount: filtered.length,
+                      itemBuilder: (ctx, i) {
+                        final user = filtered[i];
+                        final name = user['namee'] ?? 'User';
+                        final avatar = user['profile_picture'] ?? '';
+                        return ListTile(
+                          dense: true,
+                          leading: CircleAvatar(
+                            radius: 18,
+                            backgroundColor: const Color(0xFFF1F5F9),
+                            backgroundImage: avatar.isNotEmpty
+                                ? NetworkImage(avatar)
+                                : null,
+                            child: avatar.isEmpty
+                                ? Text(
+                                    name.isNotEmpty ? name[0].toUpperCase() : '?',
+                                    style: const TextStyle(
+                                        fontSize: 13,
+                                        color: Color(0xFF64748B),
+                                        fontWeight: FontWeight.w600),
+                                  )
+                                : null,
+                          ),
+                          title: Text(name,
+                              style: const TextStyle(
+                                  fontSize: 13, fontWeight: FontWeight.w500)),
+                          onTap: () => Navigator.pop(ctx, user),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

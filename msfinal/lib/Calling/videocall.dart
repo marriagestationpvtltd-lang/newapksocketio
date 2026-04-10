@@ -63,7 +63,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   bool _joined = false;
   bool _callActive = false;
   bool _micMuted = false;
-  bool _speakerOn = false;
+  bool _speakerOn = true; // Video calls default to loudspeaker (consistent with incoming video call)
   bool _cameraOn = true;
   bool _frontCamera = true;
   bool _ending = false;
@@ -405,14 +405,36 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   // ================= START CALL =================
   Future<void> _startCall() async {
     try {
+      // Request permissions BEFORE starting ringtone so that a first-time
+      // permission dialog does not interrupt audio/video playback.
+      final micStatus = await Permission.microphone.status;
+      if (micStatus.isDenied) {
+        if (!(await Permission.microphone.request()).isGranted) {
+          debugPrint("Microphone permission denied");
+          return;
+        }
+      } else if (micStatus.isPermanentlyDenied) {
+        debugPrint("Microphone permanently denied");
+        await openAppSettings();
+        return;
+      }
+
+      final camStatus = await Permission.camera.status;
+      if (camStatus.isDenied) {
+        if (!(await Permission.camera.request()).isGranted) {
+          debugPrint("Camera permission denied");
+          return;
+        }
+      } else if (camStatus.isPermanentlyDenied) {
+        debugPrint("Camera permanently denied");
+        await openAppSettings();
+        return;
+      }
+
       if (widget.isOutgoingCall) {
         await _ensureCallToneSettingsLoaded();
         await _playRingtone();
       }
-
-      // Permissions
-      if (!(await Permission.microphone.request()).isGranted) return;
-      if (!(await Permission.camera.request()).isGranted) return;
 
       // ✅ UID FIRST
       _localUid = Random().nextInt(999999);
@@ -485,6 +507,11 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
       );
       _engineInitialized = true;
 
+      // Agora enables audio by default after initialize(). Explicitly disable it
+      // so the SDK does not take audio focus (and kill the ringtone) before the
+      // remote peer joins. It is re-enabled in onUserJoined.
+      await _engine.disableAudio();
+
       _engine.registerEventHandler(
         RtcEngineEventHandler(
           onJoinChannelSuccess: (_, __) {
@@ -504,6 +531,11 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
             // Enable microphone only after call connects to avoid interrupting ringtone
             if (_engineInitialized) {
               await _engine.enableAudio();
+              // Re-assert speaker routing: enableAudio() resets Agora's audio
+              // routing to its default (earpiece), so we must re-apply the
+              // current speaker state immediately after enabling audio.
+              unawaited(_engine.setEnableSpeakerphone(_speakerOn)
+                  .catchError((e) => debugPrint('setEnableSpeakerphone error: $e')));
               // Now enable microphone publishing
               await _engine.updateChannelMediaOptions(const ChannelMediaOptions(
                 publishCameraTrack: true,

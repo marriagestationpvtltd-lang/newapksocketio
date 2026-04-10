@@ -3094,6 +3094,13 @@ class _ChatWindowState extends State<ChatWindow> {
       const kInfoLabel = Color(0xFF78909C);
       const kInfoValue = Color(0xFF1A2340);
 
+      // Normalize field names: handle both admin-sent and user-sent formats
+      final String? pId = profileData['id']?.toString() ?? profileData['userId']?.toString();
+      final String pFirst = profileData['first']?.toString() ?? profileData['firstName']?.toString() ?? '';
+      final String pLast = profileData['last']?.toString() ?? profileData['lastName']?.toString() ?? '';
+      final String pCountry = profileData['country']?.toString() ?? profileData['location']?.toString() ?? '';
+      final String pName = profileData['name']?.toString() ?? '$pFirst $pLast'.trim();
+
       final bool isPaid = profileData['is_paid'] == true;
       final String bioText = profileData['bio'] ?? '';
       final matchRegex = RegExp(r'(\d+(?:\.\d+)?)%');
@@ -3281,7 +3288,7 @@ class _ChatWindowState extends State<ChatWindow> {
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 10),
                             child: Text(
-                              profileData['name'] ?? 'Unknown',
+                              pName.isNotEmpty ? pName : 'Unknown',
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
@@ -3341,7 +3348,7 @@ class _ChatWindowState extends State<ChatWindow> {
                                   ),
                                   const Spacer(),
                                   Text(
-                                    '#${profileData['id']}',
+                                    '#${pId ?? ''}',
                                     style: const TextStyle(fontSize: 9.5, color: kCardPrimary, fontWeight: FontWeight.w700),
                                   ),
                                 ],
@@ -3349,11 +3356,14 @@ class _ChatWindowState extends State<ChatWindow> {
                             ),
                             _buildInfoRow(Icons.badge_rounded, 'Member ID', profileData['Member ID'], kInfoLabel, kInfoValue),
                             _buildInfoRow(Icons.wc_rounded, 'Gender', profileData['gender'], kInfoLabel, kInfoValue),
-                            _buildInfoRow(Icons.location_on_rounded, 'Country', profileData['country'], kInfoLabel, kInfoValue),
+                            _buildInfoRow(Icons.location_on_rounded, 'Location', pCountry, kInfoLabel, kInfoValue),
                             _buildInfoRow(Icons.work_rounded, 'Occupation', profileData['occupation'], kInfoLabel, kInfoValue),
                             _buildInfoRow(Icons.school_rounded, 'Education', profileData['education'], kInfoLabel, kInfoValue),
                             _buildInfoRow(Icons.favorite_border_rounded, 'Marital', profileData['marit'], kInfoLabel, kInfoValue),
                             _buildInfoRow(Icons.cake_rounded, 'Age', profileData['age']?.toString(), kInfoLabel, kInfoValue),
+                            _buildInfoRow(Icons.height_rounded, 'Height', profileData['height']?.toString(), kInfoLabel, kInfoValue),
+                            _buildInfoRow(Icons.menu_book_rounded, 'Religion', profileData['religion']?.toString(), kInfoLabel, kInfoValue),
+                            _buildInfoRow(Icons.groups_rounded, 'Community', profileData['community']?.toString(), kInfoLabel, kInfoValue),
                           ],
                         ),
                       ),
@@ -3366,7 +3376,7 @@ class _ChatWindowState extends State<ChatWindow> {
                           children: [
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => openUrl("${kAdminApiBaseUrl}/profile.php?id=${profileData['id']}"),
+                                onTap: () => openUrl("${kAdminApiBaseUrl}/profile.php?id=${pId ?? ''}"),
                                 child: Container(
                                   height: 32,
                                   decoration: BoxDecoration(
@@ -3390,9 +3400,9 @@ class _ChatWindowState extends State<ChatWindow> {
                                 onTap: () {
                                   setState(() {
                                     Provider.of<ChatProvider>(context, listen: false)
-                                        .updateName("${profileData['last']}  ${profileData['first']}");
+                                        .updateName("${pLast}  ${pFirst}");
                                     Provider.of<ChatProvider>(context, listen: false)
-                                        .updateidd(profileData['id']);
+                                        .updateidd(pId);
                                   });
                                 },
                                 child: Container(

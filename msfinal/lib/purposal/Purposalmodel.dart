@@ -55,4 +55,23 @@ class ProposalModel {
       photoRequest: json['photo_request'],
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'proposalId': proposalId,
+    'senderId': senderId,
+    'receiverId': receiverId,
+    'requestType': requestType,
+    'status': status,
+    'firstName': firstName,
+    'lastName': lastName,
+    'profilePicture': profilePicture,
+    'verified': verified,
+    'occupation': occupation,
+    'city': city,
+    'maritalstatus': maritalstatus,
+    'memberid': memberid,
+    'type': type,
+    'privacy': privacy,
+    'photo_request': photoRequest,
+  };
 }

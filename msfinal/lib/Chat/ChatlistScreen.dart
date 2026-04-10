@@ -64,6 +64,11 @@ class _ChatListScreenState extends State<ChatListScreen>
   static const String _adminUserId = '1';
   static const String _adminDisplayName = 'Admin Support';
 
+  // Local cache keys (user-specific suffix appended at runtime)
+  static const String _chatRoomsCacheKey = 'chat_rooms_cache';
+  static const String _pendingRequestsCacheKey = 'pending_chat_requests_cache';
+  static const String _sentRequestsCacheKey = 'sent_chat_requests_cache';
+
   // Chat rooms list driven by Socket.IO
   List<Map<String, dynamic>> _socketChatRooms = [];
   bool _chatRoomsInitialized = false;
@@ -124,6 +129,101 @@ class _ChatListScreenState extends State<ChatListScreen>
         _displayCount += 10;
         _isLoadingMore = false;
       });
+    }
+  }
+
+  // ── Local cache helpers ──────────────────────────────────────────────────
+
+  /// Loads chat rooms from SharedPreferences cache and updates state.
+  /// Returns true if cached data was found and applied.
+  Future<bool> _loadChatRoomsFromCache() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString('${_chatRoomsCacheKey}_$userId');
+      if (cached == null || !mounted) return false;
+      final List<dynamic> decoded = jsonDecode(cached);
+      final parsedRooms =
+          decoded.map((r) => Map<String, dynamic>.from(r as Map)).toList();
+      int totalUnread = 0;
+      int unreadConvs = 0;
+      for (final room in parsedRooms) {
+        final int unread = (room['unreadCount'] as num?)?.toInt() ?? 0;
+        totalUnread += unread;
+        if (unread > 0) unreadConvs++;
+      }
+      final nonAdminRooms =
+          parsedRooms.where((r) => !_isAdminRoom(r)).toList();
+      setState(() {
+        _socketChatRooms = parsedRooms;
+        _cachedTotalRooms = nonAdminRooms.length;
+        _chatRoomsInitialized = true;
+        _totalUnreadCount = totalUnread;
+        _totalUnreadConversations = unreadConvs;
+      });
+      return true;
+    } catch (e) {
+      print('Error loading chat rooms cache for user $userId: $e');
+      return false;
+    }
+  }
+
+  /// Persists the current chat room list to SharedPreferences.
+  Future<void> _saveChatRoomsToCache(List<Map<String, dynamic>> rooms) async {
+    if (userId.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          '${_chatRoomsCacheKey}_$userId', jsonEncode(rooms));
+    } catch (e) {
+      print('Error saving chat rooms cache for user $userId: $e');
+    }
+  }
+
+  /// Loads pending/sent chat requests from SharedPreferences cache.
+  /// Returns true if cached data was found and applied.
+  Future<bool> _loadRequestsFromCache(String uid) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pendingCached =
+          prefs.getString('${_pendingRequestsCacheKey}_$uid');
+      final sentCached = prefs.getString('${_sentRequestsCacheKey}_$uid');
+      if ((pendingCached == null && sentCached == null) || !mounted) {
+        return false;
+      }
+      final List<ProposalModel> pending = pendingCached != null
+          ? (jsonDecode(pendingCached) as List)
+              .map((e) => ProposalModel.fromJson(e as Map<String, dynamic>))
+              .toList()
+          : [];
+      final List<ProposalModel> sent = sentCached != null
+          ? (jsonDecode(sentCached) as List)
+              .map((e) => ProposalModel.fromJson(e as Map<String, dynamic>))
+              .toList()
+          : [];
+      setState(() {
+        _pendingChatRequests = pending;
+        _sentChatRequests = sent;
+        _requestsLoading = false;
+        _sentRequestsLoading = false;
+      });
+      return true;
+    } catch (e) {
+      print('Error loading requests cache for user $uid: $e');
+      return false;
+    }
+  }
+
+  /// Persists pending/sent chat requests to SharedPreferences.
+  Future<void> _saveRequestsToCache(String uid, List<ProposalModel> pending,
+      List<ProposalModel> sent) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('${_pendingRequestsCacheKey}_$uid',
+          jsonEncode(pending.map((p) => p.toJson()).toList()));
+      await prefs.setString('${_sentRequestsCacheKey}_$uid',
+          jsonEncode(sent.map((p) => p.toJson()).toList()));
+    } catch (e) {
+      print('Error saving requests cache for user $uid: $e');
     }
   }
 
@@ -194,7 +294,12 @@ class _ChatListScreenState extends State<ChatListScreen>
 
   Future<void> _loadPendingChatRequests(String uid) async {
     try {
-      if (mounted) setState(() { _requestsLoading = true; _sentRequestsLoading = true; });
+      // Load from cache first so the list appears instantly
+      final cacheLoaded = await _loadRequestsFromCache(uid);
+      // Only show loading spinner if no cached data is available
+      if (!cacheLoaded && mounted) {
+        setState(() { _requestsLoading = true; _sentRequestsLoading = true; });
+      }
       final results = await Future.wait([
         ProposalService.fetchProposals(uid, 'received'),
         ProposalService.fetchProposals(uid, 'sent'),
@@ -217,6 +322,8 @@ class _ChatListScreenState extends State<ChatListScreen>
           _sentRequestsLoading = false;
         });
       }
+      // Persist fresh data so the next launch shows it instantly
+      await _saveRequestsToCache(uid, pending, sent);
     } catch (e) {
       print('Error loading chat requests: $e');
       if (mounted) setState(() { _requestsLoading = false; _sentRequestsLoading = false; });
@@ -302,28 +409,34 @@ class _ChatListScreenState extends State<ChatListScreen>
     if (userId.isEmpty) return;
     final socketService = SocketService();
     if (!socketService.isConnected) socketService.connect(userId);
-    socketService.getChatRooms(userId).then((rooms) {
-      if (!mounted) return;
-      final parsedRooms =
-          rooms.map((r) => Map<String, dynamic>.from(r as Map)).toList();
-      int totalUnread = 0;
-      int unreadConvs = 0;
-      for (final room in parsedRooms) {
-        final int unread = (room['unreadCount'] as num?)?.toInt() ?? 0;
-        totalUnread += unread;
-        if (unread > 0) unreadConvs++;
-      }
-      final nonAdminRooms =
-          parsedRooms.where((r) => !_isAdminRoom(r)).toList();
-      setState(() {
-        _socketChatRooms = parsedRooms;
-        _cachedTotalRooms = nonAdminRooms.length;
-        _chatRoomsInitialized = true;
-        _totalUnreadCount = totalUnread;
-        _totalUnreadConversations = unreadConvs;
+
+    // Load from cache first so the list appears instantly without a spinner
+    _loadChatRoomsFromCache().then((_) {
+      socketService.getChatRooms(userId).then((rooms) {
+        if (!mounted) return;
+        final parsedRooms =
+            rooms.map((r) => Map<String, dynamic>.from(r as Map)).toList();
+        int totalUnread = 0;
+        int unreadConvs = 0;
+        for (final room in parsedRooms) {
+          final int unread = (room['unreadCount'] as num?)?.toInt() ?? 0;
+          totalUnread += unread;
+          if (unread > 0) unreadConvs++;
+        }
+        final nonAdminRooms =
+            parsedRooms.where((r) => !_isAdminRoom(r)).toList();
+        setState(() {
+          _socketChatRooms = parsedRooms;
+          _cachedTotalRooms = nonAdminRooms.length;
+          _chatRoomsInitialized = true;
+          _totalUnreadCount = totalUnread;
+          _totalUnreadConversations = unreadConvs;
+        });
+        // Persist fresh data for next launch
+        _saveChatRoomsToCache(parsedRooms);
+        _startChatRoomsUpdateListener();
+        _startOnlineStatusListeners();
       });
-      _startChatRoomsUpdateListener();
-      _startOnlineStatusListeners();
     });
   }
 
@@ -350,6 +463,8 @@ class _ChatListScreenState extends State<ChatListScreen>
         _totalUnreadCount = totalUnread;
         _totalUnreadConversations = unreadConvs;
       });
+      // Keep cache up-to-date with real-time changes
+      _saveChatRoomsToCache(parsedRooms);
     });
   }
 

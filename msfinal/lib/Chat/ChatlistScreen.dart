@@ -43,6 +43,8 @@ class _ChatListScreenState extends State<ChatListScreen>
   var pageno;
   String userId = '';
   String name = '';
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
   bool isLoading = true;
   String docstatus = '';
 
@@ -94,6 +96,7 @@ class _ChatListScreenState extends State<ChatListScreen>
     _loadUserData();
     OnlineStatusService().start();
     _scrollController.addListener(_onScroll);
+    _searchController.addListener(_onSearchChanged);
   }
 
   @override
@@ -104,6 +107,7 @@ class _ChatListScreenState extends State<ChatListScreen>
     _chatRoomsUpdateSubscription?.cancel();
     _adminStatusSubscription?.cancel();
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -120,6 +124,7 @@ class _ChatListScreenState extends State<ChatListScreen>
   }
 
   void _onScroll() {
+    if (_searchQuery.isNotEmpty) return;
     if (_scrollController.hasClients &&
         _scrollController.position.pixels >=
             _scrollController.position.maxScrollExtent - 200 &&
@@ -131,6 +136,12 @@ class _ChatListScreenState extends State<ChatListScreen>
         _isLoadingMore = false;
       });
     }
+  }
+
+  void _onSearchChanged() {
+    final query = _searchController.text.trim().toLowerCase();
+    if (query == _searchQuery) return;
+    setState(() => _searchQuery = query);
   }
 
   // ── Local cache helpers ──────────────────────────────────────────────────
@@ -617,6 +628,64 @@ class _ChatListScreenState extends State<ChatListScreen>
     final minutes = duration.inMinutes;
     final secondsComponent = duration.inSeconds.remainder(60);
     return '$minutes:${secondsComponent.toString().padLeft(2, '0')}';
+  }
+
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+      child: TextField(
+        controller: _searchController,
+        textInputAction: TextInputAction.search,
+        decoration: InputDecoration(
+          hintText: 'Search chats',
+          prefixIcon: const Icon(Icons.search, color: Colors.black45),
+          suffixIcon: _searchQuery.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close, color: Colors.black45),
+                  onPressed: () {
+                    _searchController.clear();
+                    FocusScope.of(context).unfocus();
+                  },
+                ),
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.symmetric(vertical: 0),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Color(0xFFF90E18), width: 1.4),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _filterChatRooms(
+      List<Map<String, dynamic>> rooms) {
+    if (_searchQuery.isEmpty) return rooms;
+    return rooms.where((room) {
+      final participantNames =
+          Map<String, String>.from(room['participantNames'] ?? {});
+      final names = participantNames.values.join(' ').toLowerCase();
+      final String lastMessage = room['lastMessage']?.toString() ?? '';
+      final String messageType =
+          room['lastMessageType']?.toString() ?? 'text';
+      final preview = _formatConversationPreview(
+        rawMessage: lastMessage,
+        messageType: messageType,
+        compactMediaLabels: true,
+      ).toLowerCase();
+      return names.contains(_searchQuery) ||
+          preview.contains(_searchQuery);
+    }).toList();
   }
 
   /// Format a lastSeen timestamp into a human-readable "last active" string.
@@ -1820,6 +1889,7 @@ class _ChatListScreenState extends State<ChatListScreen>
           color: const Color(0xFFFAF0F0),
           child: Column(
             children: [
+              _buildSearchBar(),
               _buildPinnedAdminCard(),
               if (_totalUnreadCount > 0)
                 Container(
@@ -1893,6 +1963,7 @@ class _ChatListScreenState extends State<ChatListScreen>
         color: const Color(0xFFFAF0F0),
         child: Column(
           children: [
+            _buildSearchBar(),
             _buildPinnedAdminCard(),
             if (_totalUnreadCount > 0)
               Container(
@@ -1975,28 +2046,74 @@ class _ChatListScreenState extends State<ChatListScreen>
         return bTime.compareTo(aTime);
       });
 
-    if (chatRooms.isEmpty && _pendingChatRequests.isEmpty && _sentChatRequests.isEmpty && !_requestsLoading && !_sentRequestsLoading) {
-      return const Center(
+    final filteredRooms = _filterChatRooms(chatRooms);
+
+    if (filteredRooms.isEmpty &&
+        _pendingChatRequests.isEmpty &&
+        _sentChatRequests.isEmpty &&
+        !_requestsLoading &&
+        !_sentRequestsLoading &&
+        _searchQuery.isEmpty) {
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey),
-            SizedBox(height: 16),
-            Text(
+            Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.06),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.chat_bubble_outline,
+                  size: 44, color: Color(0xFFF90E18)),
+            ),
+            const SizedBox(height: 16),
+            const Text(
               'No conversations yet',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
+              style: TextStyle(fontSize: 16, color: Colors.black87),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Send a chat request to start talking',
+              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
             ),
           ],
         ),
       );
     }
 
-    return _buildRoomsList(chatRooms);
+    if (filteredRooms.isEmpty && _searchQuery.isNotEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 12),
+            Text(
+              'No chats match your search',
+              style: TextStyle(fontSize: 15, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return _buildRoomsList(filteredRooms);
   }
 
   Widget _buildRoomsList(List<Map<String, dynamic>> chatRooms) {
-    final displayedRooms =
-        chatRooms.sublist(0, _displayCount.clamp(0, chatRooms.length));
+    final bool isSearching = _searchQuery.isNotEmpty;
+    final displayedRooms = isSearching
+        ? chatRooms
+        : chatRooms.sublist(0, _displayCount.clamp(0, chatRooms.length));
 
     final int reqCount = _pendingChatRequests.length;
     final int sentCount = _sentChatRequests.length;
@@ -2029,9 +2146,9 @@ class _ChatListScreenState extends State<ChatListScreen>
         showConversationsHeader ? cursor++ : -1;
     final int firstRoomIdx = cursor;
 
-    final int totalItems = firstRoomIdx +
-        displayedRooms.length +
-        (_isLoadingMore ? 1 : 0);
+    final bool showLoadingMore = _isLoadingMore && !isSearching;
+    final int totalItems =
+        firstRoomIdx + displayedRooms.length + (showLoadingMore ? 1 : 0);
 
     // Precompute first request index for received section
     final int firstRequestIdx = showRequestsHeader ? 1 : -1;
@@ -2159,7 +2276,7 @@ class _ChatListScreenState extends State<ChatListScreen>
 
           // ── Loading indicator at tail ──
           final int roomIndex = index - firstRoomIdx;
-          if (roomIndex == displayedRooms.length) {
+          if (showLoadingMore && roomIndex == displayedRooms.length) {
             return const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
               child: Center(
@@ -2301,25 +2418,20 @@ class _ChatListScreenState extends State<ChatListScreen>
             },
             child: Container(
               margin: const EdgeInsets.symmetric(vertical: 6),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Colors.white, Color(0xFFF8FAFC)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: unreadForMe > 0
-                      ? const Color(0xFFFFE4E6)
+                      ? const Color(0xFFFBCFE8)
                       : const Color(0xFFE5E7EB),
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.04),
-                    blurRadius: 12,
-                    offset: const Offset(0, 6),
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),

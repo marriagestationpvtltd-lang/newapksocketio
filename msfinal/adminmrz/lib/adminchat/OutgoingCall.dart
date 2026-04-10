@@ -10,7 +10,7 @@ import 'package:provider/provider.dart';
 import 'tokengenerator.dart';
 
 // Call state progression: calling → ringing → connected
-enum _CallStatus { calling, ringing, connected }
+enum _CallStatus { calling, ringing, connected, busy }
 
 class CallScreen extends StatefulWidget {
   final String currentUserId;
@@ -64,6 +64,7 @@ class _CallScreenState extends State<CallScreen>
   bool _speakerOn = true;
   bool _videoEnabled = false;
   bool _ending = false;
+  bool _recipientBusy = false;
 
   // Video
   Widget? _localVideoView;
@@ -84,6 +85,7 @@ class _CallScreenState extends State<CallScreen>
   StreamSubscription<Map<String, dynamic>>? _callRejectedSubscription;
   StreamSubscription<Map<String, dynamic>>? _callCancelledSubscription;
   StreamSubscription<Map<String, dynamic>>? _callEndedSubscription;
+  StreamSubscription<Map<String, dynamic>>? _callBusySubscription;
 
   // Animation controllers
   late AnimationController _pulseController;
@@ -281,6 +283,22 @@ class _CallScreenState extends State<CallScreen>
             await _endCall(notifyPeer: false);
           }
         });
+
+        _callBusySubscription?.cancel();
+        _callBusySubscription =
+            _socketService.onCallBusy.listen((data) async {
+          if (!mounted || _ending) return;
+          if (data['channelName']?.toString() == _channel) {
+            setState(() {
+              _recipientBusy = true;
+              _callStatus = _CallStatus.busy;
+            });
+            await _stopRingtone();
+            Future.delayed(const Duration(seconds: 2), () {
+              if (!_ending) _endCall(notifyPeer: false);
+            });
+          }
+        });
       }
 
       // ================= AGORA =================
@@ -433,10 +451,12 @@ class _CallScreenState extends State<CallScreen>
       await _callCancelledSubscription?.cancel();
       await _callEndedSubscription?.cancel();
       await _callAcceptedSubscription?.cancel();
+      await _callBusySubscription?.cancel();
       _callRejectedSubscription = null;
       _callCancelledSubscription = null;
       _callEndedSubscription = null;
       _callAcceptedSubscription = null;
+      _callBusySubscription = null;
 
       if (widget.isOutgoingCall && notifyPeer) {
         if (_callActive) {
@@ -464,7 +484,7 @@ class _CallScreenState extends State<CallScreen>
       await _engine.release();
     } catch (_) {}
 
-    final String callStatus = _callActive ? 'answered' : 'missed';
+    final String callStatus = _recipientBusy ? 'busy' : (_callActive ? 'answered' : 'missed');
     widget.onCallEnded?.call('audio', callStatus, _duration.inSeconds);
 
     if (!mounted) return;
@@ -599,6 +619,10 @@ class _CallScreenState extends State<CallScreen>
         label = 'Connected';
         color = const Color(0xFF10B981);
         break;
+      case _CallStatus.busy:
+        label = 'User Busy';
+        color = Colors.orange;
+        break;
     }
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 400),
@@ -681,6 +705,9 @@ class _CallScreenState extends State<CallScreen>
         break;
       case _CallStatus.connected:
         text = _format(_duration);
+        break;
+      case _CallStatus.busy:
+        text = 'User is busy, please try again later';
         break;
     }
     return AnimatedSwitcher(
@@ -808,6 +835,7 @@ class _CallScreenState extends State<CallScreen>
     _callRejectedSubscription?.cancel();
     _callCancelledSubscription?.cancel();
     _callEndedSubscription?.cancel();
+    _callBusySubscription?.cancel();
 
     try {
       _engine.leaveChannel();

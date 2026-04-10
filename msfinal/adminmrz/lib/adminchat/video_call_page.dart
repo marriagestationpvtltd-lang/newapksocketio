@@ -14,7 +14,7 @@ import 'tokengenerator.dart';
 // No need for dart:html import
 
 // Video call state progression: calling → ringing → connected
-enum _VCallStatus { calling, ringing, connected }
+enum _VCallStatus { calling, ringing, connected, busy }
 
 const _kPrimary = Color(0xFF6366F1);
 const _kPrimaryDark = Color(0xFF4F46E5);
@@ -91,6 +91,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   bool _cameraFront = true;
   bool _ending = false;
   bool _controlsVisible = false;
+  bool _recipientBusy = false;
 
   _VCallStatus _callStatus = _VCallStatus.calling;
 
@@ -108,6 +109,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   StreamSubscription<Map<String, dynamic>>? _callRejectedSubscription;
   StreamSubscription<Map<String, dynamic>>? _callCancelledSubscription;
   StreamSubscription<Map<String, dynamic>>? _callEndedSubscription;
+  StreamSubscription<Map<String, dynamic>>? _callBusySubscription;
 
   // Video renderers
   Widget? _localVideoView;
@@ -287,6 +289,22 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
             await _endCall(notifyPeer: false);
           }
         });
+
+        _callBusySubscription?.cancel();
+        _callBusySubscription =
+            _socketService.onCallBusy.listen((data) async {
+          if (!mounted || _ending) return;
+          if (data['channelName']?.toString() == _channel) {
+            setState(() {
+              _recipientBusy = true;
+              _callStatus = _VCallStatus.busy;
+            });
+            await _stopRingtone();
+            Future.delayed(const Duration(seconds: 2), () {
+              if (!_ending) _endCall(notifyPeer: false);
+            });
+          }
+        });
       }
 
       // Initialize Agora engine
@@ -435,10 +453,12 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     await _callCancelledSubscription?.cancel();
     await _callEndedSubscription?.cancel();
     await _callAcceptedSubscription?.cancel();
+    await _callBusySubscription?.cancel();
     _callRejectedSubscription = null;
     _callCancelledSubscription = null;
     _callEndedSubscription = null;
     _callAcceptedSubscription = null;
+    _callBusySubscription = null;
 
     if (widget.isOutgoingCall && notifyPeer) {
       if (_callActive) {
@@ -472,7 +492,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     }
 
     // Fire call-ended callback so the chat can save history.
-    final String callStatus = _callActive ? 'answered' : 'missed';
+    final String callStatus = _recipientBusy ? 'busy' : (_callActive ? 'answered' : 'missed');
     widget.onCallEnded?.call('video', callStatus, _duration.inSeconds);
 
     if (_joined) {
@@ -632,14 +652,16 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
       _VCallStatus.calling => 'Calling',
       _VCallStatus.ringing => 'Ringing',
       _VCallStatus.connected => 'Live',
+      _VCallStatus.busy => 'User Busy',
     };
     final String subtitle = switch (_callStatus) {
       _VCallStatus.calling => 'Connecting…',
       _VCallStatus.ringing => 'Ringing…',
       _VCallStatus.connected => _format(_duration),
+      _VCallStatus.busy => 'User is busy, please try again later',
     };
     final Color statusColor =
-        _callStatus == _VCallStatus.connected ? _kEmerald : _kAmber;
+        _callStatus == _VCallStatus.connected ? _kEmerald : (_callStatus == _VCallStatus.busy ? Colors.orange : _kAmber);
     final String trimmedName = widget.otherUserName.trim();
     final String initial = trimmedName.isNotEmpty
         ? trimmedName.characters.first.toUpperCase()
@@ -972,6 +994,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     _callRejectedSubscription?.cancel();
     _callCancelledSubscription?.cancel();
     _callEndedSubscription?.cancel();
+    _callBusySubscription?.cancel();
     _ringtonePlayer.dispose();
     super.dispose();
   }

@@ -390,16 +390,9 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
   // ================= START CALL =================
   Future<void> _startCall() async {
     try {
-      // Start ringing immediately for outgoing calls
-      if (widget.isOutgoingCall) {
-        await _ensureCallToneSettingsLoaded();
-        await _playRingtone();
-
-      }
-
-      // Permissions
+      // Request microphone permission BEFORE starting ringtone so that a
+      // first-time permission dialog does not interrupt audio playback.
       final micStatus = await Permission.microphone.status;
-
       if (micStatus.isDenied) {
         final result = await Permission.microphone.request();
         if (!result.isGranted) {
@@ -410,6 +403,12 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
         debugPrint("Microphone permanently denied");
         await openAppSettings();
         return; // ❌ DO NOT call _exit()
+      }
+
+      // Start ringing after permissions are confirmed
+      if (widget.isOutgoingCall) {
+        await _ensureCallToneSettingsLoaded();
+        await _playRingtone();
       }
 
 
@@ -479,6 +478,11 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
         channelProfile: ChannelProfileType.channelProfileCommunication,
       ));
       _engineInitialized = true;
+
+      // Agora enables audio by default after initialize(). Explicitly disable it
+      // so the SDK does not take audio focus (and kill the ringtone) before the
+      // remote peer joins. It is re-enabled in onUserJoined.
+      await _engine.disableAudio();
 
       _engine.registerEventHandler(
         RtcEngineEventHandler(

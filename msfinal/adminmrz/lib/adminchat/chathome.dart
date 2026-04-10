@@ -3499,6 +3499,7 @@ class _ChatWindowState extends State<ChatWindow> {
                     child: CachedNetworkImage(
                       imageUrl: imageUrl,
                       width: MediaQuery.of(context).size.width * 0.24,
+                      memCacheWidth: (MediaQuery.of(context).size.width * 0.24).toInt(),
                       fit: BoxFit.cover,
                       placeholder: (context, url) => const Center(child: CircularProgressIndicator(color: kPrimary)),
                       errorWidget: (context, url, error) {

@@ -1394,6 +1394,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
     _connectivitySubscription?.cancel();
     _socketBusySub?.cancel();
     _socketBlockedSub?.cancel();
+    _socketSwitchToVideoResponseSub?.cancel();
     _ringtoneRestartTimer?.cancel();
     _playerStateSub?.cancel();
     _ringtonePlayer.dispose();

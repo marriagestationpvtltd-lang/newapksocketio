@@ -208,6 +208,33 @@ class AdminSocketService {
     _socket?.disconnect();
   }
 
+  void dispose() {
+    disconnect();
+    _socket?.dispose();
+    _socket = null;
+    _newMessageCtrl.close();
+    _messageEditedCtrl.close();
+    _messageDeletedCtrl.close();
+    _messageUnsentCtrl.close();
+    _messageLikedCtrl.close();
+    _messagesReadCtrl.close();
+    _typingStartCtrl.close();
+    _typingStopCtrl.close();
+    _userStatusCtrl.close();
+    _chatRoomsUpdateCtrl.close();
+    _incomingCallCtrl.close();
+    _callAcceptedCtrl.close();
+    _callRejectedCtrl.close();
+    _callCancelledCtrl.close();
+    _callAnsweredElsewhereCtrl.close();
+    _callEndedCtrl.close();
+    _addedToCallCtrl.close();
+    _participantAddedToCallCtrl.close();
+    _participantAcceptedCallCtrl.close();
+    _participantRejectedCallCtrl.close();
+    _connectionCtrl.close();
+  }
+
   Future<bool> ensureConnected() async {
     if (isConnected) return true;
     connect();

@@ -740,7 +740,14 @@ class SocketService {
     _callCancelledCtrl.close();
     _callEndedCtrl.close();
     _callRingingCtrl.close();
+    _callUserOfflineCtrl.close();
     _callBusyCtrl.close();
     _callBlockedCtrl.close();
+    _switchToVideoRequestCtrl.close();
+    _switchToVideoResponseCtrl.close();
+    _addedToCallCtrl.close();
+    _participantAddedToCallCtrl.close();
+    _participantAcceptedCallCtrl.close();
+    _participantRejectedCallCtrl.close();
   }
 }

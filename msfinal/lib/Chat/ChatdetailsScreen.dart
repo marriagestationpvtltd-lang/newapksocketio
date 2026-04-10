@@ -152,12 +152,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   // Messages stream subscription (replaces StreamBuilder to prevent rebuild-on-setState)
   StreamSubscription? _messagesSubscription;
+  StreamSubscription? _messageEditedSubscription;
+  StreamSubscription? _messageDeletedSubscription;
 
   // Typing indicator
   Timer? _typingDebounce;
   bool _isTyping = false;
   bool _isReceiverTyping = false;
   StreamSubscription? _typingSubscription;
+  StreamSubscription? _typingStopSubscription;
   bool _isMarkingMessagesAsRead = false;
   bool _isReceiverViewingThisChat = false;
 
@@ -428,7 +431,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     });
 
     // Listen for edits and deletes
-    _socketService.onMessageEdited.listen((data) {
+    _messageEditedSubscription?.cancel();
+    _messageEditedSubscription = _socketService.onMessageEdited.listen((data) {
       if (!mounted) return;
       if (data['chatRoomId']?.toString() != widget.chatRoomId) return;
       final idx = _cachedMessages.indexWhere(
@@ -448,7 +452,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       }
     });
 
-    _socketService.onMessageDeleted.listen((data) {
+    _messageDeletedSubscription?.cancel();
+    _messageDeletedSubscription = _socketService.onMessageDeleted.listen((data) {
       if (!mounted) return;
       if (data['chatRoomId']?.toString() != widget.chatRoomId) return;
       final msgId = data['messageId']?.toString();
@@ -579,7 +584,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     });
 
     // Stop typing
-    _socketService.onTypingStop.listen((data) {
+    _typingStopSubscription?.cancel();
+    _typingStopSubscription = _socketService.onTypingStop.listen((data) {
       if (!mounted) return;
       if (data['chatRoomId']?.toString() != widget.chatRoomId) return;
       if (data['userId']?.toString() != widget.receiverId) return;
@@ -769,6 +775,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     _recordingAnimController?.dispose();
     _typingDebounce?.cancel();
     _typingSubscription?.cancel();
+    _typingStopSubscription?.cancel();
+    _messageEditedSubscription?.cancel();
+    _messageDeletedSubscription?.cancel();
     _otherUserStatusSub?.cancel();
     _callHistorySubscription?.cancel();
     _callListenerSubscription?.cancel();

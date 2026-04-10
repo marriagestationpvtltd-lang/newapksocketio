@@ -1024,7 +1024,7 @@ io.on('connection', (socket) => {
 
     // Store as a pending call so we can re-deliver it if the recipient comes
     // online before the call times out on the caller side.
-    const channelName = rest.channelName;
+    const channelName = (rest.channelName || '').toString().trim();
     if (channelName) {
       activePendingCalls.set(channelName, {
         callerId:    callerIdStr,

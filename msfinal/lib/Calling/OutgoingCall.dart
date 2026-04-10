@@ -267,21 +267,17 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
     _syncOverlayState();
   }
 
+  String _getOutgoingStatusText() {
+    if (_callActive) return 'Connected';
+    if (_remoteAccepted) return 'Connecting...';
+    if (_recipientOffline) return 'User is not online';
+    if (_isRecipientRinging) return 'Ringing...';
+    return 'Calling...';
+  }
+
   void _syncOverlayState() {
-    final String statusText;
-    if (_callActive) {
-      statusText = 'Connected';
-    } else if (_remoteAccepted) {
-      statusText = 'Connecting...';
-    } else if (_recipientOffline) {
-      statusText = 'User is not online';
-    } else if (_isRecipientRinging) {
-      statusText = 'Ringing...';
-    } else {
-      statusText = 'Calling...';
-    }
     CallOverlayManager().updateCallState(
-      statusText: statusText,
+      statusText: _getOutgoingStatusText(),
       duration: _duration,
       isMicMuted: _micMuted,
     );
@@ -952,11 +948,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
                   );
                 },
                 child: Text(
-                  _remoteAccepted
-                      ? 'Connecting...'
-                      : _recipientOffline
-                          ? 'User is not online'
-                          : (_isRecipientRinging ? 'Ringing...' : 'Calling...'),
+                  _getOutgoingStatusText(),
                   style: TextStyle(
                     color: _recipientOffline ? Colors.orangeAccent : Colors.white70,
                     fontSize: 18,

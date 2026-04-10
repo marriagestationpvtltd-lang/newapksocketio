@@ -411,6 +411,14 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     );
   }
 
+  String _getOutgoingStatusText({bool isVideoConnect = false}) {
+    if (_callActive) return 'Connected';
+    if (_remoteAccepted) return isVideoConnect ? 'Connecting video...' : 'Connecting...';
+    if (_recipientOffline) return 'User is not online';
+    if (_isRecipientRinging) return 'Ringing...';
+    return 'Calling...';
+  }
+
   Future<void> _minimizeCall() async {
     await openMinimizedCallHost(context);
   }
@@ -937,7 +945,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          _remoteAccepted ? 'Connecting video...' : (_recipientOffline ? 'User is not online' : (_isRecipientRinging ? 'Ringing...' : 'Calling...')),
+                          _getOutgoingStatusText(isVideoConnect: true),
                           style: TextStyle(color: _recipientOffline ? Colors.orangeAccent : Colors.white70),
                         ),
                       ],
@@ -971,7 +979,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          _remoteAccepted ? 'Connecting...' : (_recipientOffline ? 'User is not online' : (_isRecipientRinging ? 'Ringing...' : 'Calling...')),
+                          _getOutgoingStatusText(),
                           style: TextStyle(color: _recipientOffline ? Colors.orangeAccent : Colors.white70, fontSize: 18),
                         ),
                         const SizedBox(height: 10),

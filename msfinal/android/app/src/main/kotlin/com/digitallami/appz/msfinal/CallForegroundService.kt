@@ -309,7 +309,6 @@ class CallForegroundService : Service() {
 
     private fun stopForegroundService() {
         Log.d(TAG, "Stopping foreground service")
-        resetAudioConfiguration()
         releaseWakeLock()
         stopForeground(true)
         stopSelf()
@@ -321,7 +320,6 @@ class CallForegroundService : Service() {
 
     override fun onDestroy() {
         Log.d(TAG, "CallForegroundService destroyed")
-        resetAudioConfiguration()
         releaseWakeLock()
         super.onDestroy()
     }

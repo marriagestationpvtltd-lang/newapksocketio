@@ -296,8 +296,10 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
         channelProfile: ChannelProfileType.channelProfileCommunication,
       ));
 
-      // Enable audio and video
-      await _engine.enableAudio();
+      // Agora enables audio by default after initialize(). Explicitly disable it
+      // so the SDK does not take audio focus (and kill the ringtone) before the
+      // remote peer joins. It is re-enabled in onUserJoined.
+      await _engine.disableAudio();
       await _engine.enableVideo();
       await _engine.setVideoEncoderConfiguration(
         VideoEncoderConfiguration(
@@ -320,7 +322,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
               _setupLocalVideo();
             }
           },
-          onUserJoined: (_, uid, __) {
+          onUserJoined: (_, uid, __) async {
             if (mounted) {
               setState(() {
                 _remoteUid = uid;
@@ -328,7 +330,16 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
               });
               _setupRemoteVideo(uid);
             }
-            _stopRingtone();
+            await _stopRingtone();
+            // Enable microphone only after call connects to avoid interrupting ringtone
+            await _engine.enableAudio();
+            // Now enable microphone and camera publishing
+            await _engine.updateChannelMediaOptions(const ChannelMediaOptions(
+              publishMicrophoneTrack: true,
+              publishCameraTrack: true,
+              autoSubscribeAudio: true,
+              autoSubscribeVideo: true,
+            ));
             _startCallTimer();
           },
           onUserOffline: (_, __, ___) {
@@ -341,13 +352,13 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
       // Set client role
       await _engine.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
 
-      // Join channel
+      // Join channel with mic OFF during ringing phase to avoid interrupting ringtone
       await _engine.joinChannel(
         token: _token,
         channelId: _channel,
         uid: _localUid,
         options: const ChannelMediaOptions(
-          publishMicrophoneTrack: true,
+          publishMicrophoneTrack: false, // Keep mic OFF during IVR/ringtone
           publishCameraTrack: true,
           autoSubscribeAudio: true,
           autoSubscribeVideo: true,

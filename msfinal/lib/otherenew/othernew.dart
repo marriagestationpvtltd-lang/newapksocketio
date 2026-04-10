@@ -2918,7 +2918,7 @@ class _ContactInfoSection extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'You can try again after 7 days',
+                      'You can try again after 12 hours',
                       style: TextStyle(
                         color: Colors.grey.shade500,
                         fontSize: 11,

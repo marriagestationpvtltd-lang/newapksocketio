@@ -85,6 +85,18 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
     WakelockPlus.enable();
     _parseData();
     _localUid = Random().nextInt(999998) + 1;
+
+    final isUpgrade = widget.callData['isAudioToVideoUpgrade']?.toString() == 'true';
+    if (isUpgrade) {
+      // Came from an audio call; no ringing needed, accept immediately.
+      _loadUserDataAndLogCall();
+      _listenForCallCancelled();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _acceptCall();
+      });
+      return;
+    }
+
     _ringTimer = Timer(const Duration(seconds: 60), _missedCall);
     _loadUserDataAndLogCall();
     _listenForCallCancelled();

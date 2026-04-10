@@ -8,6 +8,7 @@ import '../Calling/incommingcall.dart';
 import '../Calling/incomingvideocall.dart';
 import '../navigation/app_navigation.dart';
 import '../Startup/MainControllere.dart';
+import '../service/socket_service.dart';
 
 const String activeCallRouteName = '/active-call';
 const String minimizedCallHostRouteName = '/minimized-call-host';
@@ -591,6 +592,25 @@ class _CallOverlayWrapperState extends State<CallOverlayWrapper>
     // isCallScreenShowing is a shared flag so that local screen listeners
     // (e.g. AdminChatScreen) can detect that we're already showing the UI.
     if (CallManager().isCallScreenShowing) return;
+
+    // If user is already in an active call, auto-reject this new incoming call
+    // with a busy signal and do not show the call screen.
+    if (CallOverlayManager().isCallActive) {
+      final callerId = data['callerId']?.toString() ?? '';
+      final currentUserId = CallOverlayManager()._currentUserId ?? '';
+      final channelName = data['channelName']?.toString() ?? '';
+      if (callerId.isNotEmpty && currentUserId.isNotEmpty) {
+        SocketService().emitCallReject(
+          callerId: callerId,
+          recipientId: currentUserId,
+          recipientName: CallOverlayManager()._currentUserName ?? '',
+          channelName: channelName,
+          callType: isVideoCall ? 'video' : 'audio',
+        );
+      }
+      CallManager().clearCallData();
+      return;
+    }
 
     final currentState = navigatorKey.currentState;
     if (currentState == null) {

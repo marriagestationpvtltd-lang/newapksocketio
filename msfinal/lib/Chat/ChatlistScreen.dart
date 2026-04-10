@@ -26,6 +26,7 @@ import 'ChatdetailsScreen.dart';
 import 'adminchat.dart';
 import '../service/socket_service.dart';
 import 'package:ms2026/config/app_endpoints.dart';
+import '../otherprofile/otherprofileview.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -45,7 +46,9 @@ class _ChatListScreenState extends State<ChatListScreen>
   String docstatus = '';
 
   List<ProposalModel> _pendingChatRequests = [];
+  List<ProposalModel> _sentChatRequests = [];
   bool _requestsLoading = true;
+  bool _sentRequestsLoading = true;
   int _totalUnreadCount = 0;
   int _totalUnreadConversations = 0;
 
@@ -191,9 +194,17 @@ class _ChatListScreenState extends State<ChatListScreen>
 
   Future<void> _loadPendingChatRequests(String uid) async {
     try {
-      if (mounted) setState(() => _requestsLoading = true);
-      final all = await ProposalService.fetchProposals(uid, 'received');
-      final pending = all
+      if (mounted) setState(() { _requestsLoading = true; _sentRequestsLoading = true; });
+      final results = await Future.wait([
+        ProposalService.fetchProposals(uid, 'received'),
+        ProposalService.fetchProposals(uid, 'sent'),
+      ]);
+      final pending = results[0]
+          .where((p) =>
+              p.requestType?.toLowerCase() == 'chat' &&
+              p.status?.toLowerCase() == 'pending')
+          .toList();
+      final sent = results[1]
           .where((p) =>
               p.requestType?.toLowerCase() == 'chat' &&
               p.status?.toLowerCase() == 'pending')
@@ -201,12 +212,14 @@ class _ChatListScreenState extends State<ChatListScreen>
       if (mounted) {
         setState(() {
           _pendingChatRequests = pending;
+          _sentChatRequests = sent;
           _requestsLoading = false;
+          _sentRequestsLoading = false;
         });
       }
     } catch (e) {
       print('Error loading chat requests: $e');
-      if (mounted) setState(() => _requestsLoading = false);
+      if (mounted) setState(() { _requestsLoading = false; _sentRequestsLoading = false; });
     }
   }
 
@@ -1006,45 +1019,146 @@ class _ChatListScreenState extends State<ChatListScreen>
     }
   }
 
-  Widget _buildChatRequestsSection() {
-    if (_requestsLoading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: LinearProgressIndicator(),
-      );
-    }
 
-    if (_pendingChatRequests.isEmpty) return const SizedBox.shrink();
+  void _showChatRequestActionSheet(ProposalModel req) {
+    final displayName =
+        '${req.firstName ?? ''} ${req.lastName ?? ''}'.trim();
+    final imageUrl = req.profilePicture?.isNotEmpty == true
+        ? req.profilePicture!
+        : 'https://static.vecteezy.com/system/resources/previews/022/997/791/non_2x/contact-person-icon-transparent-blur-glass-effect-icon-free-vector.jpg';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Text(
-            'Chat Requests (${_pendingChatRequests.length})',
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      backgroundColor: Colors.white,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(4),
+              ),
             ),
-          ),
+            const SizedBox(height: 20),
+            PrivacyUtils.buildPrivacyAwareAvatar(
+              imageUrl: imageUrl,
+              privacy: req.privacy,
+              photoRequest: req.photoRequest,
+              radius: 32,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              displayName.isEmpty ? 'User' : displayName,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+            if ((req.city ?? '').isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                req.city!,
+                style: const TextStyle(fontSize: 13, color: Colors.black54),
+              ),
+            ],
+            const SizedBox(height: 8),
+            const Text(
+              'Wants to chat with you',
+              style: TextStyle(fontSize: 14, color: Colors.black54),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  final profileId = req.senderId ?? '';
+                  if (profileId.isNotEmpty) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => UserProfilePage(userId: int.tryParse(profileId) ?? 0),
+                      ),
+                    ).then((_) => _loadPendingChatRequests(userId));
+                  }
+                },
+                icon: const Icon(Icons.person_outline),
+                label: const Text(
+                  'View Profile',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF90E18),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  elevation: 0,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _handleRejectChatRequest(req);
+                    },
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFFE0E0E0)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text(
+                      'Reject',
+                      style: TextStyle(
+                          color: Colors.black54,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _handleAcceptChatRequest(req);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1565C0),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      elevation: 0,
+                    ),
+                    child: const Text(
+                      'Accept',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-        SizedBox(
-          height: 148,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _pendingChatRequests.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (context, index) {
-              final req = _pendingChatRequests[index];
-              return _buildChatRequestCard(req);
-            },
-          ),
-        ),
-        const Divider(height: 16),
-      ],
+      ),
     );
   }
 
@@ -1055,116 +1169,432 @@ class _ChatListScreenState extends State<ChatListScreen>
     final displayName =
         '${req.firstName ?? ''} ${req.lastName ?? ''}'.trim();
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final cardWidth =
-            (MediaQuery.sizeOf(context).width * 0.55).clamp(180.0, 240.0);
-        return Container(
-          width: cardWidth,
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.grey.shade200),
-            boxShadow: const [
-              BoxShadow(blurRadius: 4, color: Colors.black12, offset: Offset(0, 2)),
-            ],
+    return InkWell(
+      onTap: () {
+        final senderId = int.tryParse(req.senderId ?? '');
+        if (senderId != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => UserProfilePage(userId: senderId),
+            ),
+          );
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.white, Color(0xFFF8FAFC)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  PrivacyUtils.buildPrivacyAwareAvatar(
-                    imageUrl: imageUrl,
-                    privacy: req.privacy,
-                    photoRequest: req.photoRequest,
-                    radius: 22,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                PrivacyUtils.buildPrivacyAwareAvatar(
+                  imageUrl: imageUrl,
+                  privacy: req.privacy,
+                  photoRequest: req.photoRequest,
+                  radius: 28,
+                  backgroundColor: Colors.grey[200],
+                ),
+                Positioned(
+                  bottom: -4,
+                  right: -4,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF90E18),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.chat_bubble,
+                        size: 12, color: Colors.white),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          displayName.isEmpty ? 'User' : displayName,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          req.city ?? '',
-                          style: const TextStyle(
-                              fontSize: 11, color: Colors.black54),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                ),
+              ],
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayName.isEmpty ? 'User' : displayName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0F172A),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  if ((req.city ?? '').isNotEmpty)
+                    Text(
+                      req.city!,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  const SizedBox(height: 3),
+                  const Text(
+                    'Wants to chat with you',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFFF90E18),
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              const Text(
-                'Wants to chat with you',
-                style: TextStyle(fontSize: 11, color: Colors.black54),
-              ),
-              const Spacer(),
-              Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => _handleAcceptChatRequest(req),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Semantics(
+                  label:
+                      'Accept chat request from ${displayName.isEmpty ? 'User' : displayName}',
+                  button: true,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _handleAcceptChatRequest(req),
+                    child: ExcludeSemantics(
                       child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 9),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 7),
                         decoration: BoxDecoration(
                           color: const Color(0xFFF90E18),
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Center(
-                          child: Text(
-                            'Accept',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        child: const Text(
+                          'Accept',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => _handleRejectChatRequest(req),
+                ),
+                const SizedBox(height: 6),
+                Semantics(
+                  label:
+                      'Reject chat request from ${displayName.isEmpty ? 'User' : displayName}',
+                  button: true,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _handleRejectChatRequest(req),
+                    child: ExcludeSemantics(
                       child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 9),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 7),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(20),
                         ),
-                        child: const Center(
-                          child: Text(
-                            'Reject',
-                            style: TextStyle(
-                              color: Colors.black54,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        child: const Text(
+                          'Reject',
+                          style: TextStyle(
+                            color: Colors.black54,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSentChatRequestCard(ProposalModel req) {
+    final imageUrl = req.profilePicture?.isNotEmpty == true
+        ? req.profilePicture!
+        : 'https://static.vecteezy.com/system/resources/previews/022/997/791/non_2x/contact-person-icon-transparent-blur-glass-effect-icon-free-vector.jpg';
+    final displayName =
+        '${req.firstName ?? ''} ${req.lastName ?? ''}'.trim();
+
+    return InkWell(
+      onTap: () => _showSentChatRequestSheet(req),
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.white, Color(0xFFF8FAFC)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                PrivacyUtils.buildPrivacyAwareAvatar(
+                  imageUrl: imageUrl,
+                  privacy: req.privacy,
+                  photoRequest: req.photoRequest,
+                  radius: 28,
+                  backgroundColor: Colors.grey[200],
+                ),
+                Positioned(
+                  bottom: -4,
+                  right: -4,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1565C0),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.send,
+                        size: 12, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayName.isEmpty ? 'User' : displayName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0F172A),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  if ((req.city ?? '').isNotEmpty)
+                    Text(
+                      req.city!,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  const SizedBox(height: 3),
+                  const Text(
+                    'Chat request sent · Awaiting response',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF1565C0),
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1565C0).withOpacity(0.10),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'Pending',
+                style: TextStyle(
+                  color: Color(0xFF1565C0),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSentChatRequestSheet(ProposalModel req) {
+    final displayName =
+        '${req.firstName ?? ''} ${req.lastName ?? ''}'.trim();
+    final imageUrl = req.profilePicture?.isNotEmpty == true
+        ? req.profilePicture!
+        : 'https://static.vecteezy.com/system/resources/previews/022/997/791/non_2x/contact-person-icon-transparent-blur-glass-effect-icon-free-vector.jpg';
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      backgroundColor: Colors.white,
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            const SizedBox(height: 20),
+            PrivacyUtils.buildPrivacyAwareAvatar(
+              imageUrl: imageUrl,
+              privacy: req.privacy,
+              photoRequest: req.photoRequest,
+              radius: 32,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              displayName.isEmpty ? 'User' : displayName,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+            if ((req.city ?? '').isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                req.city!,
+                style:
+                    const TextStyle(fontSize: 13, color: Colors.black54),
+              ),
             ],
+            const SizedBox(height: 8),
+            const Text(
+              'Chat request sent · Awaiting response',
+              style: TextStyle(fontSize: 14, color: Color(0xFF1565C0)),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  final profileId = req.receiverId ?? '';
+                  if (profileId.isNotEmpty) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => UserProfilePage(userId: int.tryParse(profileId) ?? 0),
+                      ),
+                    ).then((_) => _loadPendingChatRequests(userId));
+                  }
+                },
+                icon: const Icon(Icons.person_outline),
+                label: const Text(
+                  'View Profile',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF90E18),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  elevation: 0,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  await _handleCancelChatRequest(req);
+                },
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFE0E0E0)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: const Text(
+                  'Cancel Request',
+                  style: TextStyle(
+                      color: Colors.black54,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleCancelChatRequest(ProposalModel proposal) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Cancel Chat Request"),
+        content: const Text("Are you sure you want to cancel this request?"),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("No"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Yes, Cancel"),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final success = await ProposalService.deleteProposal(
+        userId,
+        proposal.proposalId.toString(),
+      );
+      if (mounted) Navigator.pop(context);
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Chat request cancelled"),
+            backgroundColor: Colors.orange,
           ),
         );
-      },
-    );
+        await _loadPendingChatRequests(userId);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Failed to cancel request"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+      );
+    }
   }
 
 
@@ -1271,7 +1701,6 @@ class _ChatListScreenState extends State<ChatListScreen>
           color: const Color(0xFFFAF0F0),
           child: Column(
             children: [
-              _buildChatRequestsSection(),
               _buildPinnedAdminCard(),
               if (_totalUnreadCount > 0)
                 Container(
@@ -1345,7 +1774,6 @@ class _ChatListScreenState extends State<ChatListScreen>
         color: const Color(0xFFFAF0F0),
         child: Column(
           children: [
-            _buildChatRequestsSection(),
             _buildPinnedAdminCard(),
             if (_totalUnreadCount > 0)
               Container(
@@ -1426,7 +1854,7 @@ class _ChatListScreenState extends State<ChatListScreen>
         return bTime.compareTo(aTime);
       });
 
-    if (chatRooms.isEmpty) {
+    if (chatRooms.isEmpty && _pendingChatRequests.isEmpty && _sentChatRequests.isEmpty && !_requestsLoading && !_sentRequestsLoading) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1449,25 +1877,176 @@ class _ChatListScreenState extends State<ChatListScreen>
     final displayedRooms =
         chatRooms.sublist(0, _displayCount.clamp(0, chatRooms.length));
 
+    final int reqCount = _pendingChatRequests.length;
+    final int sentCount = _sentChatRequests.length;
+
+    // Section visibility flags
+    final bool showRequestsHeader = _requestsLoading || reqCount > 0;
+    final bool showSentHeader = _sentRequestsLoading || sentCount > 0;
+    final bool showConversationsHeader =
+        (showRequestsHeader || showSentHeader) && displayedRooms.isNotEmpty;
+
+    // ── Index offsets inside the ListView ──
+    // 0                      : received requests header (if showRequestsHeader)
+    // 1..reqCount            : received request rows
+    // next                   : sent requests header (if showSentHeader)
+    // next..sentCount        : sent request rows
+    // next                   : conversations header (if showConversationsHeader)
+    // next..                 : chat room rows
+    // last                   : loading indicator (if _isLoadingMore)
+
+    int cursor = 0;
+
+    final int requestsHeaderIdx = showRequestsHeader ? cursor++ : -1;
+    if (showRequestsHeader) cursor += reqCount;
+
+    final int sentHeaderIdx = showSentHeader ? cursor++ : -1;
+    final int firstSentIdx = showSentHeader ? cursor : -1;
+    if (showSentHeader) cursor += sentCount;
+
+    final int conversationsHeaderIdx =
+        showConversationsHeader ? cursor++ : -1;
+    final int firstRoomIdx = cursor;
+
+    final int totalItems = firstRoomIdx +
+        displayedRooms.length +
+        (_isLoadingMore ? 1 : 0);
+
+    // Precompute first request index for received section
+    final int firstRequestIdx = showRequestsHeader ? 1 : -1;
+
     return Container(
       color: Colors.white,
       child: ListView.separated(
         controller: _scrollController,
-        itemCount: displayedRooms.length + (_isLoadingMore ? 1 : 0),
-        separatorBuilder: (_, __) =>
-            const Divider(indent: 72, height: 1, color: Color(0xFFE0E0E0)),
+        itemCount: totalItems,
+        separatorBuilder: (_, index) {
+          if (showRequestsHeader && index == requestsHeaderIdx) {
+            return const SizedBox.shrink();
+          }
+          if (showSentHeader && index == sentHeaderIdx) {
+            return const SizedBox.shrink();
+          }
+          if (showConversationsHeader && index == conversationsHeaderIdx) {
+            return const SizedBox.shrink();
+          }
+          return const Divider(
+              indent: 72, height: 1, color: Color(0xFFE0E0E0));
+        },
         itemBuilder: (context, index) {
-          // Loading indicator at the bottom
-          if (index == displayedRooms.length) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                  child:
-                      CircularProgressIndicator(color: Color(0xFFF90E18))),
+          // ── Received requests header ──
+          if (showRequestsHeader && index == requestsHeaderIdx) {
+            return Semantics(
+              header: true,
+              label: _requestsLoading
+                  ? 'Loading chat requests'
+                  : 'Chat Requests section, $reqCount requests',
+              child: Container(
+                color: const Color(0xFFF90E18).withOpacity(0.06),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: _requestsLoading
+                    ? const LinearProgressIndicator()
+                    : Row(
+                        children: [
+                          const Icon(Icons.mark_chat_unread,
+                              color: Color(0xFFF90E18), size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Chat Requests ($reqCount)',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFFF90E18),
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
             );
           }
 
-          final data = displayedRooms[index];
+          // ── Received request rows ──
+          if (showRequestsHeader &&
+              index >= firstRequestIdx &&
+              index < firstRequestIdx + reqCount) {
+            return _buildChatRequestCard(
+                _pendingChatRequests[index - firstRequestIdx]);
+          }
+
+          // ── Sent requests header ──
+          if (showSentHeader && index == sentHeaderIdx) {
+            return Semantics(
+              header: true,
+              label: _sentRequestsLoading
+                  ? 'Loading sent chat requests'
+                  : 'Sent Chat Requests section, $sentCount requests',
+              child: Container(
+                color: const Color(0xFF1565C0).withOpacity(0.06),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: _sentRequestsLoading
+                    ? const LinearProgressIndicator()
+                    : Row(
+                        children: [
+                          const Icon(Icons.send,
+                              color: Color(0xFF1565C0), size: 18),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Sent Requests ($sentCount)',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF1565C0),
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            );
+          }
+
+          // ── Sent request rows ──
+          if (showSentHeader &&
+              firstSentIdx >= 0 &&
+              index >= firstSentIdx &&
+              index < firstSentIdx + sentCount) {
+            return _buildSentChatRequestCard(
+                _sentChatRequests[index - firstSentIdx]);
+          }
+
+          // ── Conversations header ──
+          if (showConversationsHeader && index == conversationsHeaderIdx) {
+            return Semantics(
+              header: true,
+              label: 'Conversations section',
+              child: Container(
+                color: Colors.grey.shade50,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: const Text(
+                  'Conversations',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black54,
+                  ),
+                ),
+              ),
+            );
+          }
+
+          // ── Loading indicator at tail ──
+          final int roomIndex = index - firstRoomIdx;
+          if (roomIndex == displayedRooms.length) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                  child: CircularProgressIndicator(color: Color(0xFFF90E18))),
+            );
+          }
+
+          final data = displayedRooms[roomIndex];
 
           final participants =
               List<String>.from(data['participants'] ?? []);

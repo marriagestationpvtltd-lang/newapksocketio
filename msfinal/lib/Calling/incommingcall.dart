@@ -23,6 +23,7 @@ import 'tokengenerator.dart';
 import 'call_history_model.dart';
 import 'call_history_service.dart';
 import 'call_foreground_service.dart';
+import 'incomingvideocall.dart';
 
 class IncomingCallScreen extends StatefulWidget {
   final Map<String, dynamic> callData;
@@ -59,6 +60,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   StreamSubscription<Map<String, dynamic>>? _cancelSubscription;
   StreamSubscription<Map<String, dynamic>>? _socketCancelSubscription;
   StreamSubscription<Map<String, dynamic>>? _socketEndedSubscription;
+  StreamSubscription<Map<String, dynamic>>? _socketSwitchToVideoSub;
 
   final _ringtonePlayer = FlutterRingtonePlayer();
 
@@ -162,6 +164,14 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       if (channelName == _channel) {
         _end();
       }
+    });
+
+    // Listen for audio→video switch request from the other party.
+    _socketSwitchToVideoSub = SocketService().onSwitchToVideoRequest.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (channelName != _channel) return;
+      if (!_callActive || _ending || !mounted) return;
+      _showSwitchToVideoDialog(data);
     });
   }
 
@@ -607,6 +617,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     _cancelSubscription?.cancel();
     _socketCancelSubscription?.cancel();
     _socketEndedSubscription?.cancel();
+    _socketSwitchToVideoSub?.cancel();
 
     if (_callActive) {
       // Notify caller via Socket.IO (fast path) + FCM (fallback)
@@ -673,6 +684,91 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     unawaited(_stopForegroundService());
   }
 
+  // ================= SWITCH TO VIDEO =================
+  /// Show dialog when the other party requests an audio→video upgrade.
+  void _showSwitchToVideoDialog(Map<String, dynamic> data) {
+    final requesterId = data['requesterId']?.toString() ?? _callerId;
+    if (!mounted) return;
+    showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Switch to Video'),
+        content: Text('$_callerName wants to switch to a video call. Accept?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Decline'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Accept'),
+          ),
+        ],
+      ),
+    ).then((accepted) {
+      if (!mounted || _ending) return;
+      if (accepted == true) {
+        SocketService().emitSwitchToVideoResponse(
+          requesterId: requesterId,
+          responderId: _currentUserId,
+          channelName: _channel,
+          accepted: true,
+        );
+        _navigateToVideoCall();
+      } else {
+        SocketService().emitSwitchToVideoResponse(
+          requesterId: requesterId,
+          responderId: _currentUserId,
+          channelName: _channel,
+          accepted: false,
+        );
+      }
+    });
+  }
+
+  /// Navigate to IncomingVideoCallScreen on the same Agora channel.
+  Future<void> _navigateToVideoCall() async {
+    if (_ending) return;
+    // Cancel all subscriptions to avoid interference.
+    _ringTimer?.cancel();
+    _callTimer?.cancel();
+    _cancelSubscription?.cancel();
+    _socketCancelSubscription?.cancel();
+    _socketEndedSubscription?.cancel();
+    _socketSwitchToVideoSub?.cancel();
+
+    // Leave the audio Agora channel.
+    try {
+      if (_joined) await _engine.leaveChannel();
+      if (_engineInitialized) await _engine.release();
+    } catch (e) {
+      debugPrint('Error releasing audio engine for video switch: $e');
+    }
+    CallOverlayManager().reset();
+    unawaited(_stopForegroundService());
+
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: activeCallRouteName),
+        fullscreenDialog: true,
+        builder: (_) => IncomingVideoCallScreen(
+          callData: {
+            ...widget.callData,
+            'channelName': _channel,
+            'callerId': _callerId,
+            'callerName': _callerName,
+            'isVideoCall': 'true',
+            'type': 'video_call',
+            // Mark as upgraded so IncomingVideoCallScreen skips emitting accept again
+            'isAudioToVideoUpgrade': 'true',
+          },
+        ),
+      ),
+    );
+  }
+
   // ================= UI =================
   @override
   Widget build(BuildContext context) {
@@ -737,35 +833,77 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
 
   Widget _buildConnectingUI() {
     return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Icon(Icons.phone_in_talk, color: Colors.white, size: 80),
-        const SizedBox(height: 30),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Text(
-            _callerName,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-            ),
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-            maxLines: 2,
+        const SizedBox(height: 40),
+        // Content area
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF00E5FF),
+                      Color(0xFF2979FF),
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF2979FF).withOpacity(0.5),
+                      blurRadius: 30,
+                      spreadRadius: 10,
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.phone_in_talk, color: Colors.white, size: 60),
+              ),
+              const SizedBox(height: 32),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  _callerName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const SizedBox(
+                width: 36,
+                height: 36,
+                child: CircularProgressIndicator(color: Colors.white70, strokeWidth: 3),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Connecting...',
+                style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.w400),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 20),
-        const SizedBox(
-          width: 48,
-          height: 48,
-          child: CircularProgressIndicator(color: Colors.white70, strokeWidth: 3),
-        ),
-        const SizedBox(height: 20),
-        const Text(
-          'Connecting...',
-          style: TextStyle(color: Colors.white70, fontSize: 18),
+        // End call button
+        Padding(
+          padding: const EdgeInsets.only(bottom: 50.0, left: 20, right: 20),
+          child: _modernCallBtn(
+            icon: Icons.call_end,
+            color: const Color(0xFFF44336),
+            onPressed: _endCall,
+            label: 'End',
+          ),
         ),
       ],
     );

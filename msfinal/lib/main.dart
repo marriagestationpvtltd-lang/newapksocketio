@@ -257,6 +257,10 @@ Future<void> _displayStandardNotification(RemoteMessage message) async {
   final channelName = isMessage ? messagesChannelName : generalChannelName;
   final channelDescription = isMessage ? messagesChannelDescription : generalChannelDescription;
 
+  // Use custom soft notification sound; AudioAttributesUsage.notification ensures
+  // system silent/vibration-only modes are respected (no sound in those modes).
+  const notificationSound = RawResourceAndroidNotificationSound('ms_notification');
+
   final androidDetails = AndroidNotificationDetails(
     channelId,
     channelName,
@@ -264,6 +268,8 @@ Future<void> _displayStandardNotification(RemoteMessage message) async {
     importance: isMessage ? Importance.high : Importance.defaultImportance,
     priority: isMessage ? Priority.high : Priority.defaultPriority,
     playSound: true,
+    sound: notificationSound,
+    audioAttributesUsage: AudioAttributesUsage.notification,
     enableVibration: true,
   );
 
@@ -271,6 +277,7 @@ Future<void> _displayStandardNotification(RemoteMessage message) async {
     presentAlert: true,
     presentBadge: true,
     presentSound: true,
+    sound: 'ms_notification.wav',
     presentBanner: true,
     presentList: true,
   );
@@ -377,12 +384,17 @@ Future<void> initLocalNotifications() async {
   );
 
   // Create Android notification channel for messages
+  // Custom soft sound respects system silent/vibration via AudioAttributesUsage.notification
+  const notificationSound = RawResourceAndroidNotificationSound('ms_notification');
+
   final messagesChannel = AndroidNotificationChannel(
     messagesChannelId,
     messagesChannelName,
     description: messagesChannelDescription,
     importance: Importance.high,
     playSound: true,
+    sound: notificationSound,
+    audioAttributesUsage: AudioAttributesUsage.notification,
     enableVibration: true,
     showBadge: true,
   );
@@ -394,6 +406,8 @@ Future<void> initLocalNotifications() async {
     description: generalChannelDescription,
     importance: Importance.defaultImportance,
     playSound: true,
+    sound: notificationSound,
+    audioAttributesUsage: AudioAttributesUsage.notification,
     showBadge: true,
   );
 

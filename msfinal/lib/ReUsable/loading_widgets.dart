@@ -337,6 +337,357 @@ class WarningMessageWidget extends StatelessWidget {
   }
 }
 
+// ── Skeleton shape primitives ──────────────────────────────────────────────
+
+/// A grey rounded rectangle placeholder used inside skeleton screens.
+class _SkeletonBox extends StatelessWidget {
+  final double width;
+  final double height;
+  final double radius;
+
+  const _SkeletonBox({
+    required this.width,
+    required this.height,
+    this.radius = 6,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: AppColors.borderLight,
+        borderRadius: BorderRadius.circular(radius),
+      ),
+    );
+  }
+}
+
+/// A circular grey placeholder (for avatars / profile pictures).
+class _SkeletonCircle extends StatelessWidget {
+  final double size;
+
+  const _SkeletonCircle({required this.size});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: const BoxDecoration(
+        color: AppColors.borderLight,
+        shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
+// ── Section-specific skeleton screens ─────────────────────────────────────
+
+/// Skeleton for a horizontal profile card (190 × 270).
+/// Used in HomeScreen's Matched Profiles and Recent Members sections.
+class ProfileCardSkeleton extends StatelessWidget {
+  const ProfileCardSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerLoading(
+      isLoading: true,
+      child: Container(
+        width: 190,
+        margin: const EdgeInsets.only(right: 14),
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(16),
+                topRight: Radius.circular(16),
+              ),
+              child: const _SkeletonBox(width: 190, height: 155, radius: 0),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _SkeletonBox(width: 120, height: 12),
+                  const SizedBox(height: 6),
+                  const _SkeletonBox(width: 80, height: 10),
+                  const SizedBox(height: 6),
+                  const _SkeletonBox(width: 100, height: 10),
+                  const SizedBox(height: 10),
+                  const _SkeletonBox(width: 160, height: 32, radius: 8),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Horizontal list of [ProfileCardSkeleton] cards.
+class ProfileCardListSkeleton extends StatelessWidget {
+  final int count;
+  final double height;
+
+  const ProfileCardListSkeleton({
+    super.key,
+    this.count = 3,
+    this.height = 270,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: height,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(left: 16, right: 8),
+        itemCount: count,
+        itemBuilder: (_, __) => const ProfileCardSkeleton(),
+      ),
+    );
+  }
+}
+
+/// Skeleton for a horizontal shortlist card (140 × 180).
+class ShortlistCardSkeleton extends StatelessWidget {
+  const ShortlistCardSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerLoading(
+      isLoading: true,
+      child: Container(
+        width: 140,
+        height: 180,
+        margin: const EdgeInsets.only(right: 12),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          color: AppColors.borderLight,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  _SkeletonBox(width: 90, height: 11),
+                  SizedBox(height: 5),
+                  _SkeletonBox(width: 60, height: 9),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Horizontal list of [ShortlistCardSkeleton] cards.
+class ShortlistCardListSkeleton extends StatelessWidget {
+  final int count;
+
+  const ShortlistCardListSkeleton({super.key, this.count = 3});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 180,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(left: 16, right: 8),
+        itemCount: count,
+        itemBuilder: (_, __) => const ShortlistCardSkeleton(),
+      ),
+    );
+  }
+}
+
+/// Skeleton for a single chat list row.
+class ChatListItemSkeleton extends StatelessWidget {
+  const ChatListItemSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerLoading(
+      isLoading: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            const _SkeletonCircle(size: 52),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  _SkeletonBox(width: 130, height: 13),
+                  SizedBox(height: 6),
+                  _SkeletonBox(width: 200, height: 11),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: const [
+                _SkeletonBox(width: 36, height: 10),
+                SizedBox(height: 6),
+                _SkeletonCircle(size: 18),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Multiple [ChatListItemSkeleton] rows for a full chat list loading state.
+class ChatListSkeleton extends StatelessWidget {
+  final int count;
+
+  const ChatListSkeleton({super.key, this.count = 7});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: List.generate(count, (_) => const ChatListItemSkeleton()),
+    );
+  }
+}
+
+/// Skeleton for a 2-column profile grid card (Search recommended profiles).
+class SearchProfileCardSkeleton extends StatelessWidget {
+  const SearchProfileCardSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerLoading(
+      isLoading: true,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.white,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(14),
+                  topRight: Radius.circular(14),
+                ),
+                child: Container(
+                  width: double.infinity,
+                  color: AppColors.borderLight,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  _SkeletonBox(width: 90, height: 12),
+                  SizedBox(height: 5),
+                  _SkeletonBox(width: 60, height: 10),
+                  SizedBox(height: 5),
+                  _SkeletonBox(width: 100, height: 10),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A 2-column grid of [SearchProfileCardSkeleton] items.
+class SearchProfileGridSkeleton extends StatelessWidget {
+  final int count;
+
+  const SearchProfileGridSkeleton({super.key, this.count = 4});
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: count,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.65,
+      ),
+      itemBuilder: (_, __) => const SearchProfileCardSkeleton(),
+    );
+  }
+}
+
+/// Skeleton for a single service/offer card row.
+class ServiceCardSkeleton extends StatelessWidget {
+  const ServiceCardSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerLoading(
+      isLoading: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            const _SkeletonBox(width: 56, height: 56, radius: 12),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  _SkeletonBox(width: 140, height: 13),
+                  SizedBox(height: 6),
+                  _SkeletonBox(width: 200, height: 11),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// List of [ServiceCardSkeleton] rows.
+class ServiceListSkeleton extends StatelessWidget {
+  final int count;
+
+  const ServiceListSkeleton({super.key, this.count = 3});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: List.generate(count, (_) => const ServiceCardSkeleton()),
+    );
+  }
+}
+
 // Shimmer Loading Effect (for skeleton screens)
 class ShimmerLoading extends StatefulWidget {
   final Widget child;

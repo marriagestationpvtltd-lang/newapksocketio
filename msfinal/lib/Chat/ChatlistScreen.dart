@@ -27,6 +27,7 @@ import 'adminchat.dart';
 import '../service/socket_service.dart';
 import 'package:ms2026/config/app_endpoints.dart';
 import '../otherprofile/otherprofileview.dart';
+import '../ReUsable/loading_widgets.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -1721,7 +1722,10 @@ class _ChatListScreenState extends State<ChatListScreen>
           elevation: 0,
           title: const Text('Chat', style: TextStyle(color: Colors.black87)),
         ),
-        body: const Center(child: CircularProgressIndicator()),
+        body: const SingleChildScrollView(
+            physics: NeverScrollableScrollPhysics(),
+            child: ChatListSkeleton(count: 8),
+          ),
       );
     }
 
@@ -1952,8 +1956,10 @@ class _ChatListScreenState extends State<ChatListScreen>
 
   Widget _buildChatListWithDebug() {
     if (!_chatRoomsInitialized) {
-      return const Center(
-          child: CircularProgressIndicator(color: Color(0xFFF90E18)));
+      return const SingleChildScrollView(
+        physics: NeverScrollableScrollPhysics(),
+        child: ChatListSkeleton(count: 7),
+      );
     }
 
     // Sort client-side by lastMessageTime descending.

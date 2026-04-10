@@ -1188,6 +1188,7 @@ class _ChatListScreenState extends State<ChatListScreen>
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Stack(
+              clipBehavior: Clip.none,
               children: [
                 PrivacyUtils.buildPrivacyAwareAvatar(
                   imageUrl: imageUrl,
@@ -1197,8 +1198,8 @@ class _ChatListScreenState extends State<ChatListScreen>
                   backgroundColor: Colors.grey[200],
                 ),
                 Positioned(
-                  bottom: -2,
-                  right: -2,
+                  bottom: -4,
+                  right: -4,
                   child: Container(
                     padding: const EdgeInsets.all(3),
                     decoration: const BoxDecoration(
@@ -1206,7 +1207,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.chat_bubble,
-                        size: 9, color: Colors.white),
+                        size: 12, color: Colors.white),
                   ),
                 ),
               ],
@@ -1248,41 +1249,49 @@ class _ChatListScreenState extends State<ChatListScreen>
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                GestureDetector(
-                  onTap: () => _handleAcceptChatRequest(req),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF90E18),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      'Accept',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                Semantics(
+                  label: 'Accept chat request from ${displayName.isEmpty ? 'User' : displayName}',
+                  button: true,
+                  child: GestureDetector(
+                    onTap: () => _handleAcceptChatRequest(req),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF90E18),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        'Accept',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 6),
-                GestureDetector(
-                  onTap: () => _handleRejectChatRequest(req),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      'Reject',
-                      style: TextStyle(
-                        color: Colors.black54,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                Semantics(
+                  label: 'Reject chat request from ${displayName.isEmpty ? 'User' : displayName}',
+                  button: true,
+                  child: GestureDetector(
+                    onTap: () => _handleRejectChatRequest(req),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Text(
+                        'Reject',
+                        style: TextStyle(
+                          color: Colors.black54,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
                   ),

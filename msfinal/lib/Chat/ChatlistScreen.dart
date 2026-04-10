@@ -26,6 +26,7 @@ import 'ChatdetailsScreen.dart';
 import 'adminchat.dart';
 import '../service/socket_service.dart';
 import 'package:ms2026/config/app_endpoints.dart';
+import '../otherprofile/otherprofileview.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -1136,7 +1137,17 @@ class _ChatListScreenState extends State<ChatListScreen>
         '${req.firstName ?? ''} ${req.lastName ?? ''}'.trim();
 
     return InkWell(
-      onTap: () => _showChatRequestActionSheet(req),
+      onTap: () {
+        final senderId = int.tryParse(req.senderId ?? '');
+        if (senderId != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => UserProfilePage(userId: senderId),
+            ),
+          );
+        }
+      },
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -1213,9 +1224,11 @@ class _ChatListScreenState extends State<ChatListScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Semantics(
-                  label: 'Accept chat request from ${displayName.isEmpty ? 'User' : displayName}',
+                  label:
+                      'Accept chat request from ${displayName.isEmpty ? 'User' : displayName}',
                   button: true,
                   child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: () => _handleAcceptChatRequest(req),
                     child: ExcludeSemantics(
                       child: Container(
@@ -1239,9 +1252,11 @@ class _ChatListScreenState extends State<ChatListScreen>
                 ),
                 const SizedBox(height: 6),
                 Semantics(
-                  label: 'Reject chat request from ${displayName.isEmpty ? 'User' : displayName}',
+                  label:
+                      'Reject chat request from ${displayName.isEmpty ? 'User' : displayName}',
                   button: true,
                   child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: () => _handleRejectChatRequest(req),
                     child: ExcludeSemantics(
                       child: Container(

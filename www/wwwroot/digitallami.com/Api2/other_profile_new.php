@@ -91,7 +91,7 @@ $chat_request_type="none";
 $can_chat=false;
 
 $chatStmt=$conn->prepare("
-SELECT sender_id,receiver_id,status FROM proposals
+SELECT sender_id,receiver_id,status,updated_at FROM proposals
 WHERE request_type='Chat'
 AND ((sender_id=? AND receiver_id=?)
 OR (sender_id=? AND receiver_id=?))
@@ -105,10 +105,21 @@ if($chatRes->num_rows>0){
     $chatRow=$chatRes->fetch_assoc();
     $chat_request=$chatRow['status'];
 
-    if($chatRow['sender_id']==$myid){
-        $chat_request_type="sent";
-    }else{
-        $chat_request_type="received";
+    // If rejected, only keep rejected status for 12 hours; after that treat as not_sent
+    if($chat_request === 'rejected' && $chatRow['sender_id'] == $myid){
+        $rejectedAt = $chatRow['updated_at'] ? strtotime($chatRow['updated_at']) : 0;
+        $hoursSinceRejection = (time() - $rejectedAt) / 3600;
+        if($hoursSinceRejection >= 12){
+            $chat_request = 'not_sent';
+        }
+    }
+
+    if($chat_request !== 'not_sent'){
+        if($chatRow['sender_id']==$myid){
+            $chat_request_type="sent";
+        }else{
+            $chat_request_type="received";
+        }
     }
 }
 

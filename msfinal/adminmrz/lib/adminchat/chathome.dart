@@ -126,7 +126,8 @@ class _ChatWindowState extends State<ChatWindow> {
   bool _adminTypingActive = false;
   String? _activeTypingRoomId;
   bool _userIsTyping = false;
-  bool _isAdminTyping = false; // guards against emitting typing_start on every keystroke
+  bool _adminTypingActive = false;
+  DateTime? _lastTypingStart;
 
   // Inline reply / edit state
   Map<String, dynamic>? _replyingTo; // {messageId, message, senderid, senderName}
@@ -169,6 +170,8 @@ class _ChatWindowState extends State<ChatWindow> {
   static const Duration _kEnsureVisibleDuration = Duration(milliseconds: 420);
   static const Duration _kAdminTypingIdle = Duration(seconds: 3);
   static const int _kMinScrollDurationMs = 320;
+  static const Duration _kTypingIdleDuration = Duration(seconds: 3);
+  static const Duration _kTypingStartThrottle = Duration(milliseconds: 900);
   static const int _kMaxScrollDurationMs = 950;
   static const double _kScrollDurationMultiplier = 0.35;
   static const double _kMessageScrollAlignment = 0.45;
@@ -1332,6 +1335,8 @@ class _ChatWindowState extends State<ChatWindow> {
   // ── TYPING INDICATOR ────────────────────────────────────────────────────
 
   void _setupTypingListener(int userId) {
+    _typingTimer?.cancel();
+    _adminTypingActive = false;
     final roomId = AdminSocketService.chatRoomId(userId.toString());
     _socketService.joinRoom(roomId);
     _typingStopTimer?.cancel();
@@ -1341,53 +1346,49 @@ class _ChatWindowState extends State<ChatWindow> {
   }
 
   void _updateAdminTypingStatus(String text, String receiverId) {
+    final trimmed = text.trim();
+    if (receiverId.isEmpty) return;
+    _typingTimer?.cancel();
     final roomId = AdminSocketService.chatRoomId(receiverId);
-    final bool hasText = text.trim().isNotEmpty;
-    _typingStopTimer?.cancel();
-
-    if (!hasText) {
-      _sendTypingStop(roomId);
-      return;
-    }
-
-    _startAdminTyping(roomId);
-    _typingStopTimer = Timer(_kAdminTypingIdle, () {
-      _sendTypingStop(roomId);
-    });
-  }
-
-  void _startAdminTyping(String roomId) {
-    if (_adminTypingActive && _activeTypingRoomId == roomId) return;
-    if (_adminTypingActive && _activeTypingRoomId != null && _activeTypingRoomId != roomId) {
-      _sendTypingStop(_activeTypingRoomId!);
+    final isTyping = trimmed.isNotEmpty;
+    if (isTyping) {
+      final now = DateTime.now();
+      final bool shouldEmitStart = !_adminTypingActive ||
+          _lastTypingStart == null ||
+          now.difference(_lastTypingStart!) >= _kTypingStartThrottle;
+      if (shouldEmitStart) {
+        _socketService.sendTypingStart(roomId);
+        _adminTypingActive = true;
+        _lastTypingStart = now;
+      }
+      _typingTimer = Timer(_kTypingIdleDuration, () {
+        _emitTypingStop(roomId);
+      });
+    } else {
+      _emitTypingStop(roomId);
     }
     _activeTypingRoomId = roomId;
     _adminTypingActive = true;
     _socketService.sendTypingStart(roomId);
   }
 
-  void _clearAdminTypingStatus() {
-    _typingStopTimer?.cancel();
-    final roomId = _activeTypingRoomId;
-    if (roomId == null) return;
-    _sendTypingStop(roomId);
-  }
-
-  void _sendTypingStop(String roomId) {
+  void _emitTypingStop(String roomId) {
+    _typingTimer?.cancel();
     if (!_adminTypingActive) return;
-    if (_activeTypingRoomId != null && _activeTypingRoomId != roomId) return;
-    _socketService.sendTypingStop(roomId);
     _adminTypingActive = false;
-    _activeTypingRoomId = null;
+    _socketService.sendTypingStop(roomId);
   }
 
-  Future<void> _ensureTypingSoundLoaded() async {
-    if (_typingSoundLoaded) return;
-    try {
-      await _typingAudioPlayer.setAsset('assets/audio/ring_soft.wav');
-      _typingSoundLoaded = true;
-    } catch (e) {
-      debugPrint('Error preloading typing sound: $e');
+  void _clearAdminTypingStatus() {
+    _typingTimer?.cancel();
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final receiverId = chatProvider.id?.toString();
+    final roomId =
+        receiverId != null && receiverId.isNotEmpty ? AdminSocketService.chatRoomId(receiverId) : null;
+    final wasTyping = _adminTypingActive;
+    _adminTypingActive = false;
+    if (roomId != null && wasTyping) {
+      _socketService.sendTypingStop(roomId);
     }
   }
 

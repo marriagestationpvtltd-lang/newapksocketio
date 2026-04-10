@@ -26,6 +26,7 @@ import 'ChatdetailsScreen.dart';
 import 'adminchat.dart';
 import '../service/socket_service.dart';
 import 'package:ms2026/config/app_endpoints.dart';
+import '../otherprofile/otherprofileview.dart';
 
 class ChatListScreen extends StatefulWidget {
   const ChatListScreen({super.key});
@@ -1074,6 +1075,39 @@ class _ChatListScreenState extends State<ChatListScreen>
               style: TextStyle(fontSize: 14, color: Colors.black54),
             ),
             const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  final profileId = req.senderId ?? '';
+                  if (profileId.isNotEmpty) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => UserProfilePage(userId: int.tryParse(profileId) ?? 0),
+                      ),
+                    ).then((_) => _loadPendingChatRequests(userId));
+                  }
+                },
+                icon: const Icon(Icons.person_outline),
+                label: const Text(
+                  'View Profile',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF90E18),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  elevation: 0,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
@@ -1105,7 +1139,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                       _handleAcceptChatRequest(req);
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF90E18),
+                      backgroundColor: const Color(0xFF1565C0),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1430,6 +1464,39 @@ class _ChatListScreenState extends State<ChatListScreen>
               style: TextStyle(fontSize: 14, color: Color(0xFF1565C0)),
             ),
             const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  final profileId = req.receiverId ?? '';
+                  if (profileId.isNotEmpty) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => UserProfilePage(userId: int.tryParse(profileId) ?? 0),
+                      ),
+                    ).then((_) => _loadPendingChatRequests(userId));
+                  }
+                },
+                icon: const Icon(Icons.person_outline),
+                label: const Text(
+                  'View Profile',
+                  style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFF90E18),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  elevation: 0,
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(

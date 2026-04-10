@@ -122,7 +122,9 @@ class _ChatWindowState extends State<ChatWindow> {
   OverlayEntry? _callWaitingBannerEntry;
 
   // Typing indicator state
-  Timer? _typingTimer;
+  Timer? _typingStopTimer;
+  bool _adminTypingActive = false;
+  String? _activeTypingRoomId;
   bool _userIsTyping = false;
   bool _isAdminTyping = false; // guards against emitting typing_start on every keystroke
 
@@ -134,6 +136,7 @@ class _ChatWindowState extends State<ChatWindow> {
   // Voice message playback state
   final AudioPlayer _voiceAudioPlayer = AudioPlayer();
   final AudioPlayer _typingAudioPlayer = AudioPlayer();
+  bool _typingSoundLoaded = false;
   String? _playingVoiceMessageId;
   bool _voiceIsPlaying = false;
   Duration _voicePlaybackPosition = Duration.zero;
@@ -164,6 +167,7 @@ class _ChatWindowState extends State<ChatWindow> {
   static const Duration _kLoadMoreDelay = Duration(milliseconds: 450);
   static const Duration _kContextFindDelay = Duration(milliseconds: 80);
   static const Duration _kEnsureVisibleDuration = Duration(milliseconds: 420);
+  static const Duration _kAdminTypingIdle = Duration(seconds: 3);
   static const int _kMinScrollDurationMs = 320;
   static const int _kMaxScrollDurationMs = 950;
   static const double _kScrollDurationMultiplier = 0.35;
@@ -448,7 +452,8 @@ class _ChatWindowState extends State<ChatWindow> {
           AdminSocketService.chatRoomId(chatProvider.id?.toString() ?? '');
       if (data['chatRoomId']?.toString() != expectedRoom) return;
       if (data['userId']?.toString() == senderId.toString()) return;
-      if (!_userIsTyping) _playTypingSound();
+      if (_userIsTyping) return;
+      _playTypingSound();
       setState(() => _userIsTyping = true);
     });
 
@@ -460,6 +465,7 @@ class _ChatWindowState extends State<ChatWindow> {
           AdminSocketService.chatRoomId(chatProvider.id?.toString() ?? '');
       if (data['chatRoomId']?.toString() != expectedRoom) return;
       if (data['userId']?.toString() == senderId.toString()) return;
+      if (!_userIsTyping) return;
       setState(() => _userIsTyping = false);
     });
 
@@ -1328,44 +1334,70 @@ class _ChatWindowState extends State<ChatWindow> {
   void _setupTypingListener(int userId) {
     final roomId = AdminSocketService.chatRoomId(userId.toString());
     _socketService.joinRoom(roomId);
+    _typingStopTimer?.cancel();
+    _adminTypingActive = false;
+    _activeTypingRoomId = null;
     setState(() => _userIsTyping = false);
   }
 
   void _updateAdminTypingStatus(String text, String receiverId) {
-    _typingTimer?.cancel();
     final roomId = AdminSocketService.chatRoomId(receiverId);
-    final isTyping = text.isNotEmpty;
-    if (isTyping) {
-      // Only emit typing_start when transitioning from not-typing to typing,
-      // preventing a socket event on every single keystroke.
-      if (!_isAdminTyping) {
-        _isAdminTyping = true;
-        _socketService.sendTypingStart(roomId);
-      }
-      _typingTimer = Timer(const Duration(seconds: 3), () {
-        _clearAdminTypingStatus();
-      });
-    } else {
-      _isAdminTyping = false;
-      _socketService.sendTypingStop(roomId);
+    final bool hasText = text.trim().isNotEmpty;
+    _typingStopTimer?.cancel();
+
+    if (!hasText) {
+      _sendTypingStop(roomId);
+      return;
     }
+
+    _startAdminTyping(roomId);
+    _typingStopTimer = Timer(_kAdminTypingIdle, () {
+      _sendTypingStop(roomId);
+    });
+  }
+
+  void _startAdminTyping(String roomId) {
+    if (_adminTypingActive && _activeTypingRoomId == roomId) return;
+    if (_adminTypingActive && _activeTypingRoomId != null && _activeTypingRoomId != roomId) {
+      _sendTypingStop(_activeTypingRoomId!);
+    }
+    _activeTypingRoomId = roomId;
+    _adminTypingActive = true;
+    _socketService.sendTypingStart(roomId);
   }
 
   void _clearAdminTypingStatus() {
-    _typingTimer?.cancel();
-    _isAdminTyping = false;
-    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-    final receiverId = chatProvider.id?.toString();
-    if (receiverId == null || receiverId.isEmpty) return;
-    final roomId = AdminSocketService.chatRoomId(receiverId);
+    _typingStopTimer?.cancel();
+    final roomId = _activeTypingRoomId;
+    if (roomId == null) return;
+    _sendTypingStop(roomId);
+  }
+
+  void _sendTypingStop(String roomId) {
+    if (!_adminTypingActive) return;
+    if (_activeTypingRoomId != null && _activeTypingRoomId != roomId) return;
     _socketService.sendTypingStop(roomId);
+    _adminTypingActive = false;
+    _activeTypingRoomId = null;
+  }
+
+  Future<void> _ensureTypingSoundLoaded() async {
+    if (_typingSoundLoaded) return;
+    try {
+      await _typingAudioPlayer.setAsset('assets/audio/ring_soft.wav');
+      _typingSoundLoaded = true;
+    } catch (e) {
+      debugPrint('Error preloading typing sound: $e');
+    }
   }
 
   // Play typing sound — short, soft, Messenger-style
   void _playTypingSound() async {
     try {
+      await _ensureTypingSoundLoaded();
+      if (!_typingSoundLoaded) return;
       await _typingAudioPlayer.setVolume(0.2);
-      await _typingAudioPlayer.setAsset('assets/audio/ring_soft.wav');
+      await _typingAudioPlayer.seek(Duration.zero);
       _typingAudioPlayer.play();
       Future.delayed(const Duration(milliseconds: 250), () {
         _typingAudioPlayer.stop();
@@ -5517,8 +5549,7 @@ class _ChatWindowState extends State<ChatWindow> {
   @override
   void dispose() {
     _removeCallOverlay();
-    _removeCallWaitingBanner();
-    _typingTimer?.cancel();
+    _typingStopTimer?.cancel();
     _replyHighlightTimer?.cancel();
     _floatingDateTimer?.cancel();
     _floatingDateNotifier.dispose();

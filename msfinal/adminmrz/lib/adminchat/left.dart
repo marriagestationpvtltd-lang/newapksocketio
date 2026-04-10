@@ -126,9 +126,15 @@ class _ChatSidebarState extends State<ChatSidebar> {
     if (reset) {
       _page = 1;
       _hasMore = true;
+      final bool hadData = _users.isNotEmpty;
       _users = [];
-      _filteredUsers = [];
-      _isInitialLoading = true;
+      if (!hadData) {
+        // No cached data — show the loading spinner and clear the list.
+        _filteredUsers = [];
+        _isInitialLoading = true;
+      }
+      // If hadData: keep _filteredUsers visible so the sidebar never goes blank
+      // while the background refresh runs (silent reload, no spinner).
     }
 
     if (!_hasMore && !reset) return;

@@ -104,6 +104,40 @@ class ProfileService {
     }
   }
 
+  /// Returns a map with keys:
+  ///   `is_blocked`    – current user has blocked the other
+  ///   `is_blocked_by` – the other user has blocked the current user
+  ///   `either_blocked`– either party has blocked the other
+  Future<Map<String, bool>> getBlockStatus({
+    required String myId,
+    required String userId,
+  }) async {
+    const _empty = {
+      'is_blocked': false,
+      'is_blocked_by': false,
+      'either_blocked': false,
+    };
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/check_block_status.php'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'my_id': myId,
+          'user_id': userId,
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+      return {
+        'is_blocked':    data['is_blocked']    == true,
+        'is_blocked_by': data['is_blocked_by'] == true,
+        'either_blocked': data['either_blocked'] == true,
+      };
+    } catch (e) {
+      return _empty;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getBlockedUsers({
     required String myId,
   }) async {

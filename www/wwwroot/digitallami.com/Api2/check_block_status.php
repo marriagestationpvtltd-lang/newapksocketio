@@ -10,20 +10,33 @@ $myId = intval($input['my_id'] ?? 0);
 $userId = intval($input['user_id'] ?? 0);
 
 if ($myId <= 0 || $userId <= 0) {
-    echo json_encode(["status" => "error", "is_blocked" => false]);
+    echo json_encode(["status" => "error", "is_blocked" => false, "is_blocked_by" => false, "either_blocked" => false]);
     exit;
 }
 
-$stmt = $conn->prepare("SELECT id FROM blocks WHERE blocker_id = ? AND blocked_id = ?");
-$stmt->bind_param("ii", $myId, $userId);
+// Fetch both block directions in a single query.
+$stmt = $conn->prepare("
+    SELECT
+        MAX(blocker_id = ? AND blocked_id = ?) AS is_blocked,
+        MAX(blocker_id = ? AND blocked_id = ?) AS is_blocked_by
+    FROM blocks
+    WHERE (blocker_id = ? AND blocked_id = ?)
+       OR (blocker_id = ? AND blocked_id = ?)
+");
+$stmt->bind_param("iiiiiiii", $myId, $userId, $userId, $myId, $myId, $userId, $userId, $myId);
 $stmt->execute();
-$result = $stmt->get_result();
+$row = $stmt->get_result()->fetch_assoc();
+$stmt->close();
+
+$isBlocked   = (bool)($row['is_blocked']   ?? false);
+$isBlockedBy = (bool)($row['is_blocked_by'] ?? false);
 
 echo json_encode([
-    "status" => "success",
-    "is_blocked" => $result->num_rows > 0
+    "status"        => "success",
+    "is_blocked"    => $isBlocked,
+    "is_blocked_by" => $isBlockedBy,
+    "either_blocked" => $isBlocked || $isBlockedBy,
 ]);
 
-$stmt->close();
 $conn->close();
 ?>

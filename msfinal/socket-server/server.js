@@ -124,6 +124,20 @@ pool.getConnection()
     `);
     console.log('✅ user_activities table ready');
 
+    // Create blocks table if not present (idempotent).
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS \`blocks\` (
+        \`id\`         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        \`blocker_id\` INT NOT NULL,
+        \`blocked_id\` INT NOT NULL,
+        \`created_at\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY \`uq_block\` (\`blocker_id\`, \`blocked_id\`),
+        INDEX \`idx_blocker\` (\`blocker_id\`),
+        INDEX \`idx_blocked\` (\`blocked_id\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log('✅ blocks table ready');
+
     // Ensure standalone index on created_at for range queries (idempotent).
     const [[idxCreatedAt]] = await conn.query(
       `SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS
@@ -422,6 +436,27 @@ function _cleanExpiredPendingCalls() {
 // ──────────────────────────────────────────────────────────────────────────────
 // DB helpers
 // ──────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns true if either user has blocked the other.
+ * Treats any DB error as unblocked so that a temporary DB hiccup does not
+ * permanently prevent communication.
+ */
+async function isEitherBlocked(userA, userB) {
+  if (!userA || !userB) return false;
+  try {
+    const [[row]] = await pool.query(
+      `SELECT 1 FROM blocks
+        WHERE (blocker_id = ? AND blocked_id = ?)
+           OR (blocker_id = ? AND blocked_id = ?)
+        LIMIT 1`,
+      [userA, userB, userB, userA],
+    );
+    return !!row;
+  } catch (_) {
+    return false;
+  }
+}
 
 /** Returns the sender_id for a message, or null if not found / IDs invalid. */
 async function getMessageSender(messageId, chatRoomId) {
@@ -767,7 +802,7 @@ io.on('connection', (socket) => {
   });
 
   // ── send_message ──────────────────────────────────────────────────────────
-  socket.on('send_message', (data) => {
+  socket.on('send_message', async (data) => {
     // ── Rate limit check (synchronous, no DB) ────────────────────────────
     if (isRateLimited(socket.id)) return; // silently drop
 
@@ -780,6 +815,13 @@ io.on('connection', (socket) => {
     } = data || {};
 
     if (!chatRoomId || !senderId || !receiverId) return;
+
+    // ── Block check ───────────────────────────────────────────────────────
+    // Drop the message silently if either party has blocked the other.
+    if (await isEitherBlocked(senderId.toString(), receiverId.toString())) {
+      console.log(`🚫 send_message blocked: sender=${senderId} receiver=${receiverId}`);
+      return;
+    }
 
     // Validate messageType against whitelist
     const ALLOWED_MESSAGE_TYPES = ['text', 'image', 'voice', 'video', 'file', 'call', 'doc', 'profile_card', 'image_gallery'];
@@ -1014,12 +1056,25 @@ io.on('connection', (socket) => {
   // ── call_invite ───────────────────────────────────────────────────────────
   // Caller emits this to invite a recipient. Delivered to recipient's personal
   // room if they are online; caller should also send a FCM push as fallback.
-  socket.on('call_invite', (data) => {
+  socket.on('call_invite', async (data) => {
     const { recipientId, callerId, ...rest } = data || {};
     if (!recipientId) return;
 
     const recipientIdStr = recipientId.toString();
     const callerIdStr    = callerId ? callerId.toString() : undefined;
+
+    // ── Block check ───────────────────────────────────────────────────────
+    // Reject the call silently if either party has blocked the other.
+    if (callerIdStr && await isEitherBlocked(callerIdStr, recipientIdStr)) {
+      if (callerIdStr) {
+        io.to(`user:${callerIdStr}`).emit('call_blocked', {
+          channelName: (rest.channelName || '').toString().trim(),
+          callerId:    callerIdStr,
+          recipientId: recipientIdStr,
+        });
+      }
+      return;
+    }
 
     const callPayload = {
       ...rest,

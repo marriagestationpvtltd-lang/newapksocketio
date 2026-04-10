@@ -88,6 +88,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
   StreamSubscription<Map<String, dynamic>>? _socketRingingSub;
   StreamSubscription<Map<String, dynamic>>? _socketUserOfflineSub;
   StreamSubscription<Map<String, dynamic>>? _socketBusySub;
+  StreamSubscription<Map<String, dynamic>>? _socketBlockedSub;
   StreamSubscription<Map<String, dynamic>>? _socketSwitchToVideoResponseSub;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   String? _connectionStatus;
@@ -182,6 +183,15 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
         Future.delayed(const Duration(seconds: 2), () {
           if (!_ending) _endCall();
         });
+      }
+    });
+    // Server rejected the call because either party has blocked the other.
+    _socketBlockedSub = SocketService().onCallBlocked.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
+      if (!_ending && mounted) {
+        unawaited(_stopRingtone());
+        _endCall();
       }
     });
     // Response to switch-to-video request
@@ -656,6 +666,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
     _socketRingingSub?.cancel();
     _socketUserOfflineSub?.cancel();
     _socketBusySub?.cancel();
+    _socketBlockedSub?.cancel();
     _socketSwitchToVideoResponseSub?.cancel();
     _socketAcceptedSub = null;
     _socketRejectedSub = null;
@@ -663,6 +674,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
     _socketRingingSub = null;
     _socketUserOfflineSub = null;
     _socketBusySub = null;
+    _socketBlockedSub = null;
     _socketSwitchToVideoResponseSub = null;
 
     await _stopRingtone();
@@ -797,6 +809,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
     _socketRingingSub?.cancel();
     _socketUserOfflineSub?.cancel();
     _socketBusySub?.cancel();
+    _socketBlockedSub?.cancel();
     _socketSwitchToVideoResponseSub?.cancel();
 
     // Leave audio Agora channel so the video screen can join with video enabled.
@@ -1379,6 +1392,8 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
     _socketRingingSub?.cancel();
     _socketUserOfflineSub?.cancel();
     _connectivitySubscription?.cancel();
+    _socketBusySub?.cancel();
+    _socketBlockedSub?.cancel();
     _ringtoneRestartTimer?.cancel();
     _playerStateSub?.cancel();
     _ringtonePlayer.dispose();

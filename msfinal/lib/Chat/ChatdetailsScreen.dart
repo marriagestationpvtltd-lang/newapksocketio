@@ -154,6 +154,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   // Typing indicator
   Timer? _typingDebounce;
+  bool _isTyping = false;
   bool _isReceiverTyping = false;
   StreamSubscription? _typingSubscription;
   bool _isMarkingMessagesAsRead = false;
@@ -520,11 +521,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   void _onTypingChanged() {
     _typingDebounce?.cancel();
-    _socketService.startTyping(widget.chatRoomId, widget.currentUserId);
+    if (!_isTyping) {
+      _isTyping = true;
+      _socketService.startTyping(widget.chatRoomId, widget.currentUserId);
+    }
     _typingDebounce = Timer(_kTypingDebounceDelay, _clearTyping);
   }
 
   void _clearTyping() {
+    _typingDebounce?.cancel();
+    if (!_isTyping) return;
+    _isTyping = false;
     _socketService.stopTyping(widget.chatRoomId, widget.currentUserId);
   }
 

@@ -119,6 +119,7 @@ class _ChatWindowState extends State<ChatWindow> {
   // Typing indicator state
   Timer? _typingTimer;
   bool _userIsTyping = false;
+  bool _isAdminTyping = false; // guards against emitting typing_start on every keystroke
 
   // Inline reply / edit state
   Map<String, dynamic>? _replyingTo; // {messageId, message, senderid, senderName}
@@ -882,17 +883,24 @@ class _ChatWindowState extends State<ChatWindow> {
     final roomId = AdminSocketService.chatRoomId(receiverId);
     final isTyping = text.isNotEmpty;
     if (isTyping) {
-      _socketService.sendTypingStart(roomId);
+      // Only emit typing_start when transitioning from not-typing to typing,
+      // preventing a socket event on every single keystroke.
+      if (!_isAdminTyping) {
+        _isAdminTyping = true;
+        _socketService.sendTypingStart(roomId);
+      }
       _typingTimer = Timer(const Duration(seconds: 3), () {
         _clearAdminTypingStatus();
       });
     } else {
+      _isAdminTyping = false;
       _socketService.sendTypingStop(roomId);
     }
   }
 
   void _clearAdminTypingStatus() {
     _typingTimer?.cancel();
+    _isAdminTyping = false;
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
     final receiverId = chatProvider.id?.toString();
     if (receiverId == null || receiverId.isEmpty) return;

@@ -10,10 +10,13 @@ class ConnectivityService extends ChangeNotifier {
 
   final Connectivity _connectivity = Connectivity();
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+  Timer? _delayedRecheckTimer;
 
   List<ConnectivityResult> _connectionStatus = [];
   bool _hasInternet = true;
   bool _isChecking = false;
+  int _consecutiveProbeFailures = 0;
+  DateTime? _startupGraceUntil;
 
   List<ConnectivityResult> get connectionStatus => _connectionStatus;
   bool get hasInternet => _hasInternet;
@@ -31,6 +34,7 @@ class ConnectivityService extends ChangeNotifier {
   /// Initialize connectivity monitoring
   Future<void> initialize() async {
     try {
+      _startupGraceUntil = DateTime.now().add(const Duration(seconds: 10));
       // Get initial status
       _connectionStatus = await _connectivity.checkConnectivity();
       await _checkActualInternetConnection();
@@ -65,17 +69,47 @@ class ConnectivityService extends ChangeNotifier {
   Future<bool> _checkActualInternetConnection() async {
     if (_isChecking) return _hasInternet;
 
+    if (_connectionStatus.contains(ConnectivityResult.none)) {
+      _consecutiveProbeFailures = 0;
+      _hasInternet = false;
+      notifyListeners();
+      return _hasInternet;
+    }
+
     _isChecking = true;
     try {
-      // Try multiple reliable servers
+      // Try multiple reliable endpoints.
       final results = await Future.wait([
-        _checkHost('google.com'),
-        _checkHost('cloudflare.com'),
+        _checkHost(Uri.https('clients3.google.com', '/generate_204')),
+        _checkHost(Uri.https('www.gstatic.com', '/generate_204')),
+        _checkHost(Uri.https('cloudflare.com', '/cdn-cgi/trace')),
       ]);
 
-      _hasInternet = results.any((result) => result);
+      final hasInternetNow = results.any((result) => result);
+
+      if (hasInternetNow) {
+        _consecutiveProbeFailures = 0;
+        _hasInternet = true;
+      } else {
+        _consecutiveProbeFailures += 1;
+        final inStartupGrace = _startupGraceUntil != null &&
+            DateTime.now().isBefore(_startupGraceUntil!);
+        final shouldKeepPreviousOnlineState = _hasInternet &&
+            (_consecutiveProbeFailures < 2 || inStartupGrace);
+
+        if (shouldKeepPreviousOnlineState) {
+          _scheduleDelayedRecheck();
+        } else {
+          _hasInternet = false;
+        }
+      }
     } catch (e) {
-      _hasInternet = false;
+      _consecutiveProbeFailures += 1;
+      if (!_hasInternet || _consecutiveProbeFailures >= 2) {
+        _hasInternet = false;
+      } else {
+        _scheduleDelayedRecheck();
+      }
       if (kDebugMode) {
         print('❌ Internet check error: $e');
       }
@@ -87,22 +121,26 @@ class ConnectivityService extends ChangeNotifier {
     return _hasInternet;
   }
 
-  /// Check if a specific host is reachable.
-  /// Uses HTTP HEAD on all platforms (avoids dart:io dependency on web).
-  Future<bool> _checkHost(String host) async {
+  /// Check if a specific endpoint is reachable.
+  /// Uses HTTP GET on all platforms (avoids dart:io dependency on web).
+  Future<bool> _checkHost(Uri uri) async {
     try {
       if (kIsWeb) {
         // On web, trust connectivity_plus; InternetAddress.lookup is unavailable.
         return !_connectionStatus.contains(ConnectivityResult.none);
       }
-      final uri = Uri.https(host, '/');
-      final response = await http
-          .head(uri)
-          .timeout(const Duration(seconds: 5));
-      return response.statusCode >= 200 && response.statusCode < 400;
+      final response = await http.get(uri).timeout(const Duration(seconds: 4));
+      return response.statusCode >= 200 && response.statusCode < 500;
     } catch (_) {
       return false;
     }
+  }
+
+  void _scheduleDelayedRecheck() {
+    _delayedRecheckTimer?.cancel();
+    _delayedRecheckTimer = Timer(const Duration(seconds: 2), () {
+      _checkActualInternetConnection();
+    });
   }
 
   /// Manual check for internet connectivity (use before important API calls)
@@ -124,6 +162,7 @@ class ConnectivityService extends ChangeNotifier {
   /// Dispose subscription when not needed
   void dispose() {
     _connectivitySubscription?.cancel();
+    _delayedRecheckTimer?.cancel();
     super.dispose();
   }
 }

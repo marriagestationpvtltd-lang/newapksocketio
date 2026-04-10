@@ -205,21 +205,25 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   static const double _kImageMaxHeight = 300.0;
 
   static const LinearGradient _primaryGradient = LinearGradient(
-    colors: [Color(0xFFF90E18), Color(0xFFD00D15)],
+    colors: [Color(0xFFE91E3E), Color(0xFFC2185B)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
+  // Received bubbles use a clean white card instead of gradient
+  static const Color _receivedBubbleColor = Color(0xFFFFFFFF);
+  static const Color _receivedBubbleBorder = Color(0xFFEEEEEE);
+  static const Color _accentColor = Color(0xFFE91E3E);
+  static const Color _backgroundColor = Color(0xFFF0F2F5);
+  static const Color _textColor = Color(0xFF1A1A2E);
+  static const Color _lightTextColor = Color(0xFF757575);
+  static const Color _inputFieldBackground = Color(0xFFF0F0F0);
+  static const Color _sendButtonDisabled = Color(0xFFBDBDBD);
+  // Keep _secondaryGradient for reply previews / edit previews only
   static const LinearGradient _secondaryGradient = LinearGradient(
-    colors: [Color(0xFFFFE4E6), Color(0xFFFFF1F2)],
+    colors: [Color(0xFFFCE4EC), Color(0xFFFFF8F9)],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
-  static const Color _accentColor = Color(0xFFF90E18);
-  static const Color _backgroundColor = Color(0xFFF8FAFC);
-  static const Color _textColor = Color(0xFF1F2937);
-  static const Color _lightTextColor = Color(0xFF6B7280);
-  static const Color _inputFieldBackground = Color(0xFFF3F4F6);
-  static const Color _sendButtonDisabled = Color(0xFFD1D5DB);
 
   @override
   void initState() {

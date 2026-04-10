@@ -47,6 +47,15 @@ class UserProvider with ChangeNotifier {
   final Set<int> _photoActioning = {};
   bool isPhotoActioning(int userId) => _photoActioning.contains(userId);
 
+  /// Returns the [User] from the loaded list matching [userId], or null if not found.
+  User? getUserById(int userId) {
+    try {
+      return _allUsers.firstWhere((u) => u.id == userId);
+    } catch (_) {
+      return null;
+    }
+  }
+
   // Check if all filtered users are selected
   bool get areAllFilteredSelected {
     if (_filteredUsers.isEmpty) return false;

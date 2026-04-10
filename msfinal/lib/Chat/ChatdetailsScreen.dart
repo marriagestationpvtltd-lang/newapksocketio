@@ -122,6 +122,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   // Scroll lock during swipe-to-reply
   bool _isHorizontalDragging = false;
 
+  // Scroll lock during message loading to prevent screen shaking
+  bool _scrollLocked = true;
+  bool _initialScrollDone = false;
+
   // Cached messages to prevent blinking
   List<Map<String, dynamic>> _cachedMessages = [];
   bool _isFirstLoad = true;
@@ -375,7 +379,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           // Show cached messages immediately; server response will replace them.
           _isFirstLoad = false;
         });
-        _scrollToBottom(jump: true);
+        // Perform initial scroll only once, then unlock
+        _performInitialScroll();
       }
     });
 
@@ -392,11 +397,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         _currentMessagePage = 1;
         _messagesCacheVersion++;
       });
-      _scrollToBottom(jump: true);
+      // Perform initial scroll only once, then unlock
+      _performInitialScroll();
       _saveMessagesToLocalCache();
     }).catchError((e) {
       debugPrint('Error loading messages: $e');
-      if (mounted) setState(() => _isFirstLoad = false);
+      if (mounted) {
+        setState(() {
+          _isFirstLoad = false;
+          _scrollLocked = false;
+        });
+      }
     });
 
     // Real-time new messages
@@ -1338,7 +1349,37 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     final remainingSeconds = seconds % 60;
     return '${minutes.toString().padLeft(2, '0')}:${remainingSeconds.toString().padLeft(2, '0')}';
   }
+
+  /// Performs the initial scroll to bottom only once, then unlocks scrolling.
+  /// This prevents screen shaking from multiple scroll attempts.
+  void _performInitialScroll() {
+    if (_initialScrollDone) return;
+    _initialScrollDone = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        // Wait for layout to settle before unlocking
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _scrollLocked = false);
+        });
+      } else {
+        // Controller not yet attached; retry after layout
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted && _scrollController.hasClients) {
+            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+          }
+          if (mounted) setState(() => _scrollLocked = false);
+        });
+      }
+    });
+  }
+
   void _scrollToBottom({bool jump = false}) {
+    // Don't auto-scroll if scroll is locked during initial load
+    if (_scrollLocked) return;
+
     void doScroll() {
       if (!mounted || !_scrollController.hasClients) return;
       if (jump) {
@@ -3466,9 +3507,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       onRefresh: _refreshMessages,
       child: ListView(
         controller: _scrollController,
+        // Use ClampingScrollPhysics to prevent bounce effect that causes shaking
         physics: _isHorizontalDragging
             ? const NeverScrollableScrollPhysics()
-            : const AlwaysScrollableScrollPhysics(),
+            : const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
         children: messageWidgets,
       ),

@@ -106,6 +106,10 @@ class _ChatWindowState extends State<ChatWindow> {
   bool _isInitialLoad = true;
   int? _prevUserId;
 
+  // Scroll lock during message loading to prevent screen shaking
+  bool _scrollLocked = true;
+  bool _initialScrollDone = false;
+
   // Floating date indicator (WhatsApp-style)
   final ValueNotifier<String?> _floatingDateNotifier = ValueNotifier(null);
   Timer? _floatingDateTimer;
@@ -1325,6 +1329,8 @@ class _ChatWindowState extends State<ChatWindow> {
         _currentPage = 1;
         _hasMoreMessages = true;
         _isInitialLoad = true;
+        _scrollLocked = true;
+        _initialScrollDone = false;
       });
       _socketService.joinRoom(roomId);
       _socketService.setActiveChat(roomId);
@@ -1337,7 +1343,7 @@ class _ChatWindowState extends State<ChatWindow> {
           _messages = cached;
           _isInitialLoad = false;
         });
-        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        _performInitialScroll();
       }
     }
 
@@ -1390,14 +1396,46 @@ class _ChatWindowState extends State<ChatWindow> {
       });
 
       if (reset) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+        _performInitialScroll();
         _saveAdminMessagesToCache(roomId);
       }
       _socketService.markRead(roomId);
     } catch (e) {
       debugPrint('Error loading messages: $e');
-      if (mounted) setState(() { _isLoadingMore = false; _isInitialLoad = false; });
+      if (mounted) {
+        setState(() {
+          _isLoadingMore = false;
+          _isInitialLoad = false;
+          _scrollLocked = false;
+        });
+      }
     }
+  }
+
+  /// Performs the initial scroll to bottom only once, then unlocks scrolling.
+  /// This prevents screen shaking from multiple scroll attempts.
+  void _performInitialScroll() {
+    if (_initialScrollDone) return;
+    _initialScrollDone = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        // Wait for layout to settle before unlocking
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _scrollLocked = false);
+        });
+      } else {
+        // Controller not yet attached; retry after layout
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted && _scrollController.hasClients) {
+            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+          }
+          if (mounted) setState(() => _scrollLocked = false);
+        });
+      }
+    });
   }
 
   /// Keep [_filteredMessages] in sync with [_messages] after an in-place update.
@@ -1882,6 +1920,8 @@ class _ChatWindowState extends State<ChatWindow> {
   }
 
   void _scrollToBottom() {
+    // Don't auto-scroll if scroll is locked during initial load
+    if (_scrollLocked) return;
     if (!mounted) return;
     if (_scrollController.hasClients) {
       // jumpTo(0) is a no-op when content fits on screen, so no need to guard
@@ -2783,9 +2823,10 @@ class _ChatWindowState extends State<ChatWindow> {
                   },
                   child: CustomScrollView(
                   controller: _scrollController,
+                  // Use ClampingScrollPhysics to prevent bounce effect that causes shaking
                   physics: _isHorizontalDragging
                       ? const NeverScrollableScrollPhysics()
-                      : null,
+                      : const ClampingScrollPhysics(),
                   slivers: [
                     if (_hasMoreMessages || _isLoadingMore)
                       SliverToBoxAdapter(

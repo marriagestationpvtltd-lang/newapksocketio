@@ -64,18 +64,26 @@ class _ChatSidebarState extends State<ChatSidebar> {
   bool _isInitialLoading = true;
   final ScrollController _scrollController = ScrollController();
   Timer? _searchDebounce;
-  Timer? _onlineStatusTimer;
+  // Last-seen text refresh timer (client-side only, no HTTP)
+  Timer? _lastSeenRefreshTimer;
+  // Raw lastSeen DateTimes per user — used for client-side "X ago" text refresh
+  final Map<String, DateTime?> _lastSeenTimes = {};
+  // Tracks in-flight single-user fetches to avoid duplicate requests
+  final Set<String> _fetchingUserIds = {};
+  // SharedPreferences key for the cached user list
+  static const String _kUsersCacheKey = 'chat_sidebar_users_v1';
   ChatProvider? _chatProvider;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
-    fetchUsers(reset: true);
-    // Poll online status every 10 seconds so the list updates live
-    _onlineStatusTimer = Timer.periodic(
-      const Duration(seconds: 10),
-      (_) => _refreshOnlineStatus(),
+    // Load cached users immediately so the sidebar appears without waiting for HTTP
+    _loadCachedUsers().then((_) => fetchUsers(reset: true));
+    // Refresh "X min ago" labels client-side every minute (no HTTP needed)
+    _lastSeenRefreshTimer = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _refreshLastSeenTexts(),
     );
     _socketService.connect();
     _startSocketListeners();
@@ -95,7 +103,7 @@ class _ChatSidebarState extends State<ChatSidebar> {
     _statusSub?.cancel();
     _scrollController.dispose();
     _searchDebounce?.cancel();
-    _onlineStatusTimer?.cancel();
+    _lastSeenRefreshTimer?.cancel();
     _chatProvider?.removeListener(_handleExternalSelection);
     super.dispose();
   }
@@ -204,6 +212,10 @@ class _ChatSidebarState extends State<ChatSidebar> {
 
         _applyFilters();
         _handleExternalSelection();
+        // Persist page-1 results so subsequent visits show content immediately
+        if (reset && _searchQuery.isEmpty) {
+          _saveCachedUsers();
+        }
       }
     } catch (error) {
       debugPrint('Error fetching users: $error');
@@ -253,6 +265,8 @@ class _ChatSidebarState extends State<ChatSidebar> {
       if (userId.isEmpty) return;
       final isOnline = data['isOnline'] == true;
       final lastSeen = AdminSocketService.parseTimestamp(data['lastSeen']);
+      // Store raw lastSeen so the client-side 1-min timer can reformat it
+      if (lastSeen != null) _lastSeenTimes[userId] = lastSeen;
       _applyUserStatus(
         userId: userId,
         isOnline: isOnline,
@@ -276,65 +290,99 @@ class _ChatSidebarState extends State<ChatSidebar> {
     }
   }
 
-  // Lightweight poll: fetch a large page and update only is_online / last_seen_text
-  Future<void> _refreshOnlineStatus() async {
-    if (_users.isEmpty || !mounted) return;
+  // ── SharedPreferences cache ─────────────────────────────────────────────────
+
+  /// Persist the current user list (static fields only) so the sidebar
+  /// can display immediately on the next visit without waiting for HTTP.
+  Future<void> _saveCachedUsers() async {
     try {
-      final uri = Uri.parse('${kAdminApiBaseUrl}/get.php').replace(
-        queryParameters: {
-          'page': '1',
-          'limit': _users.length.toString(),
-        },
-      );
+      final prefs = await SharedPreferences.getInstance();
+      final toSave = _users.map((u) {
+        final m = Map<String, dynamic>.from(u as Map);
+        // Reset ephemeral fields; they will be updated by socket events.
+        m['is_online'] = false;
+        m['last_seen_text'] = '';
+        return m;
+      }).toList();
+      await prefs.setString(_kUsersCacheKey, jsonEncode(toSave));
+    } catch (_) {}
+  }
+
+  /// Load the previously saved user list and show it while the fresh fetch runs.
+  Future<void> _loadCachedUsers() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString(_kUsersCacheKey);
+      if (cached == null || !mounted) return;
+      final List<dynamic> parsed = jsonDecode(cached);
+      if (parsed.isEmpty) return;
+      setState(() {
+        _users = parsed.map((u) => Map<String, dynamic>.from(u as Map)).toList();
+        _filteredUsers = List.from(_users);
+        _isInitialLoading = false;
+      });
+    } catch (_) {}
+  }
+
+  // ── Client-side last-seen text refresh ─────────────────────────────────────
+
+  /// Update "X min ago" labels for offline users without making any HTTP request.
+  /// Called by a 1-minute timer.
+  void _refreshLastSeenTexts() {
+    if (!mounted || _users.isEmpty) return;
+    bool changed = false;
+    final String? selectedId = _selectedChat?['id']?.toString();
+    bool selectedChanged = false;
+    for (int i = 0; i < _users.length; i++) {
+      if (_users[i]['is_online'] == true) continue;
+      final uid = _users[i]['id']?.toString();
+      if (uid == null) continue;
+      final lastSeen = _lastSeenTimes[uid];
+      if (lastSeen == null) continue;
+      final newText = _formatLastSeen(lastSeen);
+      if (_users[i]['last_seen_text'] != newText) {
+        _users[i] = {...(_users[i] as Map<String, dynamic>), 'last_seen_text': newText};
+        changed = true;
+        if (uid == selectedId) selectedChanged = true;
+      }
+    }
+    if (changed && mounted) {
+      _applyFilters();
+      if (selectedChanged) _updateSelectedChat();
+    }
+  }
+
+  // ── On-demand single-user fetch ─────────────────────────────────────────────
+
+  /// Fetch one user by ID from the API and insert/update them in [_users].
+  /// Used when a new user appears via socket events (connect or new chat room).
+  Future<void> _fetchSingleUser(String userId) async {
+    if (_fetchingUserIds.contains(userId)) return;
+    _fetchingUserIds.add(userId);
+    try {
+      final uri = Uri.parse('${kAdminApiBaseUrl}/get.php')
+          .replace(queryParameters: {'userId': userId});
       final response = await http.get(uri);
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 && mounted) {
         final jsonResponse = jsonDecode(response.body);
-        final List<dynamic> freshList =
-            (jsonResponse["data"] as List?) ?? [];
-
-        // Build lookup: id -> {is_online, last_seen_text}
-        final Map<String, Map<String, dynamic>> freshMap = {
-          for (var u in freshList)
-            u['id'].toString(): {
-              'is_online': u['is_online'] ?? false,
-              'last_seen_text': u['last_seen_text']?.toString() ?? '',
-            },
-        };
-
-        bool changed = false;
-        bool selectedChatStatusChanged = false;
-        final String? selectedId = _selectedChat?['id']?.toString();
-        for (int i = 0; i < _users.length; i++) {
-          final userId = _users[i]['id']?.toString();
-          if (userId == null) continue;
-          final fresh = freshMap[userId];
-          if (fresh == null) continue;
-          if (_users[i]['is_online'] != fresh['is_online'] ||
-              _users[i]['last_seen_text'] != fresh['last_seen_text']) {
-            _users[i] = {
-              ..._users[i] as Map<String, dynamic>,
-              'is_online': fresh['is_online'],
-              'last_seen_text': fresh['last_seen_text'],
-            };
-            changed = true;
-            // If this user is the currently selected chat, update the reference
-            if (userId == selectedId) {
-              _selectedChat = _users[i];
-              selectedChatStatusChanged = true;
-            }
+        final List<dynamic> data = (jsonResponse["data"] as List?) ?? [];
+        if (data.isEmpty) return;
+        final newUser = Map<String, dynamic>.from(data[0] as Map);
+        final existingIdx =
+            _users.indexWhere((u) => u['id']?.toString() == userId);
+        setState(() {
+          if (existingIdx >= 0) {
+            _users[existingIdx] = newUser;
+          } else {
+            _users.insert(0, newUser);
           }
-        }
-
-        if (changed && mounted) {
-          _applyFilters();
-          // Sync ChatProvider so the chat header reflects the updated online status
-          if (selectedChatStatusChanged) {
-            _updateSelectedChat();
-          }
-        }
+        });
+        _applyFilters();
       }
     } catch (e) {
-      debugPrint('Error refreshing online status: $e');
+      debugPrint('Error fetching user $userId: $e');
+    } finally {
+      _fetchingUserIds.remove(userId);
     }
   }
 
@@ -364,6 +412,8 @@ class _ChatSidebarState extends State<ChatSidebar> {
     final Map<String, int> unreadCounts = {};
     final List<dynamic> sortedUsers = [];
     final Set<String> addedIds = {};
+    // Collect IDs that appear in rooms but are not yet in _users
+    final Set<String> unknownIds = {};
 
     for (final room in rooms) {
       final participants =
@@ -397,6 +447,9 @@ class _ChatSidebarState extends State<ChatSidebar> {
       }
       if (user != null && addedIds.add(otherUserId)) {
         sortedUsers.add(user);
+      } else if (user == null) {
+        // User has a chat room but hasn't been loaded yet — schedule a fetch.
+        unknownIds.add(otherUserId);
       }
     }
 
@@ -413,6 +466,11 @@ class _ChatSidebarState extends State<ChatSidebar> {
       _users = List.from(sortedUsers);
     });
     _applyFilters();
+
+    // Fetch profiles for any users we haven't loaded yet
+    for (final uid in unknownIds) {
+      _fetchSingleUser(uid);
+    }
   }
 
   void _applyUserStatus({
@@ -442,6 +500,9 @@ class _ChatSidebarState extends State<ChatSidebar> {
     if (changed) {
       _applyFilters();
       _updateSelectedChat();
+    } else if (isOnline && userId != senderId.toString()) {
+      // A user we haven't loaded yet just came online — fetch them on demand.
+      _fetchSingleUser(userId);
     }
   }
 

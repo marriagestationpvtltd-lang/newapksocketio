@@ -24,6 +24,9 @@ $offset = ($page - 1) * $limit;
 // ✅ Search parameter
 $search = isset($_GET['search']) ? trim($_GET['search']) : '';
 
+// ✅ Single-user fetch by ID (for on-demand user loading)
+$userIdFilter = isset($_GET['userId']) ? intval($_GET['userId']) : 0;
+
 /* ----------------------------------------------------------
    STEP 1: Get total count of users
 ---------------------------------------------------------- */
@@ -31,7 +34,11 @@ $countQuery = "SELECT COUNT(*) as total FROM users WHERE id != 1";
 $countParams = [];
 $countTypes = "";
 
-if (!empty($search)) {
+if ($userIdFilter > 0) {
+    $countQuery .= " AND id = ?";
+    $countParams[] = $userIdFilter;
+    $countTypes .= "i";
+} elseif (!empty($search)) {
     $countQuery .= " AND (firstName LIKE ? OR lastName LIKE ? OR CONCAT(firstName, ' ', lastName) LIKE ?)";
     $searchParam = "%{$search}%";
     $countParams = [$searchParam, $searchParam, $searchParam];
@@ -47,7 +54,7 @@ $countResult = $countStmt->get_result();
 $totalUsers = $countResult->fetch_assoc()['total'];
 
 /* ----------------------------------------------------------
-   STEP 2: Get paginated users with optional search
+   STEP 2: Get paginated users with optional search or userId
 ---------------------------------------------------------- */
 $userQuery = "SELECT u.*,
     (SELECT MAX(created_at) FROM chats WHERE sender_id = u.id OR receiver_id = u.id) as last_chat_time
@@ -57,7 +64,11 @@ $userQuery = "SELECT u.*,
 $userParams = [];
 $userTypes = "";
 
-if (!empty($search)) {
+if ($userIdFilter > 0) {
+    $userQuery .= " AND u.id = ?";
+    $userParams[] = $userIdFilter;
+    $userTypes .= "i";
+} elseif (!empty($search)) {
     $userQuery .= " AND (u.firstName LIKE ? OR u.lastName LIKE ? OR CONCAT(u.firstName, ' ', u.lastName) LIKE ?)";
     $searchParam = "%{$search}%";
     $userParams = [$searchParam, $searchParam, $searchParam];

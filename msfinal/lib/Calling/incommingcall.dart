@@ -736,20 +736,30 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   Widget _buildConnectingUI() {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         const Icon(Icons.phone_in_talk, color: Colors.white, size: 80),
         const SizedBox(height: 30),
-        Text(
-          _callerName,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Text(
+            _callerName,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
           ),
-          textAlign: TextAlign.center,
         ),
         const SizedBox(height: 20),
-        const CircularProgressIndicator(color: Colors.white70, strokeWidth: 3),
+        const SizedBox(
+          width: 48,
+          height: 48,
+          child: CircularProgressIndicator(color: Colors.white70, strokeWidth: 3),
+        ),
         const SizedBox(height: 20),
         const Text(
           'Connecting...',

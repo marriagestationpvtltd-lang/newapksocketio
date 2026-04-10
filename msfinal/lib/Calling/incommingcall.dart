@@ -833,35 +833,77 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
 
   Widget _buildConnectingUI() {
     return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      crossAxisAlignment: CrossAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Icon(Icons.phone_in_talk, color: Colors.white, size: 80),
-        const SizedBox(height: 30),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Text(
-            _callerName,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-            ),
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-            maxLines: 2,
+        const SizedBox(height: 40),
+        // Content area
+        Expanded(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF00E5FF),
+                      Color(0xFF2979FF),
+                    ],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF2979FF).withOpacity(0.5),
+                      blurRadius: 30,
+                      spreadRadius: 10,
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.phone_in_talk, color: Colors.white, size: 60),
+              ),
+              const SizedBox(height: 32),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  _callerName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
+                ),
+              ),
+              const SizedBox(height: 16),
+              const SizedBox(
+                width: 36,
+                height: 36,
+                child: CircularProgressIndicator(color: Colors.white70, strokeWidth: 3),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Connecting...',
+                style: TextStyle(color: Colors.white70, fontSize: 18, fontWeight: FontWeight.w400),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 20),
-        const SizedBox(
-          width: 48,
-          height: 48,
-          child: CircularProgressIndicator(color: Colors.white70, strokeWidth: 3),
-        ),
-        const SizedBox(height: 20),
-        const Text(
-          'Connecting...',
-          style: TextStyle(color: Colors.white70, fontSize: 18),
+        // End call button
+        Padding(
+          padding: const EdgeInsets.only(bottom: 50.0, left: 20, right: 20),
+          child: _modernCallBtn(
+            icon: Icons.call_end,
+            color: const Color(0xFFF44336),
+            onPressed: _endCall,
+            label: 'End',
+          ),
         ),
       ],
     );

@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../main.dart';
 import 'SearchResult.dart';
 import 'package:ms2026/config/app_endpoints.dart';
+import '../ReUsable/loading_widgets.dart';
 
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
@@ -983,9 +984,7 @@ class _SearchPageState extends State<SearchPage>
     if (_isLoading) {
       return const SizedBox(
         height: 300,
-        child: Center(
-          child: CircularProgressIndicator(color: Color(0xffFF1500)),
-        ),
+        child: SearchProfileGridSkeleton(count: 4),
       );
     }
     if (_errorMessage.isNotEmpty) {

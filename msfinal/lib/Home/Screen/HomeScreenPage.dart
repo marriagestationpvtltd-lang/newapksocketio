@@ -1762,15 +1762,7 @@ String usertye = '';
 
   Widget _buildMatchedProfilesFromApi() {
     if (_isLoading && _matchedProfilesApi.isEmpty) {
-      return SizedBox(
-        height: 260,
-        child: Center(
-          child: CircularProgressIndicator(
-            color: AppColors.primary,
-            strokeWidth: 2,
-          ),
-        ),
-      );
+      return const ProfileCardListSkeleton(count: 3, height: 270);
     }
 
     if (_errorMessage.isNotEmpty) {
@@ -2118,15 +2110,7 @@ String usertye = '';
 
   Widget _buildShortlistedProfiles() {
     if (_isLoadingShortlist && _shortlistedProfiles.isEmpty) {
-      return const SizedBox(
-        height: 180,
-        child: Center(
-          child: CircularProgressIndicator(
-            color: AppColors.primary,
-            strokeWidth: 2,
-          ),
-        ),
-      );
+      return const ShortlistCardListSkeleton(count: 3);
     }
 
     if (_shortlistedProfiles.isEmpty) {
@@ -2835,9 +2819,7 @@ String usertye = '';
     if (_loading && _otherServices.isEmpty) {
       return const SizedBox(
         height: 200,
-        child: Center(
-          child: CircularProgressIndicator(color: AppColors.primary),
-        ),
+        child: ServiceListSkeleton(count: 3),
       );
     }
 
@@ -3136,14 +3118,9 @@ String usertye = '';
   }
 
   Widget _buildRequestLoadingState() {
-    return SizedBox(
+    return const SizedBox(
       height: 250,
-      child: Center(
-        child: CircularProgressIndicator(
-          color: _brandRed,
-          strokeWidth: 2,
-        ),
-      ),
+      child: ProfileCardListSkeleton(count: 2, height: 250),
     );
   }
 

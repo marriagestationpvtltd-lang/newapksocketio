@@ -1006,55 +1006,6 @@ class _ChatListScreenState extends State<ChatListScreen>
     }
   }
 
-  Widget _buildChatRequestsSection() {
-    if (_requestsLoading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: LinearProgressIndicator(),
-      );
-    }
-
-    if (_pendingChatRequests.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          color: const Color(0xFFF90E18).withOpacity(0.06),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              const Icon(Icons.mark_chat_unread,
-                  color: Color(0xFFF90E18), size: 18),
-              const SizedBox(width: 8),
-              Text(
-                'Chat Requests (${_pendingChatRequests.length})',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFFF90E18),
-                ),
-              ),
-            ],
-          ),
-        ),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 264),
-          child: ListView.separated(
-            shrinkWrap: true,
-            itemCount: _pendingChatRequests.length,
-            separatorBuilder: (_, __) =>
-                const Divider(indent: 72, height: 1, color: Color(0xFFE0E0E0)),
-            itemBuilder: (context, index) {
-              return _buildChatRequestCard(_pendingChatRequests[index]);
-            },
-          ),
-        ),
-        const Divider(height: 1, thickness: 1, color: Color(0xFFE0E0E0)),
-        const SizedBox(height: 8),
-      ],
-    );
-  }
 
   void _showChatRequestActionSheet(ProposalModel req) {
     final displayName =
@@ -1408,7 +1359,6 @@ class _ChatListScreenState extends State<ChatListScreen>
           color: const Color(0xFFFAF0F0),
           child: Column(
             children: [
-              _buildChatRequestsSection(),
               _buildPinnedAdminCard(),
               if (_totalUnreadCount > 0)
                 Container(
@@ -1482,7 +1432,6 @@ class _ChatListScreenState extends State<ChatListScreen>
         color: const Color(0xFFFAF0F0),
         child: Column(
           children: [
-            _buildChatRequestsSection(),
             _buildPinnedAdminCard(),
             if (_totalUnreadCount > 0)
               Container(
@@ -1563,7 +1512,7 @@ class _ChatListScreenState extends State<ChatListScreen>
         return bTime.compareTo(aTime);
       });
 
-    if (chatRooms.isEmpty) {
+    if (chatRooms.isEmpty && _pendingChatRequests.isEmpty && !_requestsLoading) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1586,25 +1535,113 @@ class _ChatListScreenState extends State<ChatListScreen>
     final displayedRooms =
         chatRooms.sublist(0, _displayCount.clamp(0, chatRooms.length));
 
+    final int reqCount = _pendingChatRequests.length;
+    // Slots: [0] = requests header (if any requests or loading), then reqCount
+    // request rows, then an optional conversations header, then displayedRooms,
+    // then optional loading indicator at the tail.
+    final bool showRequestsHeader = _requestsLoading || reqCount > 0;
+    final bool showConversationsHeader =
+        showRequestsHeader && displayedRooms.isNotEmpty;
+
+    // Index offsets inside the ListView
+    // 0            : requests header (if showRequestsHeader)
+    // 1..reqCount  : request rows
+    // next         : conversations header (if showConversationsHeader)
+    // next..       : chat room rows
+    // last         : loading indicator (if _isLoadingMore)
+    final int requestsHeaderIdx = showRequestsHeader ? 0 : -1;
+    final int firstRequestIdx = showRequestsHeader ? 1 : -1;
+    final int conversationsHeaderIdx = showConversationsHeader
+        ? (showRequestsHeader ? 1 + reqCount : 0)
+        : -1;
+    final int firstRoomIdx = showConversationsHeader
+        ? conversationsHeaderIdx + 1
+        : (showRequestsHeader ? 1 + reqCount : 0);
+    final int totalItems = (showRequestsHeader ? 1 + reqCount : 0) +
+        (showConversationsHeader ? 1 : 0) +
+        displayedRooms.length +
+        (_isLoadingMore ? 1 : 0);
+
     return Container(
       color: Colors.white,
       child: ListView.separated(
         controller: _scrollController,
-        itemCount: displayedRooms.length + (_isLoadingMore ? 1 : 0),
-        separatorBuilder: (_, __) =>
-            const Divider(indent: 72, height: 1, color: Color(0xFFE0E0E0)),
+        itemCount: totalItems,
+        separatorBuilder: (_, index) {
+          // No divider between the requests header and first request row,
+          // or between the conversations header and first room row.
+          if (showRequestsHeader && index == requestsHeaderIdx) {
+            return const SizedBox.shrink();
+          }
+          if (showConversationsHeader && index == conversationsHeaderIdx) {
+            return const SizedBox.shrink();
+          }
+          return const Divider(
+              indent: 72, height: 1, color: Color(0xFFE0E0E0));
+        },
         itemBuilder: (context, index) {
-          // Loading indicator at the bottom
-          if (index == displayedRooms.length) {
-            return const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                  child:
-                      CircularProgressIndicator(color: Color(0xFFF90E18))),
+          // ── Requests header ──
+          if (showRequestsHeader && index == requestsHeaderIdx) {
+            return Container(
+              color: const Color(0xFFF90E18).withOpacity(0.06),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: _requestsLoading
+                  ? const LinearProgressIndicator()
+                  : Row(
+                      children: [
+                        const Icon(Icons.mark_chat_unread,
+                            color: Color(0xFFF90E18), size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Chat Requests ($reqCount)',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFF90E18),
+                          ),
+                        ),
+                      ],
+                    ),
             );
           }
 
-          final data = displayedRooms[index];
+          // ── Request rows ──
+          if (showRequestsHeader &&
+              index >= firstRequestIdx &&
+              index < firstRequestIdx + reqCount) {
+            return _buildChatRequestCard(
+                _pendingChatRequests[index - firstRequestIdx]);
+          }
+
+          // ── Conversations header ──
+          if (showConversationsHeader && index == conversationsHeaderIdx) {
+            return Container(
+              color: Colors.grey.shade50,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: const Text(
+                'Conversations',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black54,
+                ),
+              ),
+            );
+          }
+
+          // ── Loading indicator at tail ──
+          final int roomIndex = index - firstRoomIdx;
+          if (roomIndex == displayedRooms.length) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                  child: CircularProgressIndicator(color: Color(0xFFF90E18))),
+            );
+          }
+
+          final data = displayedRooms[roomIndex];
 
           final participants =
               List<String>.from(data['participants'] ?? []);

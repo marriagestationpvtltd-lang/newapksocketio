@@ -53,6 +53,10 @@ class MainActivity : FlutterActivity() {
                     // For simplicity, return false - service tracking can be improved
                     result.success(false)
                 }
+                "enableAudioFocus" -> {
+                    CallForegroundService.enableAudioFocus(applicationContext)
+                    result.success(true)
+                }
                 else -> result.notImplemented()
             }
         }

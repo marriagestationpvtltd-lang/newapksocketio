@@ -95,4 +95,16 @@ class CallForegroundServiceManager {
       isOngoing: true,
     );
   }
+
+  /// Request audio focus for the active call.
+  /// Must be called once the call is actually connected (remote peer joined) so
+  /// that the outgoing ringtone is not interrupted while the call is still ringing.
+  static Future<void> enableAudioFocus() async {
+    if (kIsWeb) return;
+    try {
+      await _channel.invokeMethod('enableAudioFocus');
+    } on PlatformException catch (e) {
+      print('[CallForegroundService] Error enabling audio focus: ${e.message}');
+    }
+  }
 }

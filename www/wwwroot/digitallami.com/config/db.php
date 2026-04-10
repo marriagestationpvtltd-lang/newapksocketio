@@ -35,9 +35,11 @@ if (file_exists($_dbEnvFile)) {
 unset($_dbEnvFile);
 
 // ── Main "ms" database constants ─────────────────────────────────────────────
+// TODO: Move to environment variable - SECURITY RISK: fallback credentials below must not be used in production
 if (!defined('DB_HOST')) define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
 if (!defined('DB_NAME')) define('DB_NAME', getenv('DB_NAME') ?: 'ms');
 if (!defined('DB_USER')) define('DB_USER', getenv('DB_USER') ?: 'ms');
+// TODO: Move to environment variable - SECURITY RISK: hardcoded password fallback
 if (!defined('DB_PASS')) define('DB_PASS', getenv('DB_PASS') ?: 'ms');
 
 // ── Public URL constants (for absolute media/profile links) ──────────────────
@@ -48,6 +50,7 @@ if (!defined('APP_API2_BASE_URL')) define('APP_API2_BASE_URL', APP_PUBLIC_BASE_U
 if (!defined('ADMINCHAT_DB_HOST')) define('ADMINCHAT_DB_HOST', getenv('ADMINCHAT_DB_HOST') ?: DB_HOST);
 if (!defined('ADMINCHAT_DB_NAME')) define('ADMINCHAT_DB_NAME', getenv('ADMINCHAT_DB_NAME') ?: 'adminchat');
 if (!defined('ADMINCHAT_DB_USER')) define('ADMINCHAT_DB_USER', getenv('ADMINCHAT_DB_USER') ?: 'adminchat');
+// TODO: Move to environment variable - SECURITY RISK: hardcoded password fallback
 if (!defined('ADMINCHAT_DB_PASS')) define('ADMINCHAT_DB_PASS', getenv('ADMINCHAT_DB_PASS') ?: 'adminchat');
 
 // ── Agora constants (server-side token generation only) ──────────────────────

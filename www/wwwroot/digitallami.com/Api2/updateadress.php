@@ -38,6 +38,11 @@ $permanent_residentalstatus= $_POST['permanent_residentalstatus'] ?? null;
 
 // ----------------- FUNCTION TO INSERT/UPDATE -----------------
 function upsertAddress($conn, $table, $userid, $country, $state, $city, $tole, $residentalstatus, $willingtogoabroad = null, $visastatus = null) {
+    // Whitelist table names to prevent any possibility of SQL injection via table name
+    $allowedTables = ['current_address', 'permanent_address'];
+    if (!in_array($table, $allowedTables, true)) {
+        return false;
+    }
     // Check if record exists
     $check = $conn->prepare("SELECT id FROM $table WHERE userid = ?");
     $check->bind_param("i", $userid);

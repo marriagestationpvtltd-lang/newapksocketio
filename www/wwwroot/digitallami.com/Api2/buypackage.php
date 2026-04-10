@@ -24,9 +24,22 @@ try {
         exit;
     }
 
-    $userid = $data['userid'];
-    $packageid = $data['packageid'];
-    $paidby = $data['paidby'];
+    $userid    = isset($data['userid'])    ? intval($data['userid'])    : 0;
+    $packageid = isset($data['packageid']) ? intval($data['packageid']) : 0;
+    $paidby    = isset($data['paidby'])    ? strtolower(trim($data['paidby'])) : '';
+
+    // Validate numeric IDs
+    if ($userid <= 0 || $packageid <= 0) {
+        echo json_encode(["success" => false, "message" => "Invalid userid or packageid."]);
+        exit;
+    }
+
+    // Whitelist payment methods to prevent unexpected values in DB
+    $allowedPaidBy = ['esewa', 'khalti', 'stripe', 'paypal', 'bank', 'card', 'cash', 'other'];
+    if (!in_array($paidby, $allowedPaidBy, true)) {
+        echo json_encode(["success" => false, "message" => "Invalid payment method."]);
+        exit;
+    }
 
     // Get package duration from packagelist table
     $stmt = $pdo->prepare("SELECT duration FROM packagelist WHERE id = :packageid");
@@ -88,9 +101,10 @@ try {
     ]);
 
 } catch (PDOException $e) {
+    error_log("buypackage.php PDO error: " . $e->getMessage());
     echo json_encode([
         "success" => false,
-        "message" => "Database error: " . $e->getMessage()
+        "message" => "Database error. Please try again."
     ]);
 }
 ?>

@@ -1,7 +1,7 @@
 <?php
-// generate_password.php
-$password = 'admin123';
-$hashed = password_hash($password, PASSWORD_DEFAULT);
-echo "Password: $password\n";
-echo "Hashed: $hashed\n";
+// This file has been disabled for security reasons.
+http_response_code(403);
+header('Content-Type: application/json');
+echo json_encode(['error' => 'Forbidden']);
+exit;
 ?>

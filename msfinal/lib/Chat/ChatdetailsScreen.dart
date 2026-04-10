@@ -1766,28 +1766,35 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           ],
                         )
                       : BoxDecoration(
-                    gradient: isMine ? _primaryGradient : _secondaryGradient,
-                    borderRadius: isMine
-                        ? const BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
-                      bottomLeft: Radius.circular(20),
-                      bottomRight: Radius.circular(4),
-                    )
-                        : const BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
-                      bottomLeft: Radius.circular(4),
-                      bottomRight: Radius.circular(20),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.15),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
+                          gradient: isMine ? _primaryGradient : null,
+                          color: isMine ? null : _receivedBubbleColor,
+                          border: isMine
+                              ? null
+                              : Border.all(
+                                  color: _receivedBubbleBorder,
+                                  width: 1,
+                                ),
+                          borderRadius: isMine
+                              ? const BorderRadius.only(
+                                  topLeft: Radius.circular(20),
+                                  topRight: Radius.circular(20),
+                                  bottomLeft: Radius.circular(20),
+                                  bottomRight: Radius.circular(4),
+                                )
+                              : const BorderRadius.only(
+                                  topLeft: Radius.circular(20),
+                                  topRight: Radius.circular(20),
+                                  bottomLeft: Radius.circular(4),
+                                  bottomRight: Radius.circular(20),
+                                ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.08),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -2039,61 +2046,68 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         final isCurrentMessage = _playingMessageId == messageId;
         final totalSecs = duration ?? 0;
         final progressValue = isCurrentMessage && _playbackDuration.inSeconds > 0
-            ? (_playbackPosition.inMilliseconds / _playbackDuration.inMilliseconds).clamp(0.0, 1.0)
+            ? (_playbackPosition.inMilliseconds /
+                    _playbackDuration.inMilliseconds)
+                .clamp(0.0, 1.0)
             : 0.0;
         final displayTime = isCurrentMessage && _playbackDuration.inSeconds > 0
             ? _formatDuration(_playbackPosition.inSeconds)
             : _formatDuration(totalSecs);
-        return GestureDetector(
-          onTap: () => _toggleVoicePlayback(messageId, text),
-          child: SizedBox(
-            width: 200,
-            child: Row(
-              children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: isMine
-                      ? Colors.white.withOpacity(0.20)
-                      : _accentColor.withOpacity(0.12),
-                    shape: BoxShape.circle,
+        return RepaintBoundary(
+          child: GestureDetector(
+            onTap: () => _toggleVoicePlayback(messageId, text),
+            child: SizedBox(
+              width: 210,
+              child: Row(
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: isMine
+                          ? Colors.white.withOpacity(0.20)
+                          : _accentColor.withOpacity(0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isCurrentlyPlaying ? Icons.pause : Icons.play_arrow,
+                      color: isMine ? Colors.white : _accentColor,
+                      size: 20,
+                    ),
                   ),
-                  child: Icon(
-                    isCurrentlyPlaying ? Icons.pause : Icons.play_arrow,
-                    color: isMine ? Colors.white : _accentColor,
-                    size: 20,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: progressValue,
-                          minHeight: 3,
-                          backgroundColor: Colors.grey.withOpacity(0.25),
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            isMine ? Colors.white : _accentColor,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: LinearProgressIndicator(
+                            value: progressValue,
+                            minHeight: 4.5,
+                            backgroundColor: isMine
+                                ? Colors.white.withOpacity(0.18)
+                                : Colors.black.withOpacity(0.08),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              isMine ? Colors.white : _accentColor,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        displayTime,
-                        style: TextStyle(
-                          color: isMine ? Colors.white70 : _lightTextColor,
-                          fontSize: 12,
+                        const SizedBox(height: 5),
+                        Text(
+                          displayTime,
+                          style: TextStyle(
+                            color: isMine ? Colors.white70 : _lightTextColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -2860,14 +2874,15 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       ),
       decoration: BoxDecoration(
         color: Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
         border: Border(
           top: BorderSide(color: Colors.grey.shade200, width: 1),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 6,
-            offset: const Offset(0, -1),
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
           ),
         ],
       ),
@@ -2902,17 +2917,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
                         ),
                 ),
-              Expanded(
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: 46),
-                  decoration: BoxDecoration(
-                    color: _inputFieldBackground,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: Colors.grey.shade300,
-                      width: 1,
+                Expanded(
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    decoration: BoxDecoration(
+                      color: _inputFieldBackground,
+                      borderRadius: BorderRadius.circular(26),
+                      border: Border.all(
+                        color: Colors.grey.shade300,
+                        width: 1,
+                      ),
                     ),
-                  ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
@@ -3189,11 +3204,36 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.chat, size: 60, color: Colors.grey[300]),
+            Container(
+              width: 84,
+              height: 84,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Icon(Icons.chat_bubble_outline,
+                  size: 42, color: _accentColor.withOpacity(0.7)),
+            ),
             const SizedBox(height: 16),
             Text(
-              'Start a conversation!',
-              style: TextStyle(color: Colors.grey[500]),
+              'Start the conversation',
+              style: TextStyle(
+                color: _textColor,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Say hello and break the ice!',
+              style: TextStyle(color: _lightTextColor, fontSize: 13),
             ),
           ],
         ),
@@ -3292,22 +3332,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
+                    _ShimmerBox(
                       width: 150 + (index * 20.0) % 80,
                       height: 12,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(6),
-                      ),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                     const SizedBox(height: 6),
-                    Container(
+                    _ShimmerBox(
                       width: 100,
                       height: 12,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[300],
-                        borderRadius: BorderRadius.circular(6),
-                      ),
+                      borderRadius: BorderRadius.circular(6),
                     ),
                   ],
                 ),
@@ -4657,6 +4691,74 @@ class _SwipeToReplyWrapperState extends State<_SwipeToReplyWrapper>
             ),
         ],
       ),
+    );
+  }
+}
+
+class _ShimmerBox extends StatefulWidget {
+  const _ShimmerBox({
+    required this.width,
+    required this.height,
+    required this.borderRadius,
+  });
+
+  final double width;
+  final double height;
+  final BorderRadius borderRadius;
+
+  @override
+  State<_ShimmerBox> createState() => _ShimmerBoxState();
+}
+
+class _ShimmerBoxState extends State<_ShimmerBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        return ShaderMask(
+          blendMode: BlendMode.srcATop,
+          shaderCallback: (rect) {
+            final slide = _controller.value;
+            return LinearGradient(
+              begin: Alignment(-1.0 - 2 * slide, 0),
+              end: Alignment(1.0 + 2 * slide, 0),
+              colors: const [
+                Color(0xFFE5E7EB),
+                Color(0xFFF8FAFC),
+                Color(0xFFE5E7EB),
+              ],
+              stops: const [0.2, 0.5, 0.8],
+            ).createShader(rect);
+          },
+          child: Container(
+            width: widget.width,
+            height: widget.height,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE5E7EB),
+              borderRadius: widget.borderRadius,
+            ),
+          ),
+        );
+      },
     );
   }
 }

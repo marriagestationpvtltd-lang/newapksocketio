@@ -1124,99 +1124,89 @@ class _ChatListScreenState extends State<ChatListScreen>
     final displayName =
         '${req.firstName ?? ''} ${req.lastName ?? ''}'.trim();
 
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Colors.white, Color(0xFFF8FAFC)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Padding(
+    return InkWell(
+      onTap: () {
+        final senderId = int.tryParse(req.senderId ?? '');
+        if (senderId != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => UserProfilePage(userId: senderId),
+            ),
+          );
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.white, Color(0xFFF8FAFC)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                final senderId = int.tryParse(req.senderId ?? '');
-                if (senderId != null) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => UserProfilePage(userId: senderId),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                PrivacyUtils.buildPrivacyAwareAvatar(
+                  imageUrl: imageUrl,
+                  privacy: req.privacy,
+                  photoRequest: req.photoRequest,
+                  radius: 28,
+                  backgroundColor: Colors.grey[200],
+                ),
+                Positioned(
+                  bottom: -4,
+                  right: -4,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF90E18),
+                      shape: BoxShape.circle,
                     ),
-                  );
-                }
-              },
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      PrivacyUtils.buildPrivacyAwareAvatar(
-                        imageUrl: imageUrl,
-                        privacy: req.privacy,
-                        photoRequest: req.photoRequest,
-                        radius: 28,
-                        backgroundColor: Colors.grey[200],
-                      ),
-                      Positioned(
-                        bottom: -4,
-                        right: -4,
-                        child: Container(
-                          padding: const EdgeInsets.all(3),
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFF90E18),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.chat_bubble,
-                              size: 12, color: Colors.white),
-                        ),
-                      ),
-                    ],
+                    child: const Icon(Icons.chat_bubble,
+                        size: 12, color: Colors.white),
                   ),
-                  const SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        displayName.isEmpty ? 'User' : displayName,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF0F172A),
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 3),
-                      if ((req.city ?? '').isNotEmpty)
-                        Text(
-                          req.city!,
-                          style:
-                              const TextStyle(fontSize: 12, color: Colors.grey),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      const SizedBox(height: 3),
-                      const Text(
-                        'Wants to chat with you',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Color(0xFFF90E18),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
+                ),
+              ],
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayName.isEmpty ? 'User' : displayName,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF0F172A),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  if ((req.city ?? '').isNotEmpty)
+                    Text(
+                      req.city!,
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  const SizedBox(height: 3),
+                  const Text(
+                    'Wants to chat with you',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFFF90E18),
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),
             ),
-            const Spacer(),
             const SizedBox(width: 8),
             Column(
               mainAxisSize: MainAxisSize.min,
@@ -1226,6 +1216,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                       'Accept chat request from ${displayName.isEmpty ? 'User' : displayName}',
                   button: true,
                   child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: () => _handleAcceptChatRequest(req),
                     child: ExcludeSemantics(
                       child: Container(
@@ -1253,6 +1244,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                       'Reject chat request from ${displayName.isEmpty ? 'User' : displayName}',
                   button: true,
                   child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
                     onTap: () => _handleRejectChatRequest(req),
                     child: ExcludeSemantics(
                       child: Container(

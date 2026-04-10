@@ -503,6 +503,11 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
             // Enable microphone only after call connects to avoid interrupting ringtone
             if (_engineInitialized) {
               await _engine.enableAudio();
+              // Re-assert speaker routing: enableAudio() resets Agora's audio
+              // routing to its default (earpiece), so we must re-apply the
+              // current speaker state immediately after enabling audio.
+              unawaited(_engine.setEnableSpeakerphone(_speakerOn)
+                  .catchError((e) => debugPrint('setEnableSpeakerphone error: $e')));
               // Now enable microphone publishing
               await _engine.updateChannelMediaOptions(const ChannelMediaOptions(
                 publishMicrophoneTrack: true,

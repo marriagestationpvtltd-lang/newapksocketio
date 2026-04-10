@@ -302,46 +302,16 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     final userType = _currentUserType;
 
     if (docStatus == 'approved' && userType == 'paid') {
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        final userDataString = prefs.getString('user_data');
-        if (userDataString == null) return;
-        final userData = jsonDecode(userDataString);
-        final currentUserId = userData['id']?.toString() ?? '';
-        final firstName = userData['firstName']?.toString() ?? '';
-        final lastName = userData['lastName']?.toString() ?? '';
-        final currentUserName = '$firstName $lastName'.trim();
-
-        final List<String> ids = [currentUserId, userId];
-        ids.sort();
-        final chatRoomId = ids.join('_');
-
-        if (!context.mounted) return;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ChatDetailScreen(
-              chatRoomId: chatRoomId,
-              receiverId: userId,
-              receiverName: displayName.isNotEmpty ? displayName : 'User $userId',
-              receiverImage: '',
-              currentUserId: currentUserId,
-              currentUserName: currentUserName.isNotEmpty ? currentUserName : 'User $currentUserId',
-              currentUserImage: resolveApiImageUrl(_currentUserImage),
-            ),
-          ),
-        );
-      } catch (e) {
-        debugPrint('Error opening chat: $e');
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to open chat. Please try again.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
+      if (!context.mounted) return;
+      // Navigate to the profile page so chat request status is checked and the
+      // correct action button is shown (Send Request / Start Chat).
+      // Direct messaging without the other user's permission is not allowed.
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProfileScreen(userId: userId),
+        ),
+      );
     } else if (docStatus.isEmpty || docStatus == 'not_uploaded') {
       _showDocumentUploadRequiredDialog(context);
     } else if (docStatus == 'pending') {

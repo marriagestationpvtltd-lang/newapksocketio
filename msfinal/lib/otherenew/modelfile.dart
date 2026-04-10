@@ -968,7 +968,7 @@ class UserProfile extends ChangeNotifier {
 
   // Helper getters for UI
 
-  bool get canChat => isChatRequestAccepted || (isCurrentUserPaid && (profileResponse?.accessControl.canChat == true));
+  bool get canChat => isChatRequestAccepted;
 
   bool get isPhotoRequestPending => photoRequestStatus == 'pending';
   bool get isPhotoRequestAccepted => photoRequestStatus == 'accepted';

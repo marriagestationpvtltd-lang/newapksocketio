@@ -2085,7 +2085,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: isMe
-              ? Colors.white.withOpacity(0.2)
+              ? Colors.white.withOpacity(0.9)
               : _primaryGradient.colors[0].withOpacity(0.1),
           borderRadius: BorderRadius.circular(12),
         ),
@@ -2093,13 +2093,13 @@ class _AdminChatScreenState extends State<AdminChatScreen>
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.reply, size: 14,
-                color: isMe ? Colors.white70 : _primaryGradient.colors[0]),
+                color: isMe ? _primaryGradient.colors[0] : _primaryGradient.colors[0]),
             const SizedBox(width: 6),
             Text('Replied message',
                 style: TextStyle(
                     fontSize: 12,
                     fontStyle: FontStyle.italic,
-                    color: isMe ? Colors.white70 : _lightTextColor)),
+                    color: isMe ? Colors.black87 : _lightTextColor)),
           ],
         ),
       );
@@ -2147,12 +2147,12 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       ),
       decoration: BoxDecoration(
         color: isMe
-            ? Colors.white.withOpacity(0.2)
+            ? Colors.white.withOpacity(0.9)
             : _primaryGradient.colors[0].withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isMe
-              ? Colors.white.withOpacity(0.4)
+              ? Colors.white.withOpacity(0.95)
               : _primaryGradient.colors[0].withOpacity(0.3),
         ),
       ),
@@ -2165,7 +2165,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
             height: hasImage ? 64 : 46,
             decoration: BoxDecoration(
               color: isMe
-                  ? Colors.white.withOpacity(0.7)
+                  ? _primaryGradient.colors[0]
                   : _primaryGradient.colors[0],
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
@@ -2184,7 +2184,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                         color: isMe
-                            ? Colors.white.withOpacity(0.9)
+                            ? _primaryGradient.colors[0]
                             : _primaryGradient.colors[0],
                       )),
                   const SizedBox(height: 3),
@@ -2192,7 +2192,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                       style: TextStyle(
                         fontSize: 12,
                         color: isMe
-                            ? Colors.white.withOpacity(0.8)
+                            ? Colors.black87
                             : _lightTextColor,
                         fontStyle: FontStyle.italic,
                       ),

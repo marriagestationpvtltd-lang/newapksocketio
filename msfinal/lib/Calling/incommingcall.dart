@@ -23,6 +23,7 @@ import 'tokengenerator.dart';
 import 'call_history_model.dart';
 import 'call_history_service.dart';
 import 'call_foreground_service.dart';
+import 'incomingvideocall.dart';
 
 class IncomingCallScreen extends StatefulWidget {
   final Map<String, dynamic> callData;
@@ -59,6 +60,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
   StreamSubscription<Map<String, dynamic>>? _cancelSubscription;
   StreamSubscription<Map<String, dynamic>>? _socketCancelSubscription;
   StreamSubscription<Map<String, dynamic>>? _socketEndedSubscription;
+  StreamSubscription<Map<String, dynamic>>? _socketSwitchToVideoSub;
 
   final _ringtonePlayer = FlutterRingtonePlayer();
 
@@ -162,6 +164,14 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       if (channelName == _channel) {
         _end();
       }
+    });
+
+    // Listen for audio→video switch request from the other party.
+    _socketSwitchToVideoSub = SocketService().onSwitchToVideoRequest.listen((data) {
+      final channelName = data['channelName']?.toString();
+      if (channelName != _channel) return;
+      if (!_callActive || _ending || !mounted) return;
+      _showSwitchToVideoDialog(data);
     });
   }
 
@@ -607,6 +617,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
     _cancelSubscription?.cancel();
     _socketCancelSubscription?.cancel();
     _socketEndedSubscription?.cancel();
+    _socketSwitchToVideoSub?.cancel();
 
     if (_callActive) {
       // Notify caller via Socket.IO (fast path) + FCM (fallback)
@@ -671,6 +682,91 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       Navigator.of(context).pop();
     }
     unawaited(_stopForegroundService());
+  }
+
+  // ================= SWITCH TO VIDEO =================
+  /// Show dialog when the other party requests an audio→video upgrade.
+  void _showSwitchToVideoDialog(Map<String, dynamic> data) {
+    final requesterId = data['requesterId']?.toString() ?? _callerId;
+    if (!mounted) return;
+    showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Switch to Video'),
+        content: Text('$_callerName wants to switch to a video call. Accept?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Decline'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Accept'),
+          ),
+        ],
+      ),
+    ).then((accepted) {
+      if (!mounted || _ending) return;
+      if (accepted == true) {
+        SocketService().emitSwitchToVideoResponse(
+          requesterId: requesterId,
+          responderId: _currentUserId,
+          channelName: _channel,
+          accepted: true,
+        );
+        _navigateToVideoCall();
+      } else {
+        SocketService().emitSwitchToVideoResponse(
+          requesterId: requesterId,
+          responderId: _currentUserId,
+          channelName: _channel,
+          accepted: false,
+        );
+      }
+    });
+  }
+
+  /// Navigate to IncomingVideoCallScreen on the same Agora channel.
+  Future<void> _navigateToVideoCall() async {
+    if (_ending) return;
+    // Cancel all subscriptions to avoid interference.
+    _ringTimer?.cancel();
+    _callTimer?.cancel();
+    _cancelSubscription?.cancel();
+    _socketCancelSubscription?.cancel();
+    _socketEndedSubscription?.cancel();
+    _socketSwitchToVideoSub?.cancel();
+
+    // Leave the audio Agora channel.
+    try {
+      if (_joined) await _engine.leaveChannel();
+      if (_engineInitialized) await _engine.release();
+    } catch (e) {
+      debugPrint('Error releasing audio engine for video switch: $e');
+    }
+    CallOverlayManager().reset();
+    unawaited(_stopForegroundService());
+
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: activeCallRouteName),
+        fullscreenDialog: true,
+        builder: (_) => IncomingVideoCallScreen(
+          callData: {
+            ...widget.callData,
+            'channelName': _channel,
+            'callerId': _callerId,
+            'callerName': _callerName,
+            'isVideoCall': 'true',
+            'type': 'video_call',
+            // Mark as upgraded so IncomingVideoCallScreen skips emitting accept again
+            'isAudioToVideoUpgrade': 'true',
+          },
+        ),
+      ),
+    );
   }
 
   // ================= UI =================

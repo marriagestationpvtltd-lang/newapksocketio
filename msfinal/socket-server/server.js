@@ -405,6 +405,11 @@ const userActiveChatRoom = new Map(); // userId → chatRoomId | null
 const activePendingCalls = new Map();
 const PENDING_CALL_TTL_MS = 60000; // 60 seconds — matches FCM notification lifetime
 
+// Tracks users who are currently in an active (answered) call.
+// userId (string) → channelName (string)
+// Used to detect busy state and reject new incoming calls automatically.
+const activeCallUsers = new Map();
+
 function _cleanExpiredPendingCalls() {
   const now = Date.now();
   for (const [channelName, call] of activePendingCalls) {
@@ -1034,7 +1039,17 @@ io.on('connection', (socket) => {
       });
     }
 
-    if (userSockets.has(recipientIdStr)) {
+    if (activeCallUsers.has(recipientIdStr)) {
+      // Recipient is already on another call — notify caller immediately.
+      if (channelName) activePendingCalls.delete(channelName);
+      if (callerIdStr) {
+        io.to(`user:${callerIdStr}`).emit('call_busy', {
+          channelName: channelName,
+          callerId: callerIdStr,
+          recipientId: recipientIdStr,
+        });
+      }
+    } else if (userSockets.has(recipientIdStr)) {
       // Recipient is online — deliver the call and confirm ringing to caller.
       io.to(`user:${recipientIdStr}`).emit('incoming_call', callPayload);
       if (callerIdStr) {
@@ -1073,12 +1088,20 @@ io.on('connection', (socket) => {
   // ── call_accept ───────────────────────────────────────────────────────────
   // Recipient emits this to inform the caller the call was accepted.
   socket.on('call_accept', (data) => {
-    const { callerId, ...rest } = data || {};
+    const { callerId, recipientId, ...rest } = data || {};
     if (!callerId) return;
     if (rest.channelName) activePendingCalls.delete(rest.channelName);
-    io.to(`user:${callerId.toString()}`).emit('call_accepted', {
+    // Mark both parties as busy in an active call
+    const callerStr    = callerId.toString();
+    const recipientStr = recipientId ? recipientId.toString() : undefined;
+    if (rest.channelName) {
+      activeCallUsers.set(callerStr, rest.channelName);
+      if (recipientStr) activeCallUsers.set(recipientStr, rest.channelName);
+    }
+    io.to(`user:${callerStr}`).emit('call_accepted', {
       ...rest,
-      callerId: callerId.toString(),
+      callerId: callerStr,
+      ...(recipientId ? { recipientId: recipientStr } : {}),
     });
   });
 
@@ -1111,6 +1134,9 @@ io.on('connection', (socket) => {
   socket.on('call_end', (data) => {
     const { callerId, recipientId, ...rest } = data || {};
     if (rest.channelName) activePendingCalls.delete(rest.channelName);
+    // Remove both parties from the active-call tracking set
+    if (callerId)    activeCallUsers.delete(callerId.toString());
+    if (recipientId) activeCallUsers.delete(recipientId.toString());
     if (callerId) {
       io.to(`user:${callerId.toString()}`).emit('call_ended', {
         ...rest, callerId, recipientId,
@@ -1121,6 +1147,33 @@ io.on('connection', (socket) => {
         ...rest, callerId, recipientId,
       });
     }
+  });
+
+  // ── switch_to_video_request ──────────────────────────────────────────────
+  // One party requests to upgrade the ongoing audio call to a video call.
+  socket.on('switch_to_video_request', (data) => {
+    const { recipientId, requesterId, channelName, ...rest } = data || {};
+    if (!recipientId) return;
+    io.to(`user:${recipientId.toString()}`).emit('switch_to_video_request', {
+      ...rest,
+      recipientId: recipientId.toString(),
+      requesterId: requesterId ? requesterId.toString() : undefined,
+      channelName,
+    });
+  });
+
+  // ── switch_to_video_accepted ─────────────────────────────────────────────
+  // Recipient accepts (or declines) the switch-to-video request.
+  socket.on('switch_to_video_response', (data) => {
+    const { requesterId, responderId, channelName, accepted, ...rest } = data || {};
+    if (!requesterId) return;
+    io.to(`user:${requesterId.toString()}`).emit('switch_to_video_response', {
+      ...rest,
+      requesterId: requesterId.toString(),
+      responderId: responderId ? responderId.toString() : undefined,
+      channelName,
+      accepted: accepted === true || accepted === 'true',
+    });
   });
 
   // ── add_participant_to_call ───────────────────────────────────────────────
@@ -1219,6 +1272,8 @@ io.on('connection', (socket) => {
 
     userSockets.delete(authenticatedUserId);
     userActiveChatRoom.delete(authenticatedUserId);
+    // If this user was in an active call, remove them from busy tracking.
+    activeCallUsers.delete(authenticatedUserId);
 
     await upsertOnlineStatus(authenticatedUserId, false);
 

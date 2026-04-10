@@ -2961,12 +2961,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     required DateTime timestamp,
   }) {
     final isVideo = callType == 'video';
-    final isMissed = callStatus == 'missed' || callStatus == 'declined' || callStatus == 'cancelled';
+    final isBusy = callStatus == 'busy';
+    final isMissed = isBusy || callStatus == 'missed' || callStatus == 'declined' || callStatus == 'cancelled';
     final isOutgoing = callerId == widget.currentUserId;
 
     Color iconColor;
     IconData directionIcon;
-    if (isMissed) {
+    if (isBusy) {
+      iconColor = Colors.orange;
+      directionIcon = Icons.phone_locked;
+    } else if (isMissed) {
       iconColor = Colors.red;
       directionIcon = isVideo ? Icons.videocam_off : Icons.phone_missed;
     } else if (isOutgoing) {
@@ -2978,7 +2982,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     }
 
     String label;
-    if (isMissed) {
+    if (isBusy) {
+      label = 'User is busy';
+    } else if (isMissed) {
       label = isVideo ? 'Missed video call' : 'Missed voice call';
     } else if (isOutgoing) {
       label = isVideo ? 'Outgoing video call' : 'Outgoing voice call';
@@ -3002,10 +3008,18 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           constraints: const BoxConstraints(maxWidth: 260),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: isMissed ? Colors.red.withOpacity(0.08) : Colors.white,
+            color: isBusy
+                ? Colors.orange.withOpacity(0.08)
+                : isMissed
+                    ? Colors.red.withOpacity(0.08)
+                    : Colors.white,
             borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: isMissed ? Colors.red.withOpacity(0.3) : Colors.grey.withOpacity(0.25),
+              color: isBusy
+                  ? Colors.orange.withOpacity(0.3)
+                  : isMissed
+                      ? Colors.red.withOpacity(0.3)
+                      : Colors.grey.withOpacity(0.25),
               width: 1,
             ),
             boxShadow: [

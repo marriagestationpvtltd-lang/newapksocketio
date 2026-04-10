@@ -548,6 +548,7 @@ class _ChatWindowState extends State<ChatWindow> {
     Timer? autoRejectTimer;
     StreamSubscription<Map<String, dynamic>>? cancelSub;
     StreamSubscription<Map<String, dynamic>>? endedSub;
+    StreamSubscription<Map<String, dynamic>>? answeredElsewhereSub;
     BuildContext? incomingCallDialogContext;
     var dismissed = false;
     var remoteCallClosed = false;
@@ -578,6 +579,12 @@ class _ChatWindowState extends State<ChatWindow> {
     });
 
     endedSub = _socketService.onCallEnded.listen((event) {
+      if (event['channelName']?.toString() != channelName) return;
+      remoteCallClosed = true;
+      dismissDialog(false);
+    });
+
+    answeredElsewhereSub = _socketService.onCallAnsweredElsewhere.listen((event) {
       if (event['channelName']?.toString() != channelName) return;
       remoteCallClosed = true;
       dismissDialog(false);
@@ -797,6 +804,7 @@ class _ChatWindowState extends State<ChatWindow> {
       autoRejectTimer?.cancel();
       cancelSub?.cancel();
       endedSub?.cancel();
+      answeredElsewhereSub?.cancel();
       _callManager.clearCallData();
       if (accepted == true) {
         _socketService.emitCallAccept(
@@ -875,10 +883,9 @@ class _ChatWindowState extends State<ChatWindow> {
     Timer? autoRejectTimer;
     StreamSubscription<Map<String, dynamic>>? cancelSub;
     StreamSubscription<Map<String, dynamic>>? endedSub;
+    StreamSubscription<Map<String, dynamic>>? answeredElsewhereSub;
     var dismissed = false;
     var remoteCallClosed = false;
-
-    // Fetch caller details for the banner (usertype / memberId / occupation).
     final bannerDetailsNotifier =
         ValueNotifier<Map<String, String?>>({'usertype': null, 'memberId': null, 'occupation': null});
     _fetchCallerDetails(callerId).then((details) {
@@ -891,6 +898,7 @@ class _ChatWindowState extends State<ChatWindow> {
       autoRejectTimer?.cancel();
       cancelSub?.cancel();
       endedSub?.cancel();
+      answeredElsewhereSub?.cancel();
       bannerDetailsNotifier.dispose();
       _removeCallWaitingBanner();
       if (accepted) {
@@ -927,6 +935,11 @@ class _ChatWindowState extends State<ChatWindow> {
       dismiss(false);
     });
     endedSub = _socketService.onCallEnded.listen((event) {
+      if (event['channelName']?.toString() != channelName) return;
+      remoteCallClosed = true;
+      dismiss(false);
+    });
+    answeredElsewhereSub = _socketService.onCallAnsweredElsewhere.listen((event) {
       if (event['channelName']?.toString() != channelName) return;
       remoteCallClosed = true;
       dismiss(false);

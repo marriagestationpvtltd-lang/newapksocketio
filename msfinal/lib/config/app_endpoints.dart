@@ -1,6 +1,6 @@
 const String kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'https://digitallami.com',
+  defaultValue: 'https://192.168.1.5',
 );
 
 const String kSocketServerBaseUrl = String.fromEnvironment(

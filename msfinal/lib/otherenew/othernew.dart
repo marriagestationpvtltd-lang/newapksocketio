@@ -346,12 +346,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final reportedUserName =
           userProfile.name.isNotEmpty ? userProfile.name : 'Unknown';
 
-      final reportMessage =
-          'I have reported this profile.\n\nReason: $reason\n\nReported Profile ID: ${widget.userId}';
+      final reporterName = '${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}'.trim();
       final reportPayload = jsonEncode({
-        'reportMessage': reportMessage,
         'reportedUserId': widget.userId,
         'reportedUserName': reportedUserName,
+        'reporterName': reporterName.isNotEmpty ? reporterName : (userData['firstName']?.toString() ?? 'Unknown'),
+        'reporterId': currentUserId,
+        'reporterImage': userData['image']?.toString() ?? '',
         'reportReason': reason,
       });
 

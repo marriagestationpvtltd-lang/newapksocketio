@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../Models/masterdata.dart';
 import '../../constant/app_colors.dart';
 import '../../main.dart';
-import '../../otherprofile/otherprofileview.dart';
 import '../../pushnotification/pushservice.dart';
 import 'package:ms2026/config/app_endpoints.dart';
 

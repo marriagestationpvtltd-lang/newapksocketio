@@ -30,7 +30,6 @@ import '../Calling/call_history_service.dart';
 import '../Calling/callmanager.dart';
 import '../Calling/incommingcall.dart';
 import '../Calling/incomingvideocall.dart';
-import '../otherprofile/otherprofileview.dart';
 import '../otherenew/othernew.dart';
 import '../otherenew/service.dart';
 import '../pushnotification/pushservice.dart';
@@ -5300,7 +5299,7 @@ class _ChatUserProfileSheet extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (_) =>
-                            UserProfilePage(userId: receiverId),
+                            ProfileScreen(userId: receiverId),
                       ),
                     );
                   },

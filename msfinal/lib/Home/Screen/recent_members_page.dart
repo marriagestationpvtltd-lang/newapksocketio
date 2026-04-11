@@ -7,7 +7,6 @@ import 'package:ms2026/constant/app_colors.dart';
 import 'package:ms2026/constant/app_dimensions.dart';
 import 'package:ms2026/constant/app_text_styles.dart';
 import 'package:ms2026/constant/status_bar_utils.dart';
-import 'package:ms2026/otherprofile/otherprofileview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../Auth/Screen/signupscreen10.dart';
 import '../../main.dart';

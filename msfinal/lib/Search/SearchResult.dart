@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 import 'dart:ui' as ui;
-import 'package:ms2026/otherprofile/otherprofileview.dart'; // Add this import
 import '../main.dart';
 import '../pushnotification/pushservice.dart';
 import '../utils/privacy_utils.dart'; // Add privacy utils import

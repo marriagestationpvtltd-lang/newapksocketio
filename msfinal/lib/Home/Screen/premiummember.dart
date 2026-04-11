@@ -6,7 +6,6 @@ import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:ms2026/constant/app_colors.dart';
 import 'package:ms2026/constant/status_bar_utils.dart';
-import 'package:ms2026/otherprofile/otherprofileview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../Models/masterdata.dart';
 import '../../main.dart';

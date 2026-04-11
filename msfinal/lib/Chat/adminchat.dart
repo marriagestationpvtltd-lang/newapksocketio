@@ -731,24 +731,16 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     });
   }
 
-  void _scrollToBottom({bool animate = true}) {
+  void _scrollToBottom() {
     // Don't auto-scroll if scroll is locked during initial load
     if (_scrollLocked) return;
 
     if (_scrollController.hasClients) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_scrollController.hasClients) return;
-        if (animate) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOut,
-          );
-        } else {
-          _scrollController.jumpTo(
-            _scrollController.position.maxScrollExtent,
-          );
-        }
+        _scrollController.jumpTo(
+          _scrollController.position.maxScrollExtent,
+        );
       });
     }
   }
@@ -770,6 +762,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         _currentPage = 1;
         _hasMoreMessages = true;
         _scrollLocked = true;
+        _initialScrollDone = false;
       });
     }
     try {
@@ -828,8 +821,12 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       if (!mounted) return;
       if (_scrollController.hasClients) {
         _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-        // Wait for layout to settle before unlocking
+        // Jump again before unlocking in case layout changed between frames
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          if (_scrollController.hasClients) {
+            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+          }
           if (mounted) setState(() => _scrollLocked = false);
         });
       } else {

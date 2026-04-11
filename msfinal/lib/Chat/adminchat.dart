@@ -28,6 +28,7 @@ import '../Calling/incommingcall.dart';
 import '../Calling/incomingvideocall.dart';
 import '../pushnotification/pushservice.dart';
 import '../service/socket_service.dart';
+import '../service/chat_message_cache.dart';
 import 'call_overlay_manager.dart';
 import 'ChatdetailsScreen.dart';
 import 'screen_state_manager.dart';
@@ -194,6 +195,26 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
+
+    // Synchronously populate messages from the in-memory cache so the first
+    // frame already shows previously-loaded messages instead of a loading spinner.
+    ChatMessageCache.instance.preloadRoom(_chatRoomId);
+    final syncCached = ChatMessageCache.instance.getMessages(_chatRoomId);
+    if (syncCached != null && syncCached.isNotEmpty) {
+      _cachedMessages = List.from(syncCached);
+      _isFirstLoad = false;
+      _streamLoading = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_scrollController.hasClients) {
+          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        }
+        // Mark initial scroll done and unlock so messages are visible at once.
+        // The server response will update messages in-place without re-scrolling.
+        _initialScrollDone = true;
+        if (mounted) setState(() => _scrollLocked = false);
+      });
+    }
 
     // Voice audio player listeners
     _audioPlayerStateSub = _audioPlayer.onPlayerStateChanged.listen((state) {
@@ -597,6 +618,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         _cachedMessages = [..._cachedMessages, data];
         if (_showSuggestedMessages) _showSuggestedMessages = false;
       });
+      ChatMessageCache.instance.setMessages(_chatRoomId, _cachedMessages);
       // Auto-mark as read if the message is incoming
       final bool isMe = data['senderId']?.toString() == _mySenderId;
       if (!isMe) {
@@ -801,6 +823,8 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       if (reset) {
         // Perform initial scroll only once, then unlock
         _performInitialScroll();
+        // Persist the freshly loaded messages so next visit is instant
+        ChatMessageCache.instance.setMessages(_chatRoomId, _cachedMessages);
       }
       // After loading, join room and mark read
       _socketService.joinRoom(_chatRoomId);

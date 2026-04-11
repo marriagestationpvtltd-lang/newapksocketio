@@ -1,11 +1,11 @@
 const String kAdminApiBaseUrl = String.fromEnvironment(
   'ADMIN_API_BASE_URL',
-  defaultValue: 'http://192.168.18.214',
+  defaultValue: 'http://192.168.18.214/www/wwwroot/digitallami.com',
 );
 
 const String kAdminSocketBaseUrl = String.fromEnvironment(
   'ADMIN_SOCKET_URL',
-  defaultValue: 'http://192.168.18.214:3001',
+  defaultValue: 'http://adminnew.marriagestation.com.np',
 );
 
 const String kAdminApi2BaseUrl = '$kAdminApiBaseUrl/Api2';

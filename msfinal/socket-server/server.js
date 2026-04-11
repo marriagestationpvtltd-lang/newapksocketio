@@ -836,7 +836,7 @@ io.on('connection', (socket) => {
     }
 
     // Validate messageType against whitelist
-    const ALLOWED_MESSAGE_TYPES = ['text', 'image', 'voice', 'video', 'file', 'call', 'doc', 'profile_card', 'image_gallery'];
+    const ALLOWED_MESSAGE_TYPES = ['text', 'image', 'voice', 'video', 'file', 'call', 'doc', 'profile_card', 'image_gallery', 'report'];
     const safeMessageType = ALLOWED_MESSAGE_TYPES.includes(messageType) ? messageType : 'text';
 
     // Enforce message length limit (64 KB)

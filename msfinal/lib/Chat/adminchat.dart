@@ -1241,6 +1241,8 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         return '📄 Document';
       case 'profile_card':
         return '👤 Profile shared';
+      case 'report':
+        return '🚩 Profile reported';
       default:
         return data['message']?.toString() ?? '';
     }
@@ -1323,14 +1325,27 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     }
 
     // Render report messages as a special card
-    if (data['messageType'] == 'report' || data['type'] == 'report') {
-      Map<String, dynamic> reportData = data;
-      // If report extra fields are JSON-encoded in message, decode them
-      try {
-        final decoded = jsonDecode(data['message'] ?? '{}') as Map<String, dynamic>;
-        if (decoded.containsKey('reportReason')) reportData = {...data, ...decoded};
-      } catch (_) {}
-      return _buildReportMessageCard(reportData, isFromAdmin, formattedTime);
+    // Also detect legacy messages stored as 'text' where content is a report JSON payload
+    {
+      final msgType = data['messageType']?.toString() ?? data['type']?.toString() ?? '';
+      final rawMessage = data['message']?.toString() ?? '';
+      Map<String, dynamic>? decodedReport;
+      if (msgType == 'report') {
+        try {
+          final decoded = jsonDecode(rawMessage) as Map<String, dynamic>;
+          if (decoded.containsKey('reportReason')) decodedReport = decoded;
+        } catch (_) {}
+      } else if (msgType == 'text' || msgType.isEmpty) {
+        // Legacy: report was stored as text because server whitelist was missing 'report'
+        try {
+          final decoded = jsonDecode(rawMessage) as Map<String, dynamic>;
+          if (decoded.containsKey('reportReason')) decodedReport = decoded;
+        } catch (_) {}
+      }
+      if (decodedReport != null) {
+        final reportData = {...data, ...decodedReport};
+        return _buildReportMessageCard(reportData, isFromAdmin, formattedTime);
+      }
     }
 
     double swipeOffset = _swipeOffsets[msgID] ?? 0.0;

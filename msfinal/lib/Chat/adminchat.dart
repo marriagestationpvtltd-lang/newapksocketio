@@ -3678,35 +3678,41 @@ class _AdminChatScreenState extends State<AdminChatScreen>
 
     final messageWidgets = _buildMessagesFromCache();
 
-    return Container(
-      decoration: BoxDecoration(
-        color: _backgroundColor,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(24),
-          topRight: Radius.circular(24),
+    // Wrap in Opacity so the list is invisible while the scroll position is
+    // being set to the bottom on first load (like WhatsApp). The ListView
+    // remains in the tree so the scroll controller stays attached.
+    return Opacity(
+      opacity: _scrollLocked ? 0.0 : 1.0,
+      child: Container(
+        decoration: BoxDecoration(
+          color: _backgroundColor,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
         ),
-      ),
-      child: ListView(
-        controller: _scrollController,
-        // Use ClampingScrollPhysics to prevent bounce effect that causes shaking
-        physics: const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-        padding: const EdgeInsets.only(top: 16, bottom: 12),
-        children: [
-          if (_isLoadingMore)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: _accentColor),
+        child: ListView(
+          controller: _scrollController,
+          // Use ClampingScrollPhysics to prevent bounce effect that causes shaking
+          physics: const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+          padding: const EdgeInsets.only(top: 16, bottom: 12),
+          children: [
+            if (_isLoadingMore)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: _accentColor),
+                  ),
                 ),
               ),
-            ),
-          ...messageWidgets,
-          if (_isAdminTyping) _buildTypingIndicator(),
-        ],
+            ...messageWidgets,
+            if (_isAdminTyping) _buildTypingIndicator(),
+          ],
+        ),
       ),
     );
   }

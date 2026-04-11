@@ -2820,7 +2820,13 @@ class _ChatWindowState extends State<ChatWindow> {
                 final messageGroups = _groupMessagesByDate(messages);
                 _currentMessageGroups = messageGroups;
 
-                return NotificationListener<ScrollUpdateNotification>(
+                return Opacity(
+                  // Hide the list while the scroll position is being set to
+                  // the bottom on first load (WhatsApp-style instant positioning).
+                  // The CustomScrollView stays in the tree so the controller
+                  // remains attached and jumpTo works correctly.
+                  opacity: _scrollLocked ? 0.0 : 1.0,
+                  child: NotificationListener<ScrollUpdateNotification>(
                   onNotification: (notification) {
                     final offset = _scrollController.hasClients ? _scrollController.offset : 0.0;
                     final label = _dateGroupAtScrollOffset(offset, _currentMessageGroups);
@@ -2965,6 +2971,7 @@ class _ChatWindowState extends State<ChatWindow> {
                     const SliverToBoxAdapter(child: SizedBox(height: 12)),
                   ],
                   ),
+                ),
                 );
               },
             ),

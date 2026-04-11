@@ -3509,7 +3509,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       );
     }
 
-    return _buildMessagesFromCache();
+    // Wrap the message list in Opacity so it stays invisible while the scroll
+    // position is being set to the bottom on first load (like WhatsApp). The
+    // ListView remains in the widget tree (scroll controller stays attached and
+    // jumpTo works), but the user never sees the brief flash from top to bottom.
+    return Opacity(
+      opacity: _scrollLocked ? 0.0 : 1.0,
+      child: _buildMessagesFromCache(),
+    );
   }
 
   Future<void> _refreshMessages() async {

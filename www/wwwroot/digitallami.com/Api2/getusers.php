@@ -56,7 +56,13 @@ try {
     }
     unset($row);
 
-    echo json_encode(['success' => true, 'users' => $rows]);
+    $encoded = json_encode(['success' => true, 'users' => $rows], JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_UNICODE);
+    if ($encoded === false) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Failed to encode response']);
+    } else {
+        echo $encoded;
+    }
 
 } catch (Exception $e) {
     http_response_code(500);

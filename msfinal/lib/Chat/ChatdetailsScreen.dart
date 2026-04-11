@@ -1529,6 +1529,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         return '📹 Video call';
       case 'profile_card':
         return '👤 Profile card';
+      case 'report':
+        return '🚩 Profile reported';
       default:
         return repliedTo['message'] as String? ?? '';
     }
@@ -1901,14 +1903,16 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 if (replyWidget != null) replyWidget,
 
                 Container(
-                  padding: (messageType == 'image' || messageType == 'image_gallery' || messageType == 'profile_card')
+                  padding: (messageType == 'image' || messageType == 'image_gallery' || messageType == 'profile_card' || messageType == 'report')
                       ? EdgeInsets.zero
                       : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   constraints: BoxConstraints(
                     maxWidth: screenWidth * 0.75,
                   ),
-                  clipBehavior: (messageType == 'image' || messageType == 'image_gallery' || messageType == 'profile_card') ? Clip.antiAlias : Clip.none,
-                  decoration: messageType == 'profile_card'
+                  clipBehavior: (messageType == 'image' || messageType == 'image_gallery' || messageType == 'profile_card' || messageType == 'report') ? Clip.antiAlias : Clip.none,
+                  decoration: messageType == 'report'
+                      ? const BoxDecoration(color: Colors.transparent)
+                      : messageType == 'profile_card'
                       ? BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(20),
@@ -2273,6 +2277,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             },
           ),
         );
+      case 'report':
+        return _buildReportCardWidget(text, isMine);
       case 'profile_card':
         return _buildProfileCardWidget(text, isMine);
       default:
@@ -2285,6 +2291,165 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           ),
         );
     }
+  }
+
+  /// Builds a report card widget from a JSON-encoded report payload string.
+  Widget _buildReportCardWidget(String jsonText, bool isMine) {
+    Map<String, dynamic>? reportData;
+    try {
+      final decoded = jsonDecode(jsonText);
+      if (decoded is Map) reportData = Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+
+    final reportReason = reportData?['reportReason']?.toString() ?? '';
+    final reportedUserName = reportData?['reportedUserName']?.toString() ?? '';
+    final reportedUserId = reportData?['reportedUserId']?.toString() ?? '';
+    final initials = reportedUserName.isNotEmpty
+        ? reportedUserName.trim().split(' ').map((w) => w.isEmpty ? '' : w[0].toUpperCase()).take(2).join()
+        : '?';
+
+    return Container(
+      constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.75),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFDE7),
+        border: Border.all(color: const Color(0xFFF9A825), width: 1.2),
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(16),
+          topRight: const Radius.circular(16),
+          bottomLeft:
+              isMine ? const Radius.circular(16) : const Radius.circular(4),
+          bottomRight:
+              isMine ? const Radius.circular(4) : const Radius.circular(16),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.amber.withOpacity(0.20),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header banner
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFFF9A825), Color(0xFFF57F17)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(14),
+                topRight: Radius.circular(14),
+              ),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.flag_rounded, color: Colors.white, size: 16),
+                SizedBox(width: 6),
+                Text(
+                  'PROFILE REPORTED',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Reported user section
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: const Color(0xFFF9A825),
+                  child: Text(
+                    initials,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (reportedUserName.isNotEmpty)
+                        Text(
+                          reportedUserName,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF4A3000),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      if (reportedUserId.isNotEmpty)
+                        Text(
+                          'User ID: $reportedUserId',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Divider
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Divider(
+              color: const Color(0xFFF9A825).withOpacity(0.4),
+              height: 1,
+            ),
+          ),
+          // Reason section
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'REPORT REASON',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFF57F17),
+                    letterSpacing: 0.6,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  reportReason.isNotEmpty ? reportReason : 'No reason provided',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF4A3000),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Builds a profile card widget from a JSON-encoded profile data string.

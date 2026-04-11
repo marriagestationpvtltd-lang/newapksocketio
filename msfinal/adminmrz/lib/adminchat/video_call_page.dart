@@ -110,6 +110,12 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   StreamSubscription<Map<String, dynamic>>? _callCancelledSubscription;
   StreamSubscription<Map<String, dynamic>>? _callEndedSubscription;
   StreamSubscription<Map<String, dynamic>>? _callBusySubscription;
+  StreamSubscription<Map<String, dynamic>>? _participantAcceptedSubscription;
+  StreamSubscription<Map<String, dynamic>>? _participantRejectedSubscription;
+
+  // Track all remote UIDs in the channel so the call is only ended when
+  // the last remote participant disconnects (supports 3-party conference).
+  final Set<int> _remoteUids = {};
 
   // Video renderers
   Widget? _localVideoView;
@@ -307,6 +313,50 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
         });
       }
 
+      // ── Conference call participant events ────────────────────────────────
+      // Listen for events when admin adds a third participant to the call.
+      _participantAcceptedSubscription?.cancel();
+      _participantAcceptedSubscription =
+          _socketService.onParticipantAcceptedCall.listen((data) {
+        if (!mounted || _ending) return;
+        if (data['channelName']?.toString() == _channel) {
+          final acceptedById = data['acceptedById']?.toString() ?? '';
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  acceptedById.isNotEmpty
+                      ? 'User $acceptedById joined the call'
+                      : 'New participant joined the call',
+                ),
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      });
+
+      _participantRejectedSubscription?.cancel();
+      _participantRejectedSubscription =
+          _socketService.onParticipantRejectedCall.listen((data) {
+        if (!mounted || _ending) return;
+        if (data['channelName']?.toString() == _channel) {
+          final rejectedById = data['rejectedById']?.toString() ?? '';
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  rejectedById.isNotEmpty
+                      ? 'User $rejectedById declined the conference invitation'
+                      : 'Participant declined the conference invitation',
+                ),
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      });
+
       // Initialize Agora engine
       _engine = createAgoraRtcEngine();
       await _engine.initialize(RtcEngineContext(
@@ -341,27 +391,43 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
             }
           },
           onUserJoined: (_, uid, __) async {
-            if (mounted) {
-              setState(() {
-                _remoteUid = uid;
-                _callStatus = _VCallStatus.connected;
-              });
-              _setupRemoteVideo(uid);
+            _remoteUids.add(uid);
+            if (!_callActive) {
+              // First remote user – transition to connected state
+              if (mounted) {
+                setState(() {
+                  _remoteUid = uid;
+                  _callStatus = _VCallStatus.connected;
+                });
+                _setupRemoteVideo(uid);
+              }
+              await _stopRingtone();
+              // Enable microphone only after call connects to avoid interrupting ringtone
+              await _engine.enableAudio();
+              // Now enable microphone and camera publishing
+              await _engine.updateChannelMediaOptions(const ChannelMediaOptions(
+                publishMicrophoneTrack: true,
+                publishCameraTrack: true,
+                autoSubscribeAudio: true,
+                autoSubscribeVideo: true,
+              ));
+              _startCallTimer();
+            } else {
+              // Additional conference participant – show their video
+              if (mounted) {
+                setState(() {
+                  _remoteUid = uid;
+                });
+                _setupRemoteVideo(uid);
+              }
             }
-            await _stopRingtone();
-            // Enable microphone only after call connects to avoid interrupting ringtone
-            await _engine.enableAudio();
-            // Now enable microphone and camera publishing
-            await _engine.updateChannelMediaOptions(const ChannelMediaOptions(
-              publishMicrophoneTrack: true,
-              publishCameraTrack: true,
-              autoSubscribeAudio: true,
-              autoSubscribeVideo: true,
-            ));
-            _startCallTimer();
           },
-          onUserOffline: (_, __, ___) {
-            _endCall();
+          onUserOffline: (_, uid, __) {
+            _remoteUids.remove(uid);
+            // Only end the call when ALL remote participants have left
+            if (_remoteUids.isEmpty && !_ending) {
+              _endCall();
+            }
           },
           onError: (code, msg) {},
         ),
@@ -454,11 +520,15 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     await _callEndedSubscription?.cancel();
     await _callAcceptedSubscription?.cancel();
     await _callBusySubscription?.cancel();
+    await _participantAcceptedSubscription?.cancel();
+    await _participantRejectedSubscription?.cancel();
     _callRejectedSubscription = null;
     _callCancelledSubscription = null;
     _callEndedSubscription = null;
     _callAcceptedSubscription = null;
     _callBusySubscription = null;
+    _participantAcceptedSubscription = null;
+    _participantRejectedSubscription = null;
 
     if (widget.isOutgoingCall && notifyPeer) {
       if (_callActive) {
@@ -995,6 +1065,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     _callCancelledSubscription?.cancel();
     _callEndedSubscription?.cancel();
     _callBusySubscription?.cancel();
+    _participantAcceptedSubscription?.cancel();
+    _participantRejectedSubscription?.cancel();
     _ringtonePlayer.dispose();
     super.dispose();
   }

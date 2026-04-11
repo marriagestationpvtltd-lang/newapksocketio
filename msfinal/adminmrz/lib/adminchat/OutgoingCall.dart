@@ -86,6 +86,12 @@ class _CallScreenState extends State<CallScreen>
   StreamSubscription<Map<String, dynamic>>? _callCancelledSubscription;
   StreamSubscription<Map<String, dynamic>>? _callEndedSubscription;
   StreamSubscription<Map<String, dynamic>>? _callBusySubscription;
+  StreamSubscription<Map<String, dynamic>>? _participantAcceptedSubscription;
+  StreamSubscription<Map<String, dynamic>>? _participantRejectedSubscription;
+
+  // Track all remote UIDs in the channel so the call is only ended when
+  // the last remote participant disconnects (supports 3-party conference).
+  final Set<int> _remoteUids = {};
 
   // Animation controllers
   late AnimationController _pulseController;
@@ -301,6 +307,50 @@ class _CallScreenState extends State<CallScreen>
         });
       }
 
+      // ── Conference call participant events ────────────────────────────────
+      // Listen for events when admin adds a third participant to the call.
+      _participantAcceptedSubscription?.cancel();
+      _participantAcceptedSubscription =
+          _socketService.onParticipantAcceptedCall.listen((data) {
+        if (!mounted || _ending) return;
+        if (data['channelName']?.toString() == _channel) {
+          final acceptedById = data['acceptedById']?.toString() ?? '';
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  acceptedById.isNotEmpty
+                      ? 'User $acceptedById joined the call'
+                      : 'New participant joined the call',
+                ),
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      });
+
+      _participantRejectedSubscription?.cancel();
+      _participantRejectedSubscription =
+          _socketService.onParticipantRejectedCall.listen((data) {
+        if (!mounted || _ending) return;
+        if (data['channelName']?.toString() == _channel) {
+          final rejectedById = data['rejectedById']?.toString() ?? '';
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  rejectedById.isNotEmpty
+                      ? 'User $rejectedById declined the conference invitation'
+                      : 'Participant declined the conference invitation',
+                ),
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      });
+
       // ================= AGORA =================
       _engine = createAgoraRtcEngine();
 
@@ -318,30 +368,38 @@ class _CallScreenState extends State<CallScreen>
         RtcEngineEventHandler(
           onUserJoined: (_, uid, __) async {
             if (!mounted) return;
-            // Phase 3 – "Connected"
-            setState(() {
-              _remoteUid = uid;
-              _callActive = true;
-              _callStatus = _CallStatus.connected;
-            });
-            _pulseController.stop();
-            _pulseController.reset();
-            _signalController.stop();
-            _signalController.reset();
-            await _stopRingtone();
-            // Enable microphone only after call connects to avoid interrupting ringtone
-            await _engine.enableAudio();
-            // Now enable microphone publishing
-            await _engine.updateChannelMediaOptions(const ChannelMediaOptions(
-              publishMicrophoneTrack: true,
-              autoSubscribeAudio: true,
-              autoSubscribeVideo: true,
-            ));
-            _startTimer();
+            _remoteUids.add(uid);
+            // Phase 3 – "Connected" (first remote user joins)
+            if (!_callActive) {
+              setState(() {
+                _remoteUid = uid;
+                _callActive = true;
+                _callStatus = _CallStatus.connected;
+              });
+              _pulseController.stop();
+              _pulseController.reset();
+              _signalController.stop();
+              _signalController.reset();
+              await _stopRingtone();
+              // Enable microphone only after call connects to avoid interrupting ringtone
+              await _engine.enableAudio();
+              // Now enable microphone publishing
+              await _engine.updateChannelMediaOptions(const ChannelMediaOptions(
+                publishMicrophoneTrack: true,
+                autoSubscribeAudio: true,
+                autoSubscribeVideo: true,
+              ));
+              _startTimer();
+            } else {
+              // Additional participant joined the conference call – already connected
+              setState(() => _remoteUid = uid);
+            }
           },
 
-          onUserOffline: (_, __, ___) async {
-            if (!_ending) {
+          onUserOffline: (_, uid, __) async {
+            _remoteUids.remove(uid);
+            // Only end the call when ALL remote participants have left
+            if (_remoteUids.isEmpty && !_ending) {
               await _endCall();
             }
           },
@@ -452,11 +510,15 @@ class _CallScreenState extends State<CallScreen>
       await _callEndedSubscription?.cancel();
       await _callAcceptedSubscription?.cancel();
       await _callBusySubscription?.cancel();
+      await _participantAcceptedSubscription?.cancel();
+      await _participantRejectedSubscription?.cancel();
       _callRejectedSubscription = null;
       _callCancelledSubscription = null;
       _callEndedSubscription = null;
       _callAcceptedSubscription = null;
       _callBusySubscription = null;
+      _participantAcceptedSubscription = null;
+      _participantRejectedSubscription = null;
 
       if (widget.isOutgoingCall && notifyPeer) {
         if (_callActive) {
@@ -836,6 +898,8 @@ class _CallScreenState extends State<CallScreen>
     _callCancelledSubscription?.cancel();
     _callEndedSubscription?.cancel();
     _callBusySubscription?.cancel();
+    _participantAcceptedSubscription?.cancel();
+    _participantRejectedSubscription?.cancel();
 
     try {
       _engine.leaveChannel();

@@ -479,21 +479,33 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
             // Notify caller AFTER successfully joining Agora channel
             // This prevents race condition where caller receives accept before recipient joins
             print('📤 Notifying caller of acceptance...');
-            SocketService().emitCallAccept(
-              callerId: _callerId,
-              recipientId: _currentUserId,
-              recipientName: _recipientName,
-              recipientUid: _localUid.toString(),
-              channelName: _channel,
-              callType: 'video',
-            );
-            unawaited(NotificationService.sendVideoCallResponseNotification(
-              callerId: _callerId,
-              recipientName: _recipientName,
-              accepted: true,
-              recipientUid: _localUid.toString(),
-              channelName: _channel,
-            ));
+            if (widget.callData['isConferenceCall'] == true) {
+              // Conference call: emit participant_call_accept so admin receives
+              // participant_accepted_call without disrupting the original call.
+              SocketService().emitParticipantCallAccept(
+                adminId: _callerId,
+                channelName: _channel,
+                acceptedById: _currentUserId,
+                existingParticipantId:
+                    widget.callData['existingParticipantId']?.toString(),
+              );
+            } else {
+              SocketService().emitCallAccept(
+                callerId: _callerId,
+                recipientId: _currentUserId,
+                recipientName: _recipientName,
+                recipientUid: _localUid.toString(),
+                channelName: _channel,
+                callType: 'video',
+              );
+              unawaited(NotificationService.sendVideoCallResponseNotification(
+                callerId: _callerId,
+                recipientName: _recipientName,
+                accepted: true,
+                recipientUid: _localUid.toString(),
+                channelName: _channel,
+              ));
+            }
           },
           onUserJoined: (connection, remoteUid, elapsed) {
             print('👤 Remote user joined: $remoteUid');
@@ -619,32 +631,44 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
   Future<void> _rejectCall() async {
     _ringTimer?.cancel();
     await _stopRingtone();
-    // Notify caller via Socket.IO (fast) + FCM (fallback)
-    SocketService().emitCallReject(
-      callerId: _callerId,
-      recipientId: _currentUserId,
-      recipientName: _recipientName,
-      channelName: _channel,
-      callType: 'video',
-    );
-    await NotificationService.sendVideoCallResponseNotification(
-      callerId: _callerId,
-      recipientName: _recipientName,
-      accepted: false,
-      recipientUid: '0',
-      channelName: _channel,
-    );
 
-    // Write inline call message to chat (recipient side backup)
-    if (_chatRoomId.isNotEmpty) {
-      unawaited(CallHistoryService.logCallMessageInChat(
+    if (widget.callData['isConferenceCall'] == true) {
+      // Conference call: notify admin via participant_call_reject so the
+      // admin's original call is NOT accidentally terminated.
+      SocketService().emitParticipantCallReject(
+        adminId: _callerId,
+        channelName: _channel,
+        rejectedById: _currentUserId,
+        existingParticipantId: widget.callData['existingParticipantId']?.toString(),
+      );
+    } else {
+      // Notify caller via Socket.IO (fast) + FCM (fallback)
+      SocketService().emitCallReject(
         callerId: _callerId,
+        recipientId: _currentUserId,
+        recipientName: _recipientName,
+        channelName: _channel,
         callType: 'video',
-        callStatus: 'declined',
-        duration: 0,
-        chatRoomId: _chatRoomId,
-        messageDocId: _channel.isNotEmpty ? 'call_$_channel' : null,
-      ));
+      );
+      await NotificationService.sendVideoCallResponseNotification(
+        callerId: _callerId,
+        recipientName: _recipientName,
+        accepted: false,
+        recipientUid: '0',
+        channelName: _channel,
+      );
+
+      // Write inline call message to chat (recipient side backup)
+      if (_chatRoomId.isNotEmpty) {
+        unawaited(CallHistoryService.logCallMessageInChat(
+          callerId: _callerId,
+          callType: 'video',
+          callStatus: 'declined',
+          duration: 0,
+          chatRoomId: _chatRoomId,
+          messageDocId: _channel.isNotEmpty ? 'call_$_channel' : null,
+        ));
+      }
     }
 
     await _end();
@@ -653,6 +677,20 @@ class _IncomingVideoCallScreenState extends State<IncomingVideoCallScreen> {
   // ================= MISSED =================
   Future<void> _missedCall() async {
     await _stopRingtone();
+
+    if (widget.callData['isConferenceCall'] == true) {
+      // Conference call: notify admin the invitation was not answered so admin
+      // knows without ending its original active call.
+      SocketService().emitParticipantCallReject(
+        adminId: _callerId,
+        channelName: _channel,
+        rejectedById: _currentUserId,
+        existingParticipantId: widget.callData['existingParticipantId']?.toString(),
+      );
+      await _end();
+      return;
+    }
+
     await NotificationService.sendMissedVideoCallNotification(
       callerId: _callerId,
       callerName: _callerName,

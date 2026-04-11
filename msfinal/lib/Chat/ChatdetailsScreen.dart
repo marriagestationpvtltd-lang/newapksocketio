@@ -475,7 +475,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
       _pendingIncomingMessages.add(newMsg);
 
-      // Reset the debounce timer; after 50 ms of silence we flush all buffered
+      // Reset the debounce timer; after 100 ms of silence we flush all buffered
       // messages in a single setState (one rebuild instead of one per message).
       _incomingMessageDebounce?.cancel();
       _incomingMessageDebounce = Timer(const Duration(milliseconds: 100), _flushPendingMessages);
@@ -1224,7 +1224,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
       _recordingAnimController?.repeat();
       _recordTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        _recordDurationNotifier.value++;
+        _recordDurationNotifier.value = _recordDurationNotifier.value + 1;
       });
     } catch (e) {
       if (mounted) {

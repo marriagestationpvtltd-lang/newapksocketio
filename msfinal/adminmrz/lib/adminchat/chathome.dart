@@ -4548,11 +4548,10 @@ class _ChatWindowState extends State<ChatWindow> {
                                         label: 'Warn User',
                                         onTap: () {
                                           Navigator.pop(context);
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text('Warning sent to $reportedUserName'),
-                                              backgroundColor: Colors.orange,
-                                            ),
+                                          _sendReportWarning(
+                                            reportedUserId: reportedUserId,
+                                            reportedUserName: reportedUserName,
+                                            reportReason: reportReason,
                                           );
                                         },
                                       ),
@@ -6290,6 +6289,122 @@ class _ChatWindowState extends State<ChatWindow> {
         );
       }
     });
+  }
+
+  // ── SEND REPORT WARNING ──────────────────────────────────────────────────
+
+  /// Sends a warning message to the reported user (identified by [reportedUserId])
+  /// WITHOUT revealing who filed the report. Shows a dialog so the admin can
+  /// review / edit the message before sending.
+  Future<void> _sendReportWarning({
+    required String reportedUserId,
+    required String reportedUserName,
+    required String reportReason,
+  }) async {
+    if (reportedUserId.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Reported user information not found')),
+        );
+      }
+      return;
+    }
+
+    final String defaultMessage = reportReason.isNotEmpty
+        ? '⚠️ Your profile has been reported. Reason: $reportReason. Please review our community guidelines to ensure your profile complies with our policies.'
+        : '⚠️ Your profile has been reported. Please review our community guidelines to ensure your profile complies with our policies.';
+
+    final TextEditingController msgController =
+        TextEditingController(text: defaultMessage);
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Send Warning to User'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (reportedUserName.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'To: $reportedUserName',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ),
+            TextField(
+              controller: msgController,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Enter warning message...',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            child: const Text('Send Warning'),
+          ),
+        ],
+      ),
+    );
+
+    final String finalMessage =
+        msgController.text.trim().isEmpty ? defaultMessage : msgController.text.trim();
+    msgController.dispose();
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final connected = await _socketService.ensureConnected();
+      if (!connected) throw Exception('Socket not connected');
+
+      _socketService.sendMessage(
+        chatRoomId: AdminSocketService.chatRoomId(reportedUserId),
+        receiverId: reportedUserId,
+        message: finalMessage,
+        messageType: 'text',
+        messageId: 'warn_${DateTime.now().millisecondsSinceEpoch}_$senderId',
+        receiverName: reportedUserName,
+      );
+
+      await NotificationService.sendChatNotification(
+        recipientUserId: reportedUserId,
+        senderName: 'Admin',
+        senderId: '1',
+        message: '⚠️ Warning from Admin',
+        extraData: {
+          'chatId': reportedUserId,
+          'screen': 'chat',
+        },
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Warning sent to $reportedUserName'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send warning: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   // ── FORWARD IMAGE ────────────────────────────────────────────────────────

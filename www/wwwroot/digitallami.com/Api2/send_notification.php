@@ -2,9 +2,6 @@
 require_once __DIR__ . '/../config/db.php';
 header("Content-Type: application/json");
 require 'common_fcm.php';
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
 header("Content-Type: application/json");
 
 // Database connection
@@ -117,7 +114,6 @@ try {
 } catch(Exception $e) {
     echo json_encode(["status"=>false,"error"=>$e->getMessage()]);
 }
-
 
 $conn->close();
 ?>

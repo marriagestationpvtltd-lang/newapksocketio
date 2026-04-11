@@ -30,7 +30,6 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // Method 1: Try with CORS mode first
   Future<bool> login(String email, String password) async {
     _isLoading = true;
     _error = null;
@@ -39,7 +38,6 @@ class AuthProvider with ChangeNotifier {
     try {
       final url = Uri.parse('${kAdminApiBaseUrl}/api9/login.php');
 
-      // Try with mode: 'cors' for web
       final response = await http.post(
         url,
         headers: {
@@ -51,7 +49,6 @@ class AuthProvider with ChangeNotifier {
           'password': password,
         }),
       );
-
 
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
@@ -74,101 +71,15 @@ class AuthProvider with ChangeNotifier {
           return false;
         }
       } else {
-        _error = 'Server error: ${response.statusCode}\n${response.body}';
+        _error = 'Server error: ${response.statusCode}';
         _isLoading = false;
         notifyListeners();
         return false;
       }
     } catch (e) {
-
-      // Try alternative method if first fails
-      return await _loginWithAlternativeMethod(email, password);
-    }
-  }
-
-  // Method 2: Alternative approach for CORS issues
-  Future<bool> _loginWithAlternativeMethod(String email, String password) async {
-    try {
-      // Try using a different approach
-      final url = Uri.parse('${kAdminApiBaseUrl}/api9/login.php');
-
-      // Create a more compatible request
-      final request = http.Request('POST', url);
-      request.headers['Content-Type'] = 'application/json';
-      request.body = json.encode({
-        'email': email,
-        'password': password,
-      });
-
-      final streamedResponse = await request.send();
-      final response = await http.Response.fromStream(streamedResponse);
-
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-
-        if (responseData['success'] == true) {
-          _token = responseData['data']['token'];
-          _adminData = responseData['data']['admin'];
-
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('token', _token!);
-          await prefs.setString('adminData', json.encode(_adminData));
-
-          _isLoading = false;
-          notifyListeners();
-          return true;
-        }
-      }
-
-      _error = 'Failed to connect. Please check CORS settings.';
+      _error = 'Network error: $e';
       _isLoading = false;
       notifyListeners();
-      return false;
-    } catch (e) {
-      _error = 'Network error: Please ensure CORS is enabled on the server.\nError: $e';
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  // Method 3: Using a proxy (if you have one)
-  Future<bool> _loginWithProxy(String email, String password) async {
-    try {
-      // If you have a proxy server, use it here
-      final proxyUrl = Uri.parse('https://cors-anywhere.herokuapp.com/${kAdminApiBaseUrl}/api9/login.php');
-
-      final response = await http.post(
-        proxyUrl,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-requested-with': 'XMLHttpRequest',
-        },
-        body: json.encode({
-          'email': email,
-          'password': password,
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final responseData = json.decode(response.body);
-
-        if (responseData['success'] == true) {
-          _token = responseData['data']['token'];
-          _adminData = responseData['data']['admin'];
-
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('token', _token!);
-          await prefs.setString('adminData', json.encode(_adminData));
-
-          _isLoading = false;
-          notifyListeners();
-          return true;
-        }
-      }
-
-      return false;
-    } catch (e) {
       return false;
     }
   }

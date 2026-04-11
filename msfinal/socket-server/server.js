@@ -28,13 +28,11 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '*').split(',').map(s =>
 // MySQL connection pool
 // ──────────────────────────────────────────────────────────────────────────────
 const pool = mysql.createPool({
-  // TODO: Move to environment variable - SECURITY RISK: fallback credentials below must not be used in production
   host:               process.env.DB_HOST     || 'localhost',
   port:               parseInt(process.env.DB_PORT || '3306'),
   user:               process.env.DB_USER     || 'root',
-  // TODO: Move to environment variable - SECURITY RISK: hardcoded password fallback
-  password:           process.env.DB_PASSWORD || '',
-  database:           process.env.DB_NAME     || 'marriagestation',
+  password:           process.env.DB_PASS     || process.env.DB_PASSWORD || '',
+  database:           process.env.DB_NAME     || 'ms',
   waitForConnections: true,
   connectionLimit:    50,
   // 0 = unlimited connection request queuing; safe because we also cap at
@@ -50,7 +48,7 @@ const pool = mysql.createPool({
 pool.getConnection()
   .then(async conn => {
     console.log('✅ MySQL connected');
-    const dbName = process.env.DB_NAME || 'marriagestation';
+    const dbName = process.env.DB_NAME || 'ms';
 
     // Ensure this session uses UTC so UTC_TIMESTAMP() / NOW() return UTC values.
     await conn.query("SET time_zone = '+00:00'");

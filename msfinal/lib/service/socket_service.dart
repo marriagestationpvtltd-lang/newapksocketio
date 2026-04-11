@@ -256,11 +256,18 @@ class SocketService {
       _addedToCallCtrl.add(map);
 
       // Normalize admin fields to caller fields for incoming call screen compatibility
+      final bool isVideo = map['callType']?.toString() == 'video';
       final normalizedMap = {
         ...map,
         'callerId': map['adminId'] ?? '',
         'callerName': map['adminName'] ?? 'Admin',
         'callerImage': map['adminImage'] ?? '',
+        // Allow _blockIfFreeUser() to bypass the paid-plan check for admin calls
+        'callerRole': 'admin',
+        // Set type fields so call_overlay_manager correctly opens the video call
+        // screen when the admin invites this user to a video conference call
+        if (isVideo) 'type': 'video_call',
+        if (isVideo) 'isVideoCall': 'true',
         // Keep the original adminId/adminName for conference call handling
         'isConferenceCall': true,
       };

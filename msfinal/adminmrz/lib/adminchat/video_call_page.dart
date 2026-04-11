@@ -16,6 +16,20 @@ import 'tokengenerator.dart';
 // Video call state progression: calling → ringing → connected
 enum _VCallStatus { calling, ringing, connected, busy }
 
+// Conference participant state (shared with OutgoingCall.dart conceptually)
+enum _VParticipantStatus { inviting, accepted, declined }
+
+class _VConferenceParticipant {
+  final String userId;
+  final String name;
+  _VParticipantStatus status;
+  _VConferenceParticipant({
+    required this.userId,
+    required this.name,
+    this.status = _VParticipantStatus.inviting,
+  });
+}
+
 const _kPrimary = Color(0xFF6366F1);
 const _kPrimaryDark = Color(0xFF4F46E5);
 const _kViolet = Color(0xFF8B5CF6);
@@ -53,8 +67,8 @@ class VideoCallScreen extends StatefulWidget {
   /// callType is always 'video'. status is 'answered' or 'missed'.
   final void Function(String callType, String status, int durationSeconds)? onCallEnded;
   /// Called when admin wants to add a participant to the call.
-  /// Returns the selected user ID or null if cancelled.
-  final Future<String?> Function()? onAddParticipant;
+  /// Returns `{'id': userId, 'name': userName}` or null if cancelled.
+  final Future<Map<String, String>?> Function()? onAddParticipant;
 
   const VideoCallScreen({
     super.key,
@@ -110,6 +124,15 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
   StreamSubscription<Map<String, dynamic>>? _callCancelledSubscription;
   StreamSubscription<Map<String, dynamic>>? _callEndedSubscription;
   StreamSubscription<Map<String, dynamic>>? _callBusySubscription;
+  StreamSubscription<Map<String, dynamic>>? _participantAcceptedSubscription;
+  StreamSubscription<Map<String, dynamic>>? _participantRejectedSubscription;
+
+  // Track all remote UIDs in the channel so the call is only ended when
+  // the last remote participant disconnects (supports 3-party conference).
+  final Set<int> _remoteUids = {};
+
+  // Conference participants added via the plus button
+  final List<_VConferenceParticipant> _conferenceParticipants = [];
 
   // Video renderers
   Widget? _localVideoView;
@@ -307,6 +330,50 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
         });
       }
 
+      // ── Conference call participant events ────────────────────────────────
+      // Listen for events when admin adds a third participant to the call.
+      _participantAcceptedSubscription?.cancel();
+      _participantAcceptedSubscription =
+          _socketService.onParticipantAcceptedCall.listen((data) {
+        if (!mounted || _ending) return;
+        if (data['channelName']?.toString() == _channel) {
+          final acceptedById = data['acceptedById']?.toString() ?? '';
+          setState(() {
+            for (final p in _conferenceParticipants) {
+              if (p.userId == acceptedById) {
+                p.status = _VParticipantStatus.accepted;
+              }
+            }
+          });
+        }
+      });
+
+      _participantRejectedSubscription?.cancel();
+      _participantRejectedSubscription =
+          _socketService.onParticipantRejectedCall.listen((data) {
+        if (!mounted || _ending) return;
+        if (data['channelName']?.toString() == _channel) {
+          final rejectedById = data['rejectedById']?.toString() ?? '';
+          setState(() {
+            for (final p in _conferenceParticipants) {
+              if (p.userId == rejectedById) {
+                p.status = _VParticipantStatus.declined;
+              }
+            }
+          });
+          // Auto-remove declined participant after 4 seconds
+          Future.delayed(const Duration(seconds: 4), () {
+            if (mounted) {
+              setState(() {
+                _conferenceParticipants.removeWhere((p) =>
+                    p.userId == rejectedById &&
+                    p.status == _VParticipantStatus.declined);
+              });
+            }
+          });
+        }
+      });
+
       // Initialize Agora engine
       _engine = createAgoraRtcEngine();
       await _engine.initialize(RtcEngineContext(
@@ -341,27 +408,43 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
             }
           },
           onUserJoined: (_, uid, __) async {
-            if (mounted) {
-              setState(() {
-                _remoteUid = uid;
-                _callStatus = _VCallStatus.connected;
-              });
-              _setupRemoteVideo(uid);
+            _remoteUids.add(uid);
+            if (!_callActive) {
+              // First remote user – transition to connected state
+              if (mounted) {
+                setState(() {
+                  _remoteUid = uid;
+                  _callStatus = _VCallStatus.connected;
+                });
+                _setupRemoteVideo(uid);
+              }
+              await _stopRingtone();
+              // Enable microphone only after call connects to avoid interrupting ringtone
+              await _engine.enableAudio();
+              // Now enable microphone and camera publishing
+              await _engine.updateChannelMediaOptions(const ChannelMediaOptions(
+                publishMicrophoneTrack: true,
+                publishCameraTrack: true,
+                autoSubscribeAudio: true,
+                autoSubscribeVideo: true,
+              ));
+              _startCallTimer();
+            } else {
+              // Additional conference participant – show their video
+              if (mounted) {
+                setState(() {
+                  _remoteUid = uid;
+                });
+                _setupRemoteVideo(uid);
+              }
             }
-            await _stopRingtone();
-            // Enable microphone only after call connects to avoid interrupting ringtone
-            await _engine.enableAudio();
-            // Now enable microphone and camera publishing
-            await _engine.updateChannelMediaOptions(const ChannelMediaOptions(
-              publishMicrophoneTrack: true,
-              publishCameraTrack: true,
-              autoSubscribeAudio: true,
-              autoSubscribeVideo: true,
-            ));
-            _startCallTimer();
           },
-          onUserOffline: (_, __, ___) {
-            _endCall();
+          onUserOffline: (_, uid, __) {
+            _remoteUids.remove(uid);
+            // Only end the call when ALL remote participants have left
+            if (_remoteUids.isEmpty && !_ending) {
+              _endCall();
+            }
           },
           onError: (code, msg) {},
         ),
@@ -454,11 +537,15 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     await _callEndedSubscription?.cancel();
     await _callAcceptedSubscription?.cancel();
     await _callBusySubscription?.cancel();
+    await _participantAcceptedSubscription?.cancel();
+    await _participantRejectedSubscription?.cancel();
     _callRejectedSubscription = null;
     _callCancelledSubscription = null;
     _callEndedSubscription = null;
     _callAcceptedSubscription = null;
     _callBusySubscription = null;
+    _participantAcceptedSubscription = null;
+    _participantRejectedSubscription = null;
 
     if (widget.isOutgoingCall && notifyPeer) {
       if (_callActive) {
@@ -545,8 +632,22 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     if (!_callActive) return; // Can only add participants to active calls
 
     try {
-      final newParticipantId = await widget.onAddParticipant!();
-      if (newParticipantId == null || newParticipantId.isEmpty) return;
+      final result = await widget.onAddParticipant!();
+      if (result == null || (result['id'] ?? '').isEmpty) return;
+
+      final newParticipantId = result['id']!;
+      final newParticipantName = result['name'] ?? 'User';
+
+      // Add to local participants tracking list with "inviting" status
+      if (mounted) {
+        setState(() {
+          _conferenceParticipants.removeWhere((p) => p.userId == newParticipantId);
+          _conferenceParticipants.add(_VConferenceParticipant(
+            userId: newParticipantId,
+            name: newParticipantName,
+          ));
+        });
+      }
 
       // Emit socket event to add participant
       final socketReady = await _socketService.ensureConnected();
@@ -557,6 +658,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
           callType: 'video',
           adminId: widget.currentUserId,
           adminName: widget.currentUserName,
+          newParticipantName: newParticipantName,
           existingParticipantId: widget.otherUserId,
           agoraAppId: AgoraTokenService.appId,
           callerUid: _localUid.toString(),
@@ -630,7 +732,15 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                 duration: const Duration(milliseconds: 200),
                 child: IgnorePointer(
                   ignoring: !_controlsVisible,
-                  child: _buildControls(),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Conference participants panel (above controls)
+                      if (_callActive && _conferenceParticipants.isNotEmpty)
+                        _buildParticipantsPanel(),
+                      _buildControls(),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -851,6 +961,126 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     );
   }
 
+  // ── Conference participants panel ───────────────────────────────────────────
+  Widget _buildParticipantsPanel() {
+    if (!_callActive || _conferenceParticipants.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final total = _conferenceParticipants.length + 2;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.45),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withOpacity(0.14)),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: _kPrimary.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.group, color: _kPrimary, size: 13),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Conference · $total people',
+                          style: const TextStyle(
+                            color: _kPrimary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: [
+                  _vParticipantChip('You', _VParticipantStatus.accepted),
+                  _vParticipantChip(widget.otherUserName, _VParticipantStatus.accepted),
+                  ..._conferenceParticipants.map(
+                    (p) => _vParticipantChip(p.name, p.status),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _vParticipantChip(String name, _VParticipantStatus status) {
+    final Color color;
+    final IconData icon;
+    String? badge;
+    switch (status) {
+      case _VParticipantStatus.inviting:
+        color = _kAmber;
+        icon = Icons.access_time;
+        badge = 'Inviting…';
+        break;
+      case _VParticipantStatus.accepted:
+        color = _kEmerald;
+        icon = Icons.check_circle;
+        break;
+      case _VParticipantStatus.declined:
+        color = _kRose;
+        icon = Icons.cancel;
+        badge = 'Declined';
+        break;
+    }
+    final truncated = name.length > 14 ? '${name.substring(0, 14)}…' : name;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withOpacity(0.38)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 12),
+          const SizedBox(width: 4),
+          Text(
+            truncated,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (badge != null) ...[
+            const SizedBox(width: 4),
+            Text(
+              badge,
+              style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildControls() {
     final bool controlsEnabled = _callStatus != _VCallStatus.calling;
 
@@ -886,7 +1116,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
           // Call Plus button - add participant (admin only, when call is active)
           if (widget.onAddParticipant != null && _callActive)
             _controlButton(
-              icon: Icons.person_add,
+              icon: Icons.group_add,
               onPressed: _addParticipant,
               size: buttonSize,
               backgroundColor: _kEmerald.withOpacity(0.22),
@@ -995,6 +1225,8 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
     _callCancelledSubscription?.cancel();
     _callEndedSubscription?.cancel();
     _callBusySubscription?.cancel();
+    _participantAcceptedSubscription?.cancel();
+    _participantRejectedSubscription?.cancel();
     _ringtonePlayer.dispose();
     super.dispose();
   }

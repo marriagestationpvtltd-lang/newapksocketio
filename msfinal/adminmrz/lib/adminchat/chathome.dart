@@ -2171,123 +2171,51 @@ class _ChatWindowState extends State<ChatWindow> {
 
   /// Show a dialog to select a user to add to the ongoing call.
   /// Returns the selected user ID or null if cancelled.
-  Future<String?> _showAddParticipantDialog(String currentParticipantId) async {
-    // Fetch available users (excluding admin and current participant)
+  /// Shows a searchable dialog to pick a user to add to the ongoing call.
+  /// Returns `{'id': userId, 'name': userName}` on selection, or null on cancel.
+  Future<Map<String, String>?> _showAddParticipantDialog(
+      String currentParticipantId) async {
+    List<Map<String, dynamic>> allUsers = [];
+    String? fetchError;
+
+    // Fetch users before opening the dialog
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
-
       final response = await http.post(
         Uri.parse('$kAdminApi2BaseUrl/getusers.php'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'access_token': token}),
       );
-
-      if (response.statusCode != 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to load users')),
-        );
-        return null;
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        allUsers = ((data['users'] as List<dynamic>?) ?? [])
+            .where((u) => u['id']?.toString() != currentParticipantId)
+            .map((u) => Map<String, dynamic>.from(u as Map))
+            .toList();
+      } else {
+        fetchError = 'Failed to load users (${response.statusCode})';
       }
-
-      final data = jsonDecode(response.body);
-      final users = (data['users'] as List<dynamic>?)
-          ?.where((u) => u['id']?.toString() != currentParticipantId)
-          .toList() ?? [];
-
-      if (!mounted) return null;
-
-      return await showDialog<String>(
-        context: context,
-        builder: (ctx) => Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 400, maxHeight: 600),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6366F1),
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.person_add, color: Colors.white, size: 24),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Add Participant to Call',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                ),
-                // User list
-                Flexible(
-                  child: users.isEmpty
-                      ? const Padding(
-                          padding: EdgeInsets.all(40),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.people_outline, size: 64, color: Colors.grey),
-                              SizedBox(height: 16),
-                              Text(
-                                'No users available',
-                                style: TextStyle(color: Colors.grey, fontSize: 16),
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: users.length,
-                          itemBuilder: (ctx, idx) {
-                            final user = users[idx];
-                            final userId = user['id']?.toString() ?? '';
-                            final userName = user['name']?.toString() ?? 'Unknown';
-                            final initial = userName.isNotEmpty ? userName[0].toUpperCase() : '?';
-
-                            return ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: const Color(0xFF6366F1),
-                                child: Text(
-                                  initial,
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                              title: Text(userName),
-                              subtitle: Text('ID: $userId'),
-                              onTap: () => Navigator.pop(ctx, userId),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
+      fetchError = 'Error loading users';
+    }
+
+    if (!mounted) return null;
+
+    if (fetchError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(fetchError)),
+      );
       return null;
     }
+
+    return await showDialog<Map<String, String>>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => _AddParticipantDialog(
+        allUsers: allUsers,
+      ),
+    );
   }
 
   /// Launch a call (video or audio) in a floating overlay so the admin can
@@ -8470,6 +8398,240 @@ class _ActionTile extends StatelessWidget {
         style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: color),
       ),
       onTap: onTap,
+    );
+  }
+}
+
+// ── Add Participant Dialog ────────────────────────────────────────────────────
+/// Searchable, photo-enabled dialog to pick a user for a conference call.
+/// Returns `{'id': userId, 'name': userName}` on selection.
+class _AddParticipantDialog extends StatefulWidget {
+  final List<Map<String, dynamic>> allUsers;
+  const _AddParticipantDialog({required this.allUsers});
+
+  @override
+  State<_AddParticipantDialog> createState() => _AddParticipantDialogState();
+}
+
+class _AddParticipantDialogState extends State<_AddParticipantDialog> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<Map<String, dynamic>> get _filtered {
+    if (_query.isEmpty) return widget.allUsers;
+    final q = _query.toLowerCase();
+    return widget.allUsers
+        .where((u) => (u['name']?.toString() ?? '').toLowerCase().contains(q))
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final filtered = _filtered;
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420, maxHeight: 600),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Header ──────────────────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 20, 8, 16),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.group_add, color: Colors.white, size: 26),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Add to Call',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white70),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Search bar ──────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: TextField(
+                controller: _searchCtrl,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: 'Search by name…',
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                  filled: true,
+                  fillColor: Colors.grey.shade100,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none,
+                  ),
+                  suffixIcon: _query.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            setState(() => _query = '');
+                          },
+                        )
+                      : null,
+                ),
+                onChanged: (v) => setState(() => _query = v),
+              ),
+            ),
+
+            // ── User list ───────────────────────────────────────────────────
+            Flexible(
+              child: filtered.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.search_off,
+                              size: 52, color: Colors.grey.shade400),
+                          const SizedBox(height: 12),
+                          Text(
+                            _query.isEmpty
+                                ? 'No users available'
+                                : 'No users match "$_query"',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                                color: Colors.grey.shade500, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: filtered.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 1, indent: 72),
+                      itemBuilder: (ctx, idx) {
+                        final user = filtered[idx];
+                        final userId = user['id']?.toString() ?? '';
+                        final userName =
+                            (user['name']?.toString() ?? '').trim();
+                        final displayName =
+                            userName.isNotEmpty ? userName : 'Unknown';
+                        final photoUrl =
+                            user['profile_picture']?.toString();
+                        final isOnline = user['isOnline'] == 1 ||
+                            user['isOnline'] == '1' ||
+                            user['isOnline'] == true;
+                        final initial = displayName.isNotEmpty
+                            ? displayName[0].toUpperCase()
+                            : '?';
+
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 4),
+                          leading: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              CircleAvatar(
+                                radius: 24,
+                                backgroundColor:
+                                    const Color(0xFF6366F1).withOpacity(0.15),
+                                backgroundImage: (photoUrl != null &&
+                                        photoUrl.isNotEmpty)
+                                    ? NetworkImage(photoUrl)
+                                    : null,
+                                child: (photoUrl == null || photoUrl.isEmpty)
+                                    ? Text(
+                                        initial,
+                                        style: const TextStyle(
+                                          color: Color(0xFF6366F1),
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 16,
+                                        ),
+                                      )
+                                    : null,
+                              ),
+                              if (isOnline)
+                                Positioned(
+                                  bottom: 0,
+                                  right: 0,
+                                  child: Container(
+                                    width: 11,
+                                    height: 11,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF22C55E),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                          color: Colors.white, width: 2),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          title: Text(
+                            displayName,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 14),
+                          ),
+                          subtitle: Text(
+                            isOnline ? 'Online' : 'Offline',
+                            style: TextStyle(
+                              color: isOnline
+                                  ? const Color(0xFF22C55E)
+                                  : Colors.grey.shade400,
+                              fontSize: 12,
+                            ),
+                          ),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 7),
+                            decoration: BoxDecoration(
+                              color:
+                                  const Color(0xFF6366F1).withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              'Add',
+                              style: TextStyle(
+                                color: Color(0xFF6366F1),
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          onTap: () => Navigator.pop(
+                            ctx,
+                            {'id': userId, 'name': displayName},
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

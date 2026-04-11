@@ -28,7 +28,6 @@ import '../../Package/PackageScreen.dart';
 import '../../Search/SearchPage.dart';
 import '../../main.dart';
 import '../../online/onlineservice.dart';
-import '../../otherprofile/otherprofileview.dart';
 import '../../profile/myprofile.dart';
 import '../../purposal/Purposalmodel.dart';
 import '../../purposal/purposalScreen.dart';

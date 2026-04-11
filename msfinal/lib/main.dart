@@ -29,7 +29,6 @@ import 'Startup/onboarding.dart';
 import 'otherenew/modelfile.dart';
 import 'otherenew/othernew.dart';
 import 'otherenew/service.dart';
-import 'otherprofile/otherprofileview.dart';
 import 'constant/app_theme.dart';
 import 'navigation/app_navigation.dart';
 import 'online/onlineservice.dart';
@@ -739,7 +738,7 @@ void _navigateToUserProfileFromNotification(Map<String, dynamic> data) {
     final currentState = navigatorKey.currentState;
     if (currentState != null) {
       currentState.push(MaterialPageRoute(
-        builder: (context) => UserProfilePage(userId: userId),
+        builder: (context) => ProfileScreen(userId: userId),
       ));
     } else {
       debugPrint('❌ Navigator state is null, cannot navigate to profile');

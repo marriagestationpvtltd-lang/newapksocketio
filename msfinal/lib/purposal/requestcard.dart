@@ -7,7 +7,7 @@ import 'package:ms2026/Chat/ChatdetailsScreen.dart';
 import 'package:ms2026/Models/masterdata.dart';
 import 'package:ms2026/Notification/notification_inbox_service.dart';
 import 'package:ms2026/Package/PackageScreen.dart';
-import 'package:ms2026/otherprofile/otherprofileview.dart';
+import 'package:ms2026/otherenew/othernew.dart';
 import 'package:ms2026/pushnotification/pushservice.dart';
 import 'package:ms2026/purposal/purposalservice.dart';
 import 'package:ms2026/utils/image_utils.dart';
@@ -424,8 +424,8 @@ class _RequestCardDynamicState extends State<RequestCardDynamic> {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => UserProfilePage(
-                  userId: int.parse(widget.data.memberid.toString()),
+                builder: (context) => ProfileScreen(
+                  userId: widget.data.memberid.toString(),
                 ),
               ),
             );

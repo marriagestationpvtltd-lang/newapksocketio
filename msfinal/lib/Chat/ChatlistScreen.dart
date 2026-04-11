@@ -26,7 +26,7 @@ import 'ChatdetailsScreen.dart';
 import 'adminchat.dart';
 import '../service/socket_service.dart';
 import 'package:ms2026/config/app_endpoints.dart';
-import '../otherprofile/otherprofileview.dart';
+import '../otherenew/othernew.dart';
 import '../ReUsable/loading_widgets.dart';
 
 class ChatListScreen extends StatefulWidget {
@@ -1270,7 +1270,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => UserProfilePage(userId: int.tryParse(profileId) ?? 0),
+                        builder: (_) => ProfileScreen(userId: profileId),
                       ),
                     ).then((_) => _loadPendingChatRequests(userId));
                   }
@@ -1356,12 +1356,12 @@ class _ChatListScreenState extends State<ChatListScreen>
 
     return InkWell(
       onTap: () {
-        final senderId = int.tryParse(req.senderId ?? '');
-        if (senderId != null) {
+        final senderId = req.senderId ?? '';
+        if (senderId.isNotEmpty) {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => UserProfilePage(userId: senderId),
+              builder: (context) => ProfileScreen(userId: senderId),
             ),
           );
         }
@@ -1673,7 +1673,7 @@ class _ChatListScreenState extends State<ChatListScreen>
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => UserProfilePage(userId: int.tryParse(profileId) ?? 0),
+                        builder: (_) => ProfileScreen(userId: profileId),
                       ),
                     ).then((_) => _loadPendingChatRequests(userId));
                   }

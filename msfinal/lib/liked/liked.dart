@@ -10,7 +10,6 @@ import 'package:ms2026/Notification/notification_inbox_service.dart';
 import 'package:ms2026/constant/app_colors.dart';
 import 'package:ms2026/constant/app_dimensions.dart';
 import 'package:ms2026/constant/app_text_styles.dart';
-import 'package:ms2026/otherprofile/otherprofileview.dart';
 import 'package:ms2026/ReUsable/loading_widgets.dart';
 import 'package:ms2026/utils/image_utils.dart';
 import '../Models/masterdata.dart';

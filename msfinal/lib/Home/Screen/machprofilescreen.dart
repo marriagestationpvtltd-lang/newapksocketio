@@ -6,7 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../Auth/Screen/signupscreen10.dart';
 import '../../main.dart';
-import '../../otherprofile/otherprofileview.dart';
 import '../../pushnotification/pushservice.dart';
 import '../../ReUsable/loading_widgets.dart';
 import '../../utils/privacy_utils.dart';

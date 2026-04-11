@@ -191,6 +191,15 @@ class _ChatWindowState extends State<ChatWindow> {
   Timer? _replyHighlightTimer;
   String? _highlightedMessageId;
 
+  // Message long-press action overlay state (Facebook Messenger style)
+  bool _showMsgActionOverlay = false;
+  String? _overlayMessageId;
+  Map<String, dynamic>? _overlayReplyPayload;
+  bool _overlayIsSentByMe = false;
+  bool _overlayCanEdit = false;
+  bool _overlayCanMutate = false;
+  Offset _overlayTapOffset = Offset.zero;
+
   @override
   void initState() {
     super.initState();
@@ -2751,8 +2760,10 @@ class _ChatWindowState extends State<ChatWindow> {
           ),
         ),
       ),
-      body: Column(
+      body: Stack(
         children: [
+          Column(
+            children: [
           if (_isSearching)
             Container(
               color: Colors.white,
@@ -2938,15 +2949,18 @@ class _ChatWindowState extends State<ChatWindow> {
                                   }
                                 },
                                 child: GestureDetector(
-                                onLongPress: () {
-                                  _showMessageOptions(
-                                    context,
-                                    msgId,
-                                    replyPayload,
-                                    isSentByAdmin,
-                                    canEdit: canEdit,
-                                    canMutate: canMutate,
-                                  );
+                                onLongPressStart: (details) {
+                                  if (mounted) {
+                                    setState(() {
+                                      _overlayMessageId = msgId;
+                                      _overlayReplyPayload = replyPayload;
+                                      _overlayIsSentByMe = isSentByAdmin;
+                                      _overlayCanEdit = canEdit;
+                                      _overlayCanMutate = canMutate;
+                                      _overlayTapOffset = details.globalPosition;
+                                      _showMsgActionOverlay = true;
+                                    });
+                                  }
                                 },
                                 child: Builder(builder: (_) {
                                   final Map<String, dynamic> reactions =
@@ -3082,6 +3096,9 @@ class _ChatWindowState extends State<ChatWindow> {
               ),
             ),
           _buildMessageInput(chatProvider),
+            ],
+          ),
+          if (_showMsgActionOverlay) _buildMsgActionOverlay(context),
         ],
       ),
     );
@@ -6110,6 +6127,224 @@ class _ChatWindowState extends State<ChatWindow> {
         SnackBar(content: Text("Failed to send message")),
       );
     }
+  }
+
+  // Facebook Messenger-style action overlay: emoji near message, actions at bottom
+  Widget _buildMsgActionOverlay(BuildContext context) {
+    const emojis = ['❤️', '😂', '😮', '😢', '👍', '😡'];
+    final messageId = _overlayMessageId ?? '';
+    final replyPayload = _overlayReplyPayload ?? {};
+    final String? msgType = replyPayload['type']?.toString();
+    final bool isImageMsg = msgType == 'image' || msgType == 'image_gallery';
+    final String? imagePayload = msgType == 'image'
+        ? replyPayload['imageUrl']?.toString()
+        : (msgType == 'image_gallery' ? replyPayload['message']?.toString() : null);
+    final bool canForward = isImageMsg && imagePayload != null && imagePayload.isNotEmpty;
+
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final String currentRoomId =
+        AdminSocketService.chatRoomId(chatProvider.id?.toString() ?? '');
+
+    final msgData = _messages.firstWhere(
+      (m) => m['messageId'] == messageId,
+      orElse: () => <String, dynamic>{},
+    );
+    final Map<String, dynamic> reactions = (msgData['reactions'] is Map)
+        ? Map<String, dynamic>.from(msgData['reactions'] as Map)
+        : {};
+    final String myReaction = reactions[kAdminUserId]?.toString() ?? '';
+
+    final screenHeight = MediaQuery.of(context).size.height;
+    final tapY = _overlayTapOffset.dy;
+
+    const double emojiBarHeight = 56.0;
+    const double gap = 10.0;
+    double emojiTop;
+    if (tapY - emojiBarHeight - gap < 80) {
+      emojiTop = tapY + gap;
+    } else {
+      emojiTop = tapY - emojiBarHeight - gap;
+    }
+    emojiTop = emojiTop.clamp(60.0, screenHeight - emojiBarHeight - 220.0);
+
+    return GestureDetector(
+      onTap: () {
+        if (mounted) setState(() => _showMsgActionOverlay = false);
+      },
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: double.infinity,
+        height: double.infinity,
+        child: ColoredBox(
+          color: Colors.black.withOpacity(0.45),
+          child: Stack(
+            children: [
+              // Emoji bar near the message
+              Positioned(
+                top: emojiTop,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: GestureDetector(
+                    onTap: () {},
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.18),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: emojis.map((e) {
+                          final isSelected = myReaction == e;
+                          return GestureDetector(
+                            onTap: () {
+                              if (mounted) setState(() => _showMsgActionOverlay = false);
+                              if (messageId.isNotEmpty) {
+                                _socketService.addReaction(
+                                  chatRoomId: currentRoomId,
+                                  messageId: messageId,
+                                  emoji: e,
+                                );
+                              }
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? const Color(0xFFD81B60).withOpacity(0.15)
+                                    : Colors.transparent,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                e,
+                                style: TextStyle(fontSize: isSelected ? 28 : 24),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // Action panel anchored at the bottom, overlapping the input area
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: () {},
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1E1E1E),
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        _adminOverlayMenuItem(
+                          Icons.reply_rounded,
+                          "Reply",
+                          const Color(0xFFD81B60),
+                          () {
+                            if (mounted) setState(() => _showMsgActionOverlay = false);
+                            _startReply(
+                              messageId,
+                              replyPayload['message']?.toString() ?? '',
+                              replyPayload['senderid']?.toString() ?? '',
+                              replyPayload['senderName']?.toString() ?? 'User',
+                              replyPayload,
+                            );
+                          },
+                        ),
+                        if (canForward)
+                          _adminOverlayMenuItem(
+                            Icons.forward_rounded,
+                            "Forward",
+                            const Color(0xFF10B981),
+                            () {
+                              if (mounted) setState(() => _showMsgActionOverlay = false);
+                              _forwardImage(imagePayload!, msgType ?? 'image');
+                            },
+                          ),
+                        if (_overlayIsSentByMe && _overlayCanEdit)
+                          _adminOverlayMenuItem(
+                            Icons.edit,
+                            "Edit",
+                            const Color(0xFF0EA5E9),
+                            () {
+                              if (mounted) setState(() => _showMsgActionOverlay = false);
+                              _startEdit(
+                                  messageId, replyPayload['message']?.toString() ?? '');
+                            },
+                          ),
+                        if (_overlayIsSentByMe && _overlayCanMutate) ...[
+                          _adminOverlayMenuItem(
+                            Icons.delete,
+                            "Delete",
+                            const Color(0xFFEF4444),
+                            () {
+                              if (mounted) setState(() => _showMsgActionOverlay = false);
+                              _deleteMessage(messageId);
+                            },
+                          ),
+                          _adminOverlayMenuItem(
+                            Icons.remove_circle_outline_rounded,
+                            "Unsend",
+                            const Color(0xFFF59E0B),
+                            () {
+                              _unsendMessage(messageId);
+                              if (mounted) setState(() => _showMsgActionOverlay = false);
+                            },
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _adminOverlayMenuItem(
+      IconData icon, String label, Color iconColor, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 18),
+        child: Row(
+          children: [
+            Icon(icon, color: iconColor, size: 20),
+            const SizedBox(width: 14),
+            Text(label, style: const TextStyle(color: Colors.white, fontSize: 14)),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showMessageOptions(

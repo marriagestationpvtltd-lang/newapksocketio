@@ -564,6 +564,8 @@ class _ChatSidebarState extends State<ChatSidebar> {
         return '🎤 Voice message';
       case 'profile_card':
         return '👤 Match Profile';
+      case 'report':
+        return '🚩 Profile Report';
       case 'call':
         return _formatCallPreview(rawMessage);
       case 'text':

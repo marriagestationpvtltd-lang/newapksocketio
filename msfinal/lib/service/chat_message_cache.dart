@@ -19,7 +19,7 @@ class ChatMessageCache {
 
   static const int _maxCachedMessages = 30;
 
-  /// Initialise with a [SharedPreferences] instance.
+  /// Initialize with a [SharedPreferences] instance.
   /// Should be called once from [main] before [runApp].
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();

@@ -22,6 +22,7 @@ import 'package:permission_handler/permission_handler.dart'
 // dart:io is only available on native platforms
 import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
 
+import '../service/chat_message_cache.dart';
 import '../service/socket_service.dart';
 import '../Calling/videocall.dart';
 import '../Calling/OutgoingCall.dart';
@@ -280,6 +281,24 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       duration: const Duration(milliseconds: 1200),
     );
 
+    // Load cached messages synchronously from the pre-warmed singleton so the
+    // screen shows content immediately on the first frame — no skeleton flash.
+    final syncCached = ChatMessageCache.instance.getMessages(widget.chatRoomId);
+    if (syncCached.isNotEmpty) {
+      _cachedMessages = syncCached;
+      _isFirstLoad = false;
+      // Position scroll to bottom after the first frame, then unlock.
+      // Also mark _initialScrollDone so _performInitialScroll() (called when
+      // server data arrives) skips the re-jump and only handles the unlock.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _initialScrollDone = true;
+        if (mounted && _scrollController.hasClients) {
+          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        }
+        if (mounted) setState(() => _scrollLocked = false);
+      });
+    }
+
     // Defer heavy init work off the first frame so the screen opens instantly
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _markMessagesAsRead();
@@ -357,81 +376,20 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   // ── Local message cache helpers ───────────────────────────────────────────
 
-  /// Converts a message map to a JSON-serializable form (DateTime → ISO string).
-  Map<String, dynamic> _serializeMessage(Map<String, dynamic> msg) {
-    final m = Map<String, dynamic>.from(msg);
-    if (m['timestamp'] is DateTime) {
-      m['timestamp'] = (m['timestamp'] as DateTime).toIso8601String();
-    }
-    return m;
-  }
-
   // Maximum number of messages to persist in the local cache.
   // Kept separate from _messagesPerPage so pagination and cache sizes can be
   // tuned independently.
   static const int _maxCachedMessages = 30;
 
-  /// Saves the most recent [_maxCachedMessages] messages to SharedPreferences.
-  Future<void> _saveMessagesToLocalCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final toSave = _cachedMessages.length > _maxCachedMessages
-          ? _cachedMessages.sublist(_cachedMessages.length - _maxCachedMessages)
-          : _cachedMessages;
-      final encoded = jsonEncode(toSave.map(_serializeMessage).toList());
-      await prefs.setString('chat_msgs_${widget.chatRoomId}', encoded);
-    } catch (e) {
-      debugPrint('Failed to save messages to local cache: $e');
-    }
-  }
-
-  /// Loads previously cached messages from SharedPreferences.
-  /// Returns an empty list when no cache exists or on error.
-  Future<List<Map<String, dynamic>>> _loadMessagesFromLocalCache() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getString('chat_msgs_${widget.chatRoomId}');
-      if (raw == null) return [];
-      final decoded = jsonDecode(raw) as List<dynamic>;
-      return decoded.map((item) {
-        final m = Map<String, dynamic>.from(item as Map);
-        // Re-parse ISO string timestamps back to DateTime, converting UTC → local
-        if (m['timestamp'] is String) {
-          final dt = DateTime.tryParse(m['timestamp'] as String);
-          if (dt != null) m['timestamp'] = dt.toLocal();
-        }
-        return m;
-      }).toList();
-    } catch (e) {
-      debugPrint('Failed to load messages from local cache: $e');
-      return [];
-    }
+  /// Saves the most recent [_maxCachedMessages] messages via the singleton cache.
+  void _saveMessagesToLocalCache() {
+    ChatMessageCache.instance.saveMessages(widget.chatRoomId, _cachedMessages);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
 
   void _listenToMessages() {
-    // Show locally cached messages immediately so the screen is usable at once
     _socketService.joinRoom(widget.chatRoomId);
-    _loadMessagesFromLocalCache().then((cached) {
-      if (!mounted) return;
-      if (cached.isNotEmpty && _isFirstLoad) {
-        setState(() {
-          _cachedMessages = cached;
-          _messagesCacheVersion++;
-          // Show cached messages immediately; server response will replace them.
-          _isFirstLoad = false;
-        });
-        // Pre-position to the bottom so the user sees the latest cached message
-        // while waiting for the server. Do NOT unlock yet — the definitive scroll
-        // and unlock happen after the authoritative server data arrives below.
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _scrollController.hasClients) {
-            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-          }
-        });
-      }
-    });
 
     // Load initial page via Socket.IO request-response
     _socketService.getMessages(widget.chatRoomId, page: 1, limit: _messagesPerPage).then((result) {
@@ -446,10 +404,19 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         _currentMessagePage = 1;
         _messagesCacheVersion++;
       });
-      // Scroll to the last message and unlock once the server data is authoritative.
-      // _initialScrollDone is still false here (cache no longer claims it), so this
-      // always fires and positions the list at the very last message without jumping.
-      _performInitialScroll();
+      // If the sync-cache path already unlocked scroll, just jump to bottom to
+      // account for any layout change from fresh server data.  Otherwise use the
+      // full _performInitialScroll path which also unlocks.
+      if (_initialScrollDone) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _scrollController.hasClients) {
+            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+          }
+          if (mounted && _scrollLocked) setState(() => _scrollLocked = false);
+        });
+      } else {
+        _performInitialScroll();
+      }
       _saveMessagesToLocalCache();
     }).catchError((e) {
       debugPrint('Error loading messages: $e');

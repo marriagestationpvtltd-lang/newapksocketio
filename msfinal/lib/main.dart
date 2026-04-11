@@ -33,6 +33,7 @@ import 'constant/app_theme.dart';
 import 'navigation/app_navigation.dart';
 import 'online/onlineservice.dart';
 import 'service/connectivity_service.dart';
+import 'service/chat_message_cache.dart';
 import 'Calling/call_tone_settings.dart';
 import 'widgets/global_connectivity_handler.dart';
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
@@ -1036,6 +1037,10 @@ void main() async {
   // notifications) runs in addPostFrameCallback and explicitly awaits this
   // future before proceeding.
   final firebaseInitFuture = _initFirebase();
+
+  // Pre-warm the chat message cache so chat screens can read cached messages
+  // synchronously in initState, eliminating the white-screen flash.
+  await ChatMessageCache.instance.init();
 
   // Connectivity service: create now, but start the background HTTP reachability
   // checks (to google.com / cloudflare.com) after the first frame — they can

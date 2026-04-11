@@ -4091,11 +4091,21 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 : DateTime.now();
 
         if ((data['messageType'] ?? 'text') == 'call') {
+          // Call fields are stored as a JSON payload inside data['message'].
+          // Fall back to top-level keys for backwards compat with cached data.
+          Map<String, dynamic> callPayload = {};
+          final rawCallMsg = data['message']?.toString() ?? '';
+          if (rawCallMsg.isNotEmpty) {
+            try {
+              final decoded = jsonDecode(rawCallMsg);
+              if (decoded is Map) callPayload = Map<String, dynamic>.from(decoded);
+            } catch (_) {}
+          }
           messageWidgets.add(_buildInlineCallBubble(
-            callType: data['callType'] ?? 'audio',
-            callStatus: data['callStatus'] ?? 'missed',
-            duration: data['duration']?.toInt() ?? 0,
-            callerId: data['senderId'] ?? '',
+            callType: callPayload['callType']?.toString() ?? data['callType']?.toString() ?? 'audio',
+            callStatus: callPayload['callStatus']?.toString() ?? data['callStatus']?.toString() ?? 'missed',
+            duration: (callPayload['duration'] as num?)?.toInt() ?? data['duration']?.toInt() ?? 0,
+            callerId: callPayload['callerId']?.toString() ?? data['callerId']?.toString() ?? data['senderId']?.toString() ?? '',
             timestamp: timestamp,
           ));
         } else {
@@ -4147,42 +4157,111 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     required DateTime timestamp,
   }) {
     final isVideo = callType == 'video';
-    final isBusy = callStatus == 'busy';
-    final isMissed = isBusy || callStatus == 'missed' || callStatus == 'declined' || callStatus == 'cancelled';
     final isOutgoing = callerId == widget.currentUserId;
+    final callLabel = isVideo ? 'Video' : 'Voice';
 
+    // Resolve display properties per status + direction
     Color iconColor;
     IconData directionIcon;
-    if (isBusy) {
-      iconColor = Colors.orange;
-      directionIcon = Icons.phone_locked;
-    } else if (isMissed) {
-      iconColor = Colors.red;
-      directionIcon = isVideo ? Icons.videocam_off : Icons.phone_missed;
-    } else if (isOutgoing) {
-      iconColor = const Color(0xFF25D366);
-      directionIcon = isVideo ? Icons.videocam : Icons.call_made;
-    } else {
-      iconColor = const Color(0xFF25D366);
-      directionIcon = isVideo ? Icons.videocam : Icons.call_received;
-    }
-
     String label;
-    if (isBusy) {
-      label = 'User is busy';
-    } else if (isMissed) {
-      label = isVideo ? 'Missed video call' : 'Missed voice call';
-    } else if (isOutgoing) {
-      label = isVideo ? 'Outgoing video call' : 'Outgoing voice call';
-    } else {
-      label = isVideo ? 'Incoming video call' : 'Incoming voice call';
-    }
+    String subtitle = '';
+    Color bubbleColor;
+    Color borderColor;
 
-    String durationStr = '';
-    if (!isMissed && duration > 0) {
-      final m = duration ~/ 60;
-      final s = duration % 60;
-      durationStr = m > 0 ? '${m}m ${s}s' : '${s}s';
+    switch (callStatus) {
+      case 'completed':
+        iconColor = const Color(0xFF25D366);
+        directionIcon = isOutgoing
+            ? (isVideo ? Icons.videocam : Icons.call_made)
+            : (isVideo ? Icons.videocam : Icons.call_received);
+        label = isOutgoing ? 'Outgoing $callLabel Call' : 'Incoming $callLabel Call';
+        if (duration > 0) {
+          final m = duration ~/ 60;
+          final s = duration % 60;
+          subtitle = m > 0 ? '${m}m ${s}s' : '${s}s';
+        }
+        bubbleColor = Colors.white;
+        borderColor = Colors.grey.withOpacity(0.25);
+        break;
+
+      case 'missed':
+        if (isOutgoing) {
+          // Caller side: recipient never answered
+          iconColor = Colors.amber[700]!;
+          directionIcon = isVideo ? Icons.videocam_off : Icons.call_missed_outgoing;
+          label = 'No Answer';
+          subtitle = isVideo ? 'They didn\'t pick up the video call' : 'They didn\'t pick up';
+          bubbleColor = Colors.amber.withOpacity(0.06);
+          borderColor = Colors.amber.withOpacity(0.35);
+        } else {
+          // Receiver side: missed their call
+          iconColor = Colors.red;
+          directionIcon = isVideo ? Icons.videocam_off : Icons.call_missed;
+          label = 'Missed $callLabel Call';
+          bubbleColor = Colors.red.withOpacity(0.06);
+          borderColor = Colors.red.withOpacity(0.3);
+        }
+        break;
+
+      case 'declined':
+        if (isOutgoing) {
+          // Caller side: recipient rejected the call
+          iconColor = Colors.red[600]!;
+          directionIcon = isVideo ? Icons.videocam_off : Icons.call_end;
+          label = '$callLabel Call Declined';
+          subtitle = 'Declined by recipient';
+          bubbleColor = Colors.red.withOpacity(0.06);
+          borderColor = Colors.red.withOpacity(0.3);
+        } else {
+          // Receiver side: they chose to decline
+          iconColor = Colors.indigo[400]!;
+          directionIcon = isVideo ? Icons.videocam_off : Icons.call_end;
+          label = 'You Declined';
+          subtitle = isVideo ? 'You declined the video call' : 'You declined the call';
+          bubbleColor = Colors.indigo.withOpacity(0.05);
+          borderColor = Colors.indigo.withOpacity(0.22);
+        }
+        break;
+
+      case 'cancelled':
+        if (isOutgoing) {
+          // Caller side: they cancelled before recipient answered
+          iconColor = Colors.grey[600]!;
+          directionIcon = isVideo ? Icons.videocam_off : Icons.call_end;
+          label = 'Call Cancelled';
+          subtitle = 'You cancelled before connecting';
+          bubbleColor = Colors.grey.withOpacity(0.06);
+          borderColor = Colors.grey.withOpacity(0.25);
+        } else {
+          // Receiver side: caller hung up before they could answer
+          iconColor = Colors.orange[700]!;
+          directionIcon = isVideo ? Icons.videocam_off : Icons.call_missed;
+          label = 'Missed $callLabel Call';
+          subtitle = 'Caller cancelled';
+          bubbleColor = Colors.orange.withOpacity(0.06);
+          borderColor = Colors.orange.withOpacity(0.3);
+        }
+        break;
+
+      case 'busy':
+        // Busy is always logged from the caller's perspective
+        iconColor = Colors.orange[700]!;
+        directionIcon = isVideo ? Icons.videocam_off : Icons.phone_locked;
+        label = isOutgoing ? 'User Was Busy' : 'You Were Busy';
+        subtitle = isOutgoing
+            ? 'Recipient was on another call'
+            : 'You were on another call';
+        bubbleColor = Colors.orange.withOpacity(0.06);
+        borderColor = Colors.orange.withOpacity(0.3);
+        break;
+
+      default:
+        // Unknown status — safe fallback
+        iconColor = Colors.grey[500]!;
+        directionIcon = isVideo ? Icons.videocam_off : Icons.phone_missed;
+        label = '$callLabel Call';
+        bubbleColor = Colors.grey.withOpacity(0.05);
+        borderColor = Colors.grey.withOpacity(0.2);
     }
 
     final timeStr = _formatTime(timestamp);
@@ -4191,23 +4270,12 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Center(
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 260),
+          constraints: const BoxConstraints(maxWidth: 280),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: isBusy
-                ? Colors.orange.withOpacity(0.08)
-                : isMissed
-                    ? Colors.red.withOpacity(0.08)
-                    : Colors.white,
+            color: bubbleColor,
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isBusy
-                  ? Colors.orange.withOpacity(0.3)
-                  : isMissed
-                      ? Colors.red.withOpacity(0.3)
-                      : Colors.grey.withOpacity(0.25),
-              width: 1,
-            ),
+            border: Border.all(color: borderColor, width: 1),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.06),
@@ -4236,14 +4304,14 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                       label,
                       style: TextStyle(
                         fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: isMissed ? Colors.red[700] : Colors.grey[800],
+                        fontWeight: FontWeight.w600,
+                        color: iconColor,
                       ),
                     ),
-                    if (durationStr.isNotEmpty) ...[
+                    if (subtitle.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(
-                        durationStr,
+                        subtitle,
                         style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                       ),
                     ],

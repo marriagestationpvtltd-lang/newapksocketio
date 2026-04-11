@@ -593,10 +593,13 @@ class _ChatListScreenState extends State<ChatListScreen>
       return isVideo ? 'Missed Video Call' : 'Missed Call';
     }
     if (status == 'declined') {
-      return isVideo ? 'Declined Video Call' : 'Declined Call';
+      return isVideo ? 'Video Call Declined' : 'Call Declined';
     }
     if (status == 'cancelled') {
-      return isVideo ? 'Cancelled Video Call' : 'Cancelled Call';
+      return isVideo ? 'Video Call Cancelled' : 'Call Cancelled';
+    }
+    if (status == 'busy') {
+      return isVideo ? 'Video Call (Busy)' : 'Voice Call (Busy)';
     }
 
     final String baseLabel = isVideo

@@ -117,6 +117,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   int _currentPage = 1;
   StreamSubscription<Map<String, dynamic>>? _msgSubscription;
   StreamSubscription<Map<String, dynamic>>? _msgLikedSubscription;
+  StreamSubscription<Map<String, dynamic>>? _msgReactionSubscription;
   StreamSubscription<Map<String, dynamic>>? _msgReadSubscription;
   bool _streamLoading = true;
   bool _streamHasError = false;
@@ -524,6 +525,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     WidgetsBinding.instance.removeObserver(this);
     _msgSubscription?.cancel();
     _msgLikedSubscription?.cancel();
+    _msgReactionSubscription?.cancel();
     _msgReadSubscription?.cancel();
     _adminStatusSubscription?.cancel();
     _incomingCallSubscription?.cancel();
@@ -641,6 +643,24 @@ class _AdminChatScreenState extends State<AdminChatScreen>
           return m;
         }).toList();
       });
+    });
+
+    _msgReactionSubscription?.cancel();
+    _msgReactionSubscription = _socketService.onMessageReaction.listen((data) {
+      if (!mounted) return;
+      if (data['chatRoomId'] != _chatRoomId) return;
+      final String msgId = data['messageId']?.toString() ?? '';
+      final Map<String, dynamic> reactions =
+          (data['reactions'] is Map) ? Map<String, dynamic>.from(data['reactions'] as Map) : {};
+      setState(() {
+        _cachedMessages = _cachedMessages.map((m) {
+          if (m['messageId'] == msgId) {
+            return {...m, 'reactions': reactions};
+          }
+          return m;
+        }).toList();
+      });
+      ChatMessageCache.instance.saveMessages(_chatRoomId, _cachedMessages);
     });
 
     _msgReadSubscription?.cancel();
@@ -1111,8 +1131,68 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     );
   }
 
-  void _toggleLike(String messageId, bool currentLiked) {
-    _socketService.toggleLike(_chatRoomId, messageId);
+  void _addReaction(String messageId, String emoji) {
+    _socketService.addReaction(_chatRoomId, messageId, emoji);
+  }
+
+  void _showReactionPicker(String messageId, Map<String, dynamic> reactions) {
+    const emojis = ['❤️', '😂', '😮', '😢', '👍', '😡'];
+    final myReaction = reactions[_mySenderId]?.toString() ?? '';
+    showDialog(
+      context: context,
+      barrierColor: Colors.transparent,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        insetPadding: EdgeInsets.zero,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.18),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: emojis.map((e) {
+                final isSelected = myReaction == e;
+                return GestureDetector(
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _addReaction(messageId, e);
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? _accentColor.withOpacity(0.15)
+                          : Colors.transparent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      e,
+                      style: TextStyle(
+                        fontSize: isSelected ? 28 : 24,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   // ── VOICE MESSAGE RECORDING ──────────────────────────────────────────────
@@ -1349,13 +1429,15 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     }
 
     double swipeOffset = _swipeOffsets[msgID] ?? 0.0;
+    final Map<String, dynamic> reactions =
+        (data['reactions'] is Map) ? Map<String, dynamic>.from(data['reactions'] as Map) : {};
 
     return StatefulBuilder(
       builder: (context, setItemState) {
         swipeOffset = _swipeOffsets[msgID] ?? 0.0;
         return GestureDetector(
-          onDoubleTap: () => _toggleLike(msgID, data['liked'] == true),
-          onLongPress: () => _setReplyTo(msgID, data),
+          onDoubleTap: () => _showReactionPicker(msgID, reactions),
+          onLongPress: () => _showReactionPicker(msgID, reactions),
           onHorizontalDragUpdate: (details) {
             if (details.delta.dx > 0) {
               setItemState(() {
@@ -1450,12 +1532,6 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                               color: _lightTextColor,
                             ),
                           ),
-                          if (data['liked'] == true)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8),
-                              child: Icon(Icons.favorite,
-                                  size: 16, color: _accentColor),
-                            ),
                         ],
                       ),
                     ),
@@ -1476,12 +1552,6 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                             formattedTime,
                             style: TextStyle(fontSize: 12, color: _lightTextColor),
                           ),
-                          if (data['liked'] == true)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8),
-                              child: Icon(Icons.favorite,
-                                  size: 16, color: _accentColor),
-                            ),
                         ],
                       ),
                     ),
@@ -1501,12 +1571,6 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                             formattedTime,
                             style: TextStyle(fontSize: 12, color: _lightTextColor),
                           ),
-                          if (data['liked'] == true)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8),
-                              child: Icon(Icons.favorite,
-                                  size: 16, color: _accentColor),
-                            ),
                         ],
                       ),
                     ),
@@ -1603,18 +1667,13 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                                 fontWeight: !isFromAdmin && !isRead ? FontWeight.w500 : FontWeight.normal,
                               ),
                             ),
-                            if (data['liked'] == true)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8),
-                                child: Icon(Icons.favorite,
-                                    size: 16,
-                                    color: isFromAdmin ? Colors.white : _accentColor),
-                              ),
                           ],
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
+                ),
+                  if (reactions.isNotEmpty)
+                    _buildReactionBadge(reactions, isFromAdmin),
                 ],
               ),
             ),
@@ -1642,6 +1701,65 @@ class _AdminChatScreenState extends State<AdminChatScreen>
           ),
         );
       },
+    );
+  }
+
+  Widget _buildReactionBadge(Map<String, dynamic> reactions, bool isFromAdmin) {
+    // Group reactions by emoji and count them
+    final Map<String, int> emojiCounts = {};
+    for (final emoji in reactions.values) {
+      final e = emoji.toString();
+      emojiCounts[e] = (emojiCounts[e] ?? 0) + 1;
+    }
+    if (emojiCounts.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: EdgeInsets.only(
+        top: 2,
+        left: isFromAdmin ? 0 : 4,
+        right: isFromAdmin ? 4 : 0,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment:
+            isFromAdmin ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: emojiCounts.entries.map((entry) {
+          final count = entry.value;
+          return Container(
+            margin: const EdgeInsets.only(right: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _accentColor.withOpacity(0.3), width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(entry.key, style: const TextStyle(fontSize: 13)),
+                if (count > 1) ...[
+                  const SizedBox(width: 3),
+                  Text(
+                    '$count',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _textColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 

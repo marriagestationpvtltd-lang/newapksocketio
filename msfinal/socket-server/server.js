@@ -159,6 +159,21 @@ pool.getConnection()
       console.log('✅ Added idx_created_at index to chat_messages');
     }
 
+    // Add `reactions` column to chat_messages if not present (idempotent).
+    // Stores a JSON object of { userId: emoji } e.g. { "3": "❤️", "7": "😂" }
+    const [[colReactions]] = await conn.query(
+      `SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'chat_messages' AND COLUMN_NAME = 'reactions'
+        LIMIT 1`,
+      [dbName],
+    );
+    if (!colReactions) {
+      await conn.query(
+        `ALTER TABLE chat_messages ADD COLUMN reactions TEXT NULL DEFAULT NULL`
+      );
+      console.log('✅ Added reactions column to chat_messages');
+    }
+
     // Ensure index on users.isOnline for fast dashboard online count queries (idempotent).
     const [[idxIsOnline]] = await conn.query(
       `SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS
@@ -750,6 +765,10 @@ function toMessageMap(row) {
     repliedTo:             repliedTo,
     timestamp:             row.created_at ? row.created_at.toISOString() : null,
     liked:                 row.liked === 1,
+    reactions:             (() => {
+      try { return row.reactions ? JSON.parse(row.reactions) : {}; }
+      catch (_) { return {}; }
+    })(),
   };
 }
 
@@ -1008,6 +1027,60 @@ io.on('connection', (socket) => {
       }
     } catch (err) {
       console.error('toggle_like error:', err.message);
+    }
+  });
+
+  // ── add_reaction ──────────────────────────────────────────────────────────
+  // Sets or removes an emoji reaction by the authenticated user on a message.
+  // emoji = '' or null removes the user's reaction.
+  socket.on('add_reaction', async ({ chatRoomId, messageId, emoji }) => {
+    try {
+      if (!chatRoomId || !messageId) return;
+      const uid = authenticatedUserId;
+      if (!uid) return;
+
+      // Verify participant
+      const [[room]] = await pool.query(
+        `SELECT 1 FROM chat_rooms
+          WHERE id = ? AND JSON_CONTAINS(participants, JSON_QUOTE(?))
+          LIMIT 1`,
+        [chatRoomId, uid],
+      );
+      if (!room) return;
+
+      // Read current reactions JSON
+      const [[msgRow]] = await pool.query(
+        'SELECT reactions FROM chat_messages WHERE message_id = ? AND chat_room_id = ?',
+        [messageId, chatRoomId],
+      );
+      if (!msgRow) return;
+
+      let reactions = {};
+      try { reactions = msgRow.reactions ? JSON.parse(msgRow.reactions) : {}; }
+      catch (_) { reactions = {}; }
+
+      const emojiStr = (emoji || '').trim();
+      if (!emojiStr || reactions[uid] === emojiStr) {
+        // Toggle off: remove this user's reaction
+        delete reactions[uid];
+      } else {
+        reactions[uid] = emojiStr;
+      }
+
+      const newJson = Object.keys(reactions).length > 0 ? JSON.stringify(reactions) : null;
+      await pool.query(
+        'UPDATE chat_messages SET reactions = ? WHERE message_id = ? AND chat_room_id = ?',
+        [newJson, messageId, chatRoomId],
+      );
+
+      io.to(chatRoomId).emit('message_reaction', {
+        chatRoomId,
+        messageId,
+        reactions,
+        reactorId: uid,
+      });
+    } catch (err) {
+      console.error('add_reaction error:', err.message);
     }
   });
 

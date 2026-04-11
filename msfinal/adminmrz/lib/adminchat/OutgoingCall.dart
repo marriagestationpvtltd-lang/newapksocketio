@@ -12,6 +12,20 @@ import 'tokengenerator.dart';
 // Call state progression: calling → ringing → connected
 enum _CallStatus { calling, ringing, connected, busy }
 
+// Conference participant state
+enum _ParticipantStatus { inviting, accepted, declined }
+
+class _ConferenceParticipant {
+  final String userId;
+  final String name;
+  _ParticipantStatus status;
+  _ConferenceParticipant({
+    required this.userId,
+    required this.name,
+    this.status = _ParticipantStatus.inviting,
+  });
+}
+
 class CallScreen extends StatefulWidget {
   final String currentUserId;
   final String currentUserName;
@@ -28,8 +42,8 @@ class CallScreen extends StatefulWidget {
   /// callType is always 'audio'. status is 'answered' or 'missed'.
   final void Function(String callType, String status, int durationSeconds)? onCallEnded;
   /// Called when admin wants to add a participant to the call.
-  /// Returns the selected user ID or null if cancelled.
-  final Future<String?> Function()? onAddParticipant;
+  /// Returns `{'id': userId, 'name': userName}` or null if cancelled.
+  final Future<Map<String, String>?> Function()? onAddParticipant;
 
   const CallScreen({
     super.key,
@@ -92,6 +106,9 @@ class _CallScreenState extends State<CallScreen>
   // Track all remote UIDs in the channel so the call is only ended when
   // the last remote participant disconnects (supports 3-party conference).
   final Set<int> _remoteUids = {};
+
+  // Conference participants added via the plus button
+  final List<_ConferenceParticipant> _conferenceParticipants = [];
 
   // Animation controllers
   late AnimationController _pulseController;
@@ -315,18 +332,13 @@ class _CallScreenState extends State<CallScreen>
         if (!mounted || _ending) return;
         if (data['channelName']?.toString() == _channel) {
           final acceptedById = data['acceptedById']?.toString() ?? '';
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  acceptedById.isNotEmpty
-                      ? 'User $acceptedById joined the call'
-                      : 'New participant joined the call',
-                ),
-                duration: const Duration(seconds: 3),
-              ),
-            );
-          }
+          setState(() {
+            for (final p in _conferenceParticipants) {
+              if (p.userId == acceptedById) {
+                p.status = _ParticipantStatus.accepted;
+              }
+            }
+          });
         }
       });
 
@@ -336,18 +348,23 @@ class _CallScreenState extends State<CallScreen>
         if (!mounted || _ending) return;
         if (data['channelName']?.toString() == _channel) {
           final rejectedById = data['rejectedById']?.toString() ?? '';
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  rejectedById.isNotEmpty
-                      ? 'User $rejectedById declined the conference invitation'
-                      : 'Participant declined the conference invitation',
-                ),
-                duration: const Duration(seconds: 3),
-              ),
-            );
-          }
+          setState(() {
+            for (final p in _conferenceParticipants) {
+              if (p.userId == rejectedById) {
+                p.status = _ParticipantStatus.declined;
+              }
+            }
+          });
+          // Auto-remove declined participant after 4 seconds
+          Future.delayed(const Duration(seconds: 4), () {
+            if (mounted) {
+              setState(() {
+                _conferenceParticipants
+                    .removeWhere((p) => p.userId == rejectedById &&
+                        p.status == _ParticipantStatus.declined);
+              });
+            }
+          });
         }
       });
 
@@ -567,8 +584,23 @@ class _CallScreenState extends State<CallScreen>
     if (!_callActive) return; // Can only add participants to active calls
 
     try {
-      final newParticipantId = await widget.onAddParticipant!();
-      if (newParticipantId == null || newParticipantId.isEmpty) return;
+      final result = await widget.onAddParticipant!();
+      if (result == null || (result['id'] ?? '').isEmpty) return;
+
+      final newParticipantId = result['id']!;
+      final newParticipantName = result['name'] ?? 'User';
+
+      // Add to local participants tracking list with "inviting" status
+      if (mounted) {
+        setState(() {
+          // Remove any existing entry for this user (re-invite scenario)
+          _conferenceParticipants.removeWhere((p) => p.userId == newParticipantId);
+          _conferenceParticipants.add(_ConferenceParticipant(
+            userId: newParticipantId,
+            name: newParticipantName,
+          ));
+        });
+      }
 
       // Emit socket event to add participant
       final socketReady = await _socketService.ensureConnected();
@@ -579,6 +611,7 @@ class _CallScreenState extends State<CallScreen>
           callType: 'audio',
           adminId: widget.currentUserId,
           adminName: widget.currentUserName,
+          newParticipantName: newParticipantName,
           existingParticipantId: widget.otherUserId,
           agoraAppId: AgoraTokenService.appId,
           callerUid: _localUid.toString(),
@@ -635,6 +668,8 @@ class _CallScreenState extends State<CallScreen>
                   _buildSubtitle(),
                   const SizedBox(height: 20),
                   if (_callStatus != _CallStatus.connected) _buildSignalBars(),
+                  // ── Conference participants panel (visible once connected + participants added)
+                  _buildParticipantsPanel(),
                   const Spacer(),
                   _buildControls(),
                   const SizedBox(height: 40),
@@ -820,6 +855,140 @@ class _CallScreenState extends State<CallScreen>
     );
   }
 
+  // ── Conference participants panel ───────────────────────────────────────────
+  /// Shown in the call body when the admin has added at least one participant.
+  Widget _buildParticipantsPanel() {
+    // Always show panel when call is active and any participant has been added
+    if (!_callActive || _conferenceParticipants.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final total = _conferenceParticipants.length + 2; // admin + original + added
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeOut,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white.withOpacity(0.12)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.group, color: Color(0xFF6366F1), size: 14),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Conference · $total people',
+                        style: const TextStyle(
+                          color: Color(0xFF6366F1),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // Participant chips
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                // You (admin)
+                _buildParticipantChip(
+                  name: 'You',
+                  status: _ParticipantStatus.accepted,
+                ),
+                // Original callee
+                _buildParticipantChip(
+                  name: widget.otherUserName,
+                  status: _ParticipantStatus.accepted,
+                ),
+                // Added participants
+                ..._conferenceParticipants.map(
+                  (p) => _buildParticipantChip(name: p.name, status: p.status),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildParticipantChip({
+    required String name,
+    required _ParticipantStatus status,
+  }) {
+    final Color color;
+    final IconData icon;
+    String? badge;
+    switch (status) {
+      case _ParticipantStatus.inviting:
+        color = const Color(0xFFF59E0B);
+        icon = Icons.access_time;
+        badge = 'Inviting…';
+        break;
+      case _ParticipantStatus.accepted:
+        color = const Color(0xFF10B981);
+        icon = Icons.check_circle;
+        break;
+      case _ParticipantStatus.declined:
+        color = const Color(0xFFEF4444);
+        icon = Icons.cancel;
+        badge = 'Declined';
+        break;
+    }
+    final truncated = name.length > 14 ? '${name.substring(0, 14)}…' : name;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.35)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 13),
+          const SizedBox(width: 5),
+          Text(
+            truncated,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (badge != null) ...[
+            const SizedBox(width: 4),
+            Text(
+              badge,
+              style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   // ── Bottom control buttons row
   Widget _buildControls() {
     return Padding(
@@ -860,9 +1029,10 @@ class _CallScreenState extends State<CallScreen>
           // Call Plus button - add participant (admin only, when call is active)
           if (widget.onAddParticipant != null && _callActive)
             _ControlButton(
-              icon: Icons.person_add,
-              label: 'Add',
+              icon: Icons.group_add,
+              label: 'Add to Call',
               isActive: true,
+              activeColor: const Color(0xFF10B981),
               onTap: _addParticipant,
             ),
 
@@ -917,16 +1087,19 @@ class _ControlButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final bool isActive;
+  final Color? activeColor;
 
   const _ControlButton({
     required this.icon,
     required this.label,
     required this.onTap,
     this.isActive = false,
+    this.activeColor,
   });
 
   @override
   Widget build(BuildContext context) {
+    final resolvedColor = activeColor ?? const Color(0xFF6366F1);
     return GestureDetector(
       onTap: onTap,
       child: Column(
@@ -939,11 +1112,11 @@ class _ControlButton extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: isActive
-                  ? const Color(0xFF6366F1).withOpacity(0.85)
+                  ? resolvedColor.withOpacity(0.85)
                   : Colors.white.withOpacity(0.22),
               border: Border.all(
                 color: isActive
-                    ? const Color(0xFF6366F1)
+                    ? resolvedColor
                     : Colors.white.withOpacity(0.35),
               ),
             ),

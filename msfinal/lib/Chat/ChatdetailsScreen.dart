@@ -42,6 +42,39 @@ import '../utils/privacy_utils.dart';
 import 'widgets/typing_indicator.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
+/// Immutable snapshot of audio playback state used by a single
+/// [ValueNotifier] so the voice bubble can rebuild with one listener
+/// instead of four nested [ValueListenableBuilder] widgets.
+class _AudioPlaybackState {
+  final String? playingId;
+  final bool isPlaying;
+  final Duration position;
+  final Duration duration;
+
+  const _AudioPlaybackState({
+    this.playingId,
+    this.isPlaying = false,
+    this.position = Duration.zero,
+    this.duration = Duration.zero,
+  });
+
+  _AudioPlaybackState copyWith({
+    Object? playingId = _sentinel,
+    bool? isPlaying,
+    Duration? position,
+    Duration? duration,
+  }) {
+    return _AudioPlaybackState(
+      playingId: playingId == _sentinel ? this.playingId : playingId as String?,
+      isPlaying: isPlaying ?? this.isPlaying,
+      position: position ?? this.position,
+      duration: duration ?? this.duration,
+    );
+  }
+
+  static const Object _sentinel = Object();
+}
+
 class ChatDetailScreen extends StatefulWidget {
   final String chatRoomId;
   final String receiverId;
@@ -102,12 +135,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   // Audio playback
   final AudioPlayer _audioPlayer = AudioPlayer();
-  // ValueNotifiers allow the voice bubble to rebuild in isolation without
-  // triggering a full message-list rebuild on every position tick.
-  final ValueNotifier<String?> _playingMessageIdNotifier = ValueNotifier(null);
-  final ValueNotifier<bool> _isPlayingNotifier = ValueNotifier(false);
-  final ValueNotifier<Duration> _playbackPositionNotifier = ValueNotifier(Duration.zero);
-  final ValueNotifier<Duration> _playbackDurationNotifier = ValueNotifier(Duration.zero);
+  // A single ValueNotifier holding all audio playback state allows the voice
+  // bubble to use one ValueListenableBuilder instead of four nested ones,
+  // and ensures position ticks never trigger a full message-list rebuild.
+  final ValueNotifier<_AudioPlaybackState> _audioStateNotifier =
+      ValueNotifier(const _AudioPlaybackState());
 
   // Voice recording
   final AudioRecorder _audioRecorder = AudioRecorder();
@@ -268,21 +300,22 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     // Add observer for app lifecycle
     WidgetsBinding.instance.addObserver(this);
 
-    // Audio player listeners — update ValueNotifiers directly to avoid setState
-    // on every position tick, which would bypass the message-widget cache and
-    // cause the entire message list to rebuild hundreds of times per second.
+    // Audio player listeners — update the combined ValueNotifier directly to
+    // avoid setState on every position tick, which would bypass the message-widget
+    // cache and rebuild the entire message list hundreds of times per second.
     _audioPlayerStateSubscription = _audioPlayer.onPlayerStateChanged.listen((state) {
-      _isPlayingNotifier.value = state == PlayerState.playing;
+      final playing = state == PlayerState.playing;
       if (state == PlayerState.completed) {
-        _playingMessageIdNotifier.value = null;
-        _playbackPositionNotifier.value = Duration.zero;
+        _audioStateNotifier.value = const _AudioPlaybackState();
+      } else {
+        _audioStateNotifier.value = _audioStateNotifier.value.copyWith(isPlaying: playing);
       }
     });
     _audioPlayerPositionSubscription = _audioPlayer.onPositionChanged.listen((pos) {
-      _playbackPositionNotifier.value = pos;
+      _audioStateNotifier.value = _audioStateNotifier.value.copyWith(position: pos);
     });
     _audioPlayerDurationSubscription = _audioPlayer.onDurationChanged.listen((dur) {
-      _playbackDurationNotifier.value = dur;
+      _audioStateNotifier.value = _audioStateNotifier.value.copyWith(duration: dur);
     });
 
     // Update _hasText without a full rebuild on every keystroke
@@ -445,7 +478,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       // Reset the debounce timer; after 50 ms of silence we flush all buffered
       // messages in a single setState (one rebuild instead of one per message).
       _incomingMessageDebounce?.cancel();
-      _incomingMessageDebounce = Timer(const Duration(milliseconds: 50), _flushPendingMessages);
+      _incomingMessageDebounce = Timer(const Duration(milliseconds: 100), _flushPendingMessages);
     });
 
     // Listen for edits and deletes
@@ -507,29 +540,35 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   }
 
   /// Flushes all buffered incoming messages in a single setState call.
-  /// Called by [_incomingMessageDebounce] after a 50 ms quiet period.
+  /// Called by [_incomingMessageDebounce] after a 100 ms quiet period.
   void _flushPendingMessages() {
     if (!mounted || _pendingIncomingMessages.isEmpty) return;
 
+    // Determine scroll intent before setState so we don't read scroll position
+    // inside the setState callback (which should only mutate state variables).
     bool shouldScroll = false;
-    final msgs = List<Map<String, dynamic>>.from(_pendingIncomingMessages);
-    _pendingIncomingMessages.clear();
+    for (final newMsg in _pendingIncomingMessages) {
+      final existingIdx = _cachedMessages.indexWhere(
+        (m) => m['messageId']?.toString() == newMsg['messageId']?.toString(),
+      );
+      if (existingIdx < 0 && (_forceScrollToBottom || _isNearBottom())) {
+        shouldScroll = true;
+        break;
+      }
+    }
 
     setState(() {
-      for (final newMsg in msgs) {
+      for (final newMsg in _pendingIncomingMessages) {
         final existingIdx = _cachedMessages.indexWhere(
           (m) => m['messageId']?.toString() == newMsg['messageId']?.toString(),
         );
-        final isNewMessage = existingIdx < 0;
-        if (isNewMessage && (_forceScrollToBottom || _isNearBottom())) {
-          shouldScroll = true;
-        }
         if (existingIdx >= 0) {
           _cachedMessages[existingIdx] = newMsg;
         } else {
           _cachedMessages.add(newMsg);
         }
       }
+      _pendingIncomingMessages.clear();
       _messagesCacheVersion++;
       if (_forceScrollToBottom) _forceScrollToBottom = false;
     });
@@ -824,10 +863,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     _audioPlayerStateSubscription?.cancel();
     _audioPlayerPositionSubscription?.cancel();
     _audioPlayerDurationSubscription?.cancel();
-    _playingMessageIdNotifier.dispose();
-    _isPlayingNotifier.dispose();
-    _playbackPositionNotifier.dispose();
-    _playbackDurationNotifier.dispose();
+    _audioStateNotifier.dispose();
     _audioPlayer.dispose();
     _recordTimer?.cancel();
     _amplitudeSubscription?.cancel();
@@ -1546,14 +1582,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   // VOICE PLAYBACK
   Future<void> _toggleVoicePlayback(String messageId, String audioUrl) async {
-    if (_playingMessageIdNotifier.value == messageId && _isPlayingNotifier.value) {
+    final state = _audioStateNotifier.value;
+    if (state.playingId == messageId && state.isPlaying) {
       await _audioPlayer.pause();
-    } else if (_playingMessageIdNotifier.value == messageId && !_isPlayingNotifier.value) {
+    } else if (state.playingId == messageId && !state.isPlaying) {
       await _audioPlayer.resume();
     } else {
-      _playbackPositionNotifier.value = Duration.zero;
-      _playbackDurationNotifier.value = Duration.zero;
-      _playingMessageIdNotifier.value = messageId;
+      _audioStateNotifier.value = _AudioPlaybackState(playingId: messageId);
       await _audioPlayer.play(UrlSource(audioUrl));
     }
   }
@@ -2201,91 +2236,77 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         return _buildImageGallery(text: text);
       case 'voice':
         final totalSecs = duration ?? 0;
-        // Use ValueListenableBuilder so only this bubble rebuilds on every
-        // audio position tick, not the entire message list.
+        // A single ValueListenableBuilder on the combined audio state notifier
+        // rebuilds only this bubble on each position/state tick; the message
+        // list cache remains valid throughout playback.
         return RepaintBoundary(
-          child: ValueListenableBuilder<String?>(
-            valueListenable: _playingMessageIdNotifier,
-            builder: (context, playingId, _) {
-              return ValueListenableBuilder<bool>(
-                valueListenable: _isPlayingNotifier,
-                builder: (context, isPlaying, _) {
-                  return ValueListenableBuilder<Duration>(
-                    valueListenable: _playbackPositionNotifier,
-                    builder: (context, position, _) {
-                      return ValueListenableBuilder<Duration>(
-                        valueListenable: _playbackDurationNotifier,
-                        builder: (context, playbackDuration, _) {
-                          final isCurrentMessage = playingId == messageId;
-                          final isCurrentlyPlaying = isCurrentMessage && isPlaying;
-                          final progressValue = isCurrentMessage && playbackDuration.inSeconds > 0
-                              ? (position.inMilliseconds / playbackDuration.inMilliseconds)
-                                  .clamp(0.0, 1.0)
-                              : 0.0;
-                          final displayTime = isCurrentMessage && playbackDuration.inSeconds > 0
-                              ? _formatDuration(position.inSeconds)
-                              : _formatDuration(totalSecs);
-                          return GestureDetector(
-                            onTap: () => _toggleVoicePlayback(messageId, text),
-                            child: SizedBox(
-                              width: 210,
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 38,
-                                    height: 38,
-                                    decoration: BoxDecoration(
-                                      color: isMine
-                                          ? Colors.white.withOpacity(0.20)
-                                          : _accentColor.withOpacity(0.12),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      isCurrentlyPlaying ? Icons.pause : Icons.play_arrow,
-                                      color: isMine ? Colors.white : _accentColor,
-                                      size: 20,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(6),
-                                          child: LinearProgressIndicator(
-                                            value: progressValue,
-                                            minHeight: 4.5,
-                                            backgroundColor: isMine
-                                                ? Colors.white.withOpacity(0.18)
-                                                : Colors.black.withOpacity(0.08),
-                                            valueColor: AlwaysStoppedAnimation<Color>(
-                                              isMine ? Colors.white : _accentColor,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 5),
-                                        Text(
-                                          displayTime,
-                                          style: TextStyle(
-                                            color: isMine ? Colors.white70 : _lightTextColor,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
+          child: ValueListenableBuilder<_AudioPlaybackState>(
+            valueListenable: _audioStateNotifier,
+            builder: (context, audioState, _) {
+              final isCurrentMessage = audioState.playingId == messageId;
+              final isCurrentlyPlaying = isCurrentMessage && audioState.isPlaying;
+              final progressValue = isCurrentMessage && audioState.duration.inSeconds > 0
+                  ? (audioState.position.inMilliseconds / audioState.duration.inMilliseconds)
+                      .clamp(0.0, 1.0)
+                  : 0.0;
+              final displayTime = isCurrentMessage && audioState.duration.inSeconds > 0
+                  ? _formatDuration(audioState.position.inSeconds)
+                  : _formatDuration(totalSecs);
+              return GestureDetector(
+                onTap: () => _toggleVoicePlayback(messageId, text),
+                child: SizedBox(
+                  width: 210,
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: isMine
+                              ? Colors.white.withOpacity(0.20)
+                              : _accentColor.withOpacity(0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isCurrentlyPlaying ? Icons.pause : Icons.play_arrow,
+                          color: isMine ? Colors.white : _accentColor,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(6),
+                              child: LinearProgressIndicator(
+                                value: progressValue,
+                                minHeight: 4.5,
+                                backgroundColor: isMine
+                                    ? Colors.white.withOpacity(0.18)
+                                    : Colors.black.withOpacity(0.08),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  isMine ? Colors.white : _accentColor,
+                                ),
                               ),
                             ),
-                          );
-                        },
-                      );
-                    },
-                  );
-                },
+                            const SizedBox(height: 5),
+                            Text(
+                              displayTime,
+                              style: TextStyle(
+                                color: isMine ? Colors.white70 : _lightTextColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               );
             },
           ),
@@ -3362,41 +3383,39 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                       ),
                     ),
                     const SizedBox(width: 8),
-                    // Animated waveform bars — reads amplitude via ValueNotifier
-                    // inside the AnimatedBuilder so amplitude changes do not call
-                    // setState on the parent widget.
+                    // Animated waveform bars — AnimatedBuilder drives 60fps redraws
+                    // and samples amplitude from the notifier on each frame. The
+                    // notifier is read inside the builder so amplitude changes are
+                    // picked up automatically without an extra ValueListenableBuilder
+                    // wrapping (which would cause an extra 100ms rebuild on top of
+                    // the 60fps animation ticks).
                     Expanded(
-                      child: ValueListenableBuilder<double>(
-                        valueListenable: _audioAmplitudeNotifier,
-                        builder: (context, amplitude, _) {
-                          final bool hasAudio = amplitude > -40.0;
-                          return AnimatedBuilder(
-                            animation: _recordingAnimController!,
-                            builder: (context, _) {
-                              const barCount = 22;
-                              const maxH = 20.0;
-                              const minH = 4.0;
-                              final t = _recordingAnimController!.value;
-                              return Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: List.generate(barCount, (i) {
-                                  final phase = (i / barCount) * 2 * pi;
-                                  // Flat bars when no voice is detected, animated wave otherwise
-                                  final h = hasAudio
-                                      ? minH + (maxH - minH) * (0.5 + 0.5 * sin(2 * pi * t + phase))
-                                      : minH;
-                                  return Container(
-                                    width: 3,
-                                    height: h,
-                                    decoration: BoxDecoration(
-                                      color: _accentColor.withOpacity(hasAudio ? 0.75 : 0.35),
-                                      borderRadius: BorderRadius.circular(2),
-                                    ),
-                                  );
-                                }),
+                      child: AnimatedBuilder(
+                        animation: _recordingAnimController!,
+                        builder: (context, _) {
+                          final bool hasAudio = _audioAmplitudeNotifier.value > -40.0;
+                          const barCount = 22;
+                          const maxH = 20.0;
+                          const minH = 4.0;
+                          final t = _recordingAnimController!.value;
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: List.generate(barCount, (i) {
+                              final phase = (i / barCount) * 2 * pi;
+                              // Flat bars when no voice is detected, animated wave otherwise
+                              final h = hasAudio
+                                  ? minH + (maxH - minH) * (0.5 + 0.5 * sin(2 * pi * t + phase))
+                                  : minH;
+                              return Container(
+                                width: 3,
+                                height: h,
+                                decoration: BoxDecoration(
+                                  color: _accentColor.withOpacity(hasAudio ? 0.75 : 0.35),
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
                               );
-                            },
+                            }),
                           );
                         },
                       ),

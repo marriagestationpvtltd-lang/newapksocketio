@@ -1,6 +1,5 @@
 # ── CORS for Flutter Web (browser-based API clients) ─────────────────────────
-# Apache must respond to OPTIONS preflight before PHP runs, so these headers
-# are set at the mod_headers level rather than relying solely on PHP headers().
+# mod_headers adds CORS headers to every response when the module is available.
 <IfModule mod_headers.c>
     Header always set Access-Control-Allow-Origin "*"
     Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS"
@@ -8,10 +7,10 @@
     Header always set Access-Control-Max-Age "86400"
 </IfModule>
 
-# Return 204 No Content for OPTIONS preflight requests without invoking PHP.
-RewriteEngine On
-RewriteCond %{REQUEST_METHOD} OPTIONS
-RewriteRule ^ - [R=204,L]
+# OPTIONS preflight is handled by shared/cors.php (included via config/db.php).
+# Do NOT intercept OPTIONS here with mod_rewrite: when mod_headers is disabled
+# (common in local XAMPP), the 204 would be returned without CORS headers,
+# causing Flutter Web "Failed to fetch" / preflight-failed errors in the browser.
 
 # Deny direct HTTP access to environment and configuration files.
 <FilesMatch "^(\.env|\.env\.example)$">

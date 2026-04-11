@@ -731,7 +731,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     });
   }
 
-  void _scrollToBottom({bool animate = false}) {
+  void _scrollToBottom() {
     // Don't auto-scroll if scroll is locked during initial load
     if (_scrollLocked) return;
 

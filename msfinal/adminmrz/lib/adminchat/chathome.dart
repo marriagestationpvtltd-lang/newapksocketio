@@ -2189,14 +2189,19 @@ class _ChatWindowState extends State<ChatWindow> {
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        allUsers = ((data['users'] as List<dynamic>?) ?? [])
-            .where((u) => u['id']?.toString() != currentParticipantId)
-            .map((u) => Map<String, dynamic>.from(u as Map))
-            .toList();
+        final rawList = data['users'];
+        if (rawList is List) {
+          allUsers = rawList
+              .whereType<Map>()
+              .where((u) => u['id']?.toString() != currentParticipantId)
+              .map((u) => Map<String, dynamic>.from(u))
+              .toList();
+        }
       } else {
         fetchError = 'Failed to load users (${response.statusCode})';
       }
     } catch (e) {
+      debugPrint('Error loading users: $e');
       fetchError = 'Error loading users';
     }
 

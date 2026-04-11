@@ -2,84 +2,52 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// In-memory message cache that is backed by SharedPreferences.
+/// Singleton that provides **synchronous** access to the most-recently-seen
+/// chat messages for any room.
 ///
-/// Call [init] once at app startup (before [runApp]) so the
-/// SharedPreferences instance is available for synchronous reads.
-/// After that, [preloadRoom] and [getMessages] both execute without
-/// awaiting any I/O, which lets [ChatDetailScreen] and [AdminChatScreen]
-/// populate their message list on the very first frame instead of showing
-/// a skeleton loader.
+/// The cache is backed by [SharedPreferences].  Because
+/// [SharedPreferences.getInstance] must be awaited once, call [init] from
+/// `main()` before [runApp].  After that single async initialisation every
+/// subsequent read ([getMessages]) is **synchronous** — no await, no
+/// microtask — so callers can populate their state in [State.initState]
+/// before the first frame is painted, eliminating the white-screen / skeleton
+/// flash.
+///
+/// Usage:
+/// ```dart
+/// // main.dart
+/// await ChatMessageCache.instance.init();
+/// runApp(…);
+///
+/// // ChatDetailScreen – initState
+/// final cached = ChatMessageCache.instance.getMessages(roomId);
+/// if (cached.isNotEmpty) {
+///   _cachedMessages = cached;
+///   _isFirstLoad = false;
+/// }
+/// ```
 class ChatMessageCache {
-  ChatMessageCache._internal();
-  static final ChatMessageCache instance = ChatMessageCache._internal();
+  ChatMessageCache._();
+
+  static final ChatMessageCache instance = ChatMessageCache._();
 
   SharedPreferences? _prefs;
-  final Map<String, List<Map<String, dynamic>>> _cache = {};
 
-  static const int _maxCachedMessages = 30;
+  /// Maximum number of messages stored per room.
+  static const int maxCachedMessages = 30;
 
-  /// Initialize with a [SharedPreferences] instance.
-  /// Should be called once from [main] before [runApp].
+  static const String _keyPrefix = 'chat_msgs_';
+
+  /// Must be called (and awaited) **once** before [runApp].
+  /// Safe to call multiple times — subsequent calls are no-ops.
   Future<void> init() async {
+    if (_prefs != null) return;
     _prefs = await SharedPreferences.getInstance();
   }
 
-  /// Load a room's messages from SharedPreferences into the in-memory cache.
-  ///
-  /// This is **synchronous** (no awaits) because [_prefs] was pre-initialised
-  /// by [init].  If [init] was never called, the method is a no-op.
-  void preloadRoom(String chatRoomId) {
-    if (_cache.containsKey(chatRoomId)) return;
-    final prefs = _prefs;
-    if (prefs == null) return;
-    try {
-      final raw = prefs.getString('chat_msgs_$chatRoomId');
-      if (raw == null) return;
-      final decoded = jsonDecode(raw) as List<dynamic>;
-      _cache[chatRoomId] = decoded.map((item) {
-        final m = Map<String, dynamic>.from(item as Map);
-        if (m['timestamp'] is String) {
-          final dt = DateTime.tryParse(m['timestamp'] as String);
-          if (dt != null) m['timestamp'] = dt.toLocal();
-        }
-        return m;
-      }).toList();
-    } catch (e) {
-      debugPrint('ChatMessageCache.preloadRoom error: $e');
-    }
-  }
+  // ── Serialisation helpers ─────────────────────────────────────────────────
 
-  /// Return the in-memory messages for [chatRoomId], or `null` if not loaded.
-  List<Map<String, dynamic>>? getMessages(String chatRoomId) =>
-      _cache[chatRoomId];
-
-  /// Update the in-memory cache and persist to SharedPreferences.
-  ///
-  /// Only the most-recent [_maxCachedMessages] messages are persisted so
-  /// the SharedPreferences entry stays small.
-  void setMessages(String chatRoomId, List<Map<String, dynamic>> messages) {
-    _cache[chatRoomId] = List.from(messages);
-    _persistAsync(chatRoomId, messages);
-  }
-
-  /// Merge [newMessages] into the existing cache for [chatRoomId].
-  void mergeMessages(String chatRoomId, List<Map<String, dynamic>> newMessages) {
-    final existing = _cache[chatRoomId] ?? [];
-    final existingIds = existing.map((m) => m['messageId']?.toString()).toSet();
-    final merged = [
-      ...existing,
-      ...newMessages.where((m) => !existingIds.contains(m['messageId']?.toString())),
-    ];
-    setMessages(chatRoomId, merged);
-  }
-
-  /// Clear a room's in-memory cache (does **not** delete from SharedPreferences).
-  void evictRoom(String chatRoomId) => _cache.remove(chatRoomId);
-
-  // ── private ──────────────────────────────────────────────────────────────
-
-  Map<String, dynamic> _serializeMessage(Map<String, dynamic> msg) {
+  static Map<String, dynamic> _serialize(Map<String, dynamic> msg) {
     final m = Map<String, dynamic>.from(msg);
     if (m['timestamp'] is DateTime) {
       m['timestamp'] = (m['timestamp'] as DateTime).toIso8601String();
@@ -87,19 +55,54 @@ class ChatMessageCache {
     return m;
   }
 
-  void _persistAsync(String chatRoomId, List<Map<String, dynamic>> messages) {
-    final prefs = _prefs;
-    if (prefs == null) return;
-    Future.microtask(() async {
-      try {
-        final toSave = messages.length > _maxCachedMessages
-            ? messages.sublist(messages.length - _maxCachedMessages)
-            : messages;
-        final encoded = jsonEncode(toSave.map(_serializeMessage).toList());
-        await prefs.setString('chat_msgs_$chatRoomId', encoded);
-      } catch (e) {
-        debugPrint('ChatMessageCache._persistAsync error: $e');
-      }
-    });
+  static Map<String, dynamic> _deserialize(Map<String, dynamic> raw) {
+    final m = Map<String, dynamic>.from(raw);
+    if (m['timestamp'] is String) {
+      final dt = DateTime.tryParse(m['timestamp'] as String);
+      if (dt != null) m['timestamp'] = dt.toLocal();
+    }
+    return m;
+  }
+
+  // ── Public API ────────────────────────────────────────────────────────────
+
+  /// Returns the cached messages for [roomId] **synchronously**.
+  ///
+  /// Returns an empty list when [init] has not been called yet, when no
+  /// messages have ever been saved for this room, or on any parse error.
+  List<Map<String, dynamic>> getMessages(String roomId) {
+    if (_prefs == null) return [];
+    try {
+      final raw = _prefs!.getString('$_keyPrefix$roomId');
+      if (raw == null || raw.isEmpty) return [];
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list
+          .map((e) => _deserialize(Map<String, dynamic>.from(e as Map)))
+          .toList();
+    } catch (e) {
+      debugPrint('ChatMessageCache.getMessages error: $e');
+      return [];
+    }
+  }
+
+  /// Saves the most-recent [maxCachedMessages] from [messages] for [roomId].
+  ///
+  /// The write is fire-and-forget; errors are logged but not thrown.
+  void saveMessages(String roomId, List<Map<String, dynamic>> messages) {
+    if (_prefs == null) return;
+    try {
+      final toSave = messages.length >= maxCachedMessages
+          ? messages.sublist(messages.length - maxCachedMessages)
+          : messages;
+      final encoded = jsonEncode(toSave.map(_serialize).toList());
+      _prefs!.setString('$_keyPrefix$roomId', encoded);
+    } catch (e) {
+      debugPrint('ChatMessageCache.saveMessages error: $e');
+    }
+  }
+
+  /// Removes the cached messages for [roomId] (e.g. on logout).
+  void clearRoom(String roomId) {
+    _prefs?.remove('$_keyPrefix$roomId');
   }
 }

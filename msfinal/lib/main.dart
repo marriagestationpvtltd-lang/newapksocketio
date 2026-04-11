@@ -1038,6 +1038,10 @@ void main() async {
   // future before proceeding.
   final firebaseInitFuture = _initFirebase();
 
+  // Pre-warm the chat message cache so chat screens can read cached messages
+  // synchronously in initState, eliminating the white-screen flash.
+  await ChatMessageCache.instance.init();
+
   // Connectivity service: create now, but start the background HTTP reachability
   // checks (to google.com / cloudflare.com) after the first frame — they can
   // each take up to 5 s and must not block runApp().

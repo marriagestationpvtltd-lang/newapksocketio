@@ -22,6 +22,7 @@ import 'package:permission_handler/permission_handler.dart'
 // dart:io is only available on native platforms
 import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
 
+import '../service/chat_message_cache.dart';
 import '../service/socket_service.dart';
 import '../service/chat_message_cache.dart';
 import '../Calling/videocall.dart';
@@ -281,28 +282,20 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       duration: const Duration(milliseconds: 1200),
     );
 
-    // Synchronously populate messages from the in-memory cache so the first
-    // frame already shows previously-loaded messages instead of a skeleton.
-    // ChatMessageCache.instance.init() was called in main() before runApp(),
-    // so preloadRoom() reads from the SharedPreferences instance directly
-    // without any async I/O.
-    ChatMessageCache.instance.preloadRoom(widget.chatRoomId);
+    // Load cached messages synchronously from the pre-warmed singleton so the
+    // screen shows content immediately on the first frame — no skeleton flash.
     final syncCached = ChatMessageCache.instance.getMessages(widget.chatRoomId);
-    if (syncCached != null && syncCached.isNotEmpty) {
-      _cachedMessages = List.from(syncCached);
+    if (syncCached.isNotEmpty) {
+      _cachedMessages = syncCached;
       _isFirstLoad = false;
-      _messagesCacheVersion++;
-      // Position to the last message after layout, then unlock scroll so the
-      // user sees cached messages immediately while the server response loads.
+      // Position scroll to bottom after the first frame, then unlock.
+      // Also mark _initialScrollDone so _performInitialScroll() (called when
+      // server data arrives) skips the re-jump and only handles the unlock.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (_scrollController.hasClients) {
+        _initialScrollDone = true;
+        if (mounted && _scrollController.hasClients) {
           _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
         }
-        // Mark initial scroll as done and unlock so messages are visible at once.
-        // _performInitialScroll() called from the server response path will be a
-        // no-op (guarded by _initialScrollDone) so it won't re-scroll to top.
-        _initialScrollDone = true;
         if (mounted) setState(() => _scrollLocked = false);
       });
     }
@@ -384,9 +377,9 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   // ── Local message cache helpers ───────────────────────────────────────────
 
-  /// Saves the current messages to [ChatMessageCache] (in-memory + SharedPreferences).
+  /// Saves the most recent messages via the singleton cache.
   void _saveMessagesToLocalCache() {
-    ChatMessageCache.instance.setMessages(widget.chatRoomId, _cachedMessages);
+    ChatMessageCache.instance.saveMessages(widget.chatRoomId, _cachedMessages);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -407,8 +400,19 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         _currentMessagePage = 1;
         _messagesCacheVersion++;
       });
-      // Scroll to the last message and unlock once the server data is authoritative.
-      _performInitialScroll();
+      // If the sync-cache path already unlocked scroll, just jump to bottom to
+      // account for any layout change from fresh server data.  Otherwise use the
+      // full _performInitialScroll path which also unlocks.
+      if (_initialScrollDone) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _scrollController.hasClients) {
+            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+          }
+          if (mounted && _scrollLocked) setState(() => _scrollLocked = false);
+        });
+      } else {
+        _performInitialScroll();
+      }
       _saveMessagesToLocalCache();
     }).catchError((e) {
       debugPrint('Error loading messages: $e');

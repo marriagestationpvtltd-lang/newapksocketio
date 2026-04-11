@@ -27,6 +27,7 @@ import '../Calling/callmanager.dart';
 import '../Calling/incommingcall.dart';
 import '../Calling/incomingvideocall.dart';
 import '../pushnotification/pushservice.dart';
+import '../service/chat_message_cache.dart';
 import '../service/socket_service.dart';
 import '../service/chat_message_cache.dart';
 import 'call_overlay_manager.dart';
@@ -196,22 +197,20 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       duration: const Duration(milliseconds: 1200),
     );
 
-    // Synchronously populate messages from the in-memory cache so the first
-    // frame already shows previously-loaded messages instead of a loading spinner.
-    ChatMessageCache.instance.preloadRoom(_chatRoomId);
+    // Load cached messages synchronously from the pre-warmed singleton so the
+    // screen shows content immediately on the first frame — no spinner flash.
     final syncCached = ChatMessageCache.instance.getMessages(_chatRoomId);
-    if (syncCached != null && syncCached.isNotEmpty) {
-      _cachedMessages = List.from(syncCached);
+    if (syncCached.isNotEmpty) {
+      _cachedMessages = syncCached;
       _isFirstLoad = false;
       _streamLoading = false;
+      _showSuggestedMessages = false;
+      // Position scroll to bottom after the first frame, then unlock.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (_scrollController.hasClients) {
+        _initialScrollDone = true;
+        if (mounted && _scrollController.hasClients) {
           _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
         }
-        // Mark initial scroll done and unlock so messages are visible at once.
-        // The server response will update messages in-place without re-scrolling.
-        _initialScrollDone = true;
         if (mounted) setState(() => _scrollLocked = false);
       });
     }
@@ -618,7 +617,8 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         _cachedMessages = [..._cachedMessages, data];
         if (_showSuggestedMessages) _showSuggestedMessages = false;
       });
-      ChatMessageCache.instance.setMessages(_chatRoomId, _cachedMessages);
+      // Persist updated message list to cache
+      ChatMessageCache.instance.saveMessages(_chatRoomId, _cachedMessages);
       // Auto-mark as read if the message is incoming
       final bool isMe = data['senderId']?.toString() == _mySenderId;
       if (!isMe) {
@@ -777,14 +777,17 @@ class _AdminChatScreenState extends State<AdminChatScreen>
 
   /// Load a page of messages from the server via Socket.IO ack.
   Future<void> _loadMessages({bool reset = false}) async {
+    // Only reset scroll lock if the sync-cache path hasn't already unlocked it.
     if (reset) {
       setState(() {
         _streamLoading = true;
         _streamHasError = false;
         _currentPage = 1;
         _hasMoreMessages = true;
-        _scrollLocked = true;
-        _initialScrollDone = false;
+        // Don't re-lock or reset scroll if sync cache already positioned it.
+        if (!_initialScrollDone) {
+          _scrollLocked = true;
+        }
       });
     }
     try {
@@ -812,12 +815,27 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         if (reset && _isFirstLoad && _cachedMessages.isNotEmpty) {
           _isFirstLoad = false;
         }
+        if (_showSuggestedMessages && _cachedMessages.isNotEmpty) {
+          _showSuggestedMessages = false;
+        }
       });
       if (reset) {
-        // Perform initial scroll only once, then unlock
-        _performInitialScroll();
-        // Persist the freshly loaded messages so next visit is instant
-        ChatMessageCache.instance.setMessages(_chatRoomId, _cachedMessages);
+        if (_initialScrollDone) {
+          // Sync-cache already positioned scroll; just jump to bottom for fresh data.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _scrollController.hasClients) {
+              _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+            }
+            if (mounted && _scrollLocked) setState(() => _scrollLocked = false);
+          });
+        } else {
+          // Perform initial scroll only once, then unlock
+          _performInitialScroll();
+        }
+      }
+      // Persist fresh messages to the singleton cache so the next open is instant.
+      if (reset) {
+        ChatMessageCache.instance.saveMessages(_chatRoomId, _cachedMessages);
       }
       // After loading, join room and mark read
       _socketService.joinRoom(_chatRoomId);

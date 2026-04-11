@@ -204,7 +204,9 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
       if (accepted && _callActive && !_ending) {
         _navigateToVideoCall();
       } else if (!accepted) {
+        if (!_isSwitchingToVideo) return;
         setState(() => _isSwitchingToVideo = false);
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Video switch declined'), duration: Duration(seconds: 2)),
         );

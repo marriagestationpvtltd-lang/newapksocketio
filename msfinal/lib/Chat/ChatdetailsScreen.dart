@@ -4367,23 +4367,40 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    "${widget.receiverName}",
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 17),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          widget.receiverName,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 17),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'MS-${widget.receiverId}',
+                        style: const TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13),
+                      ),
+                    ],
                   ),
-                  if (_isOtherUserOnline)
-                    const Text(
-                      "online",
-                      style: TextStyle(color: Colors.white70, fontSize: 13),
-                    )
-                  else if (_otherUserLastSeen != null)
-                    Text(
-                      _formatLastSeen(_otherUserLastSeen!),
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  Text(
+                    _isOtherUserOnline
+                        ? 'online'
+                        : (_otherUserLastSeen != null
+                            ? _formatLastSeen(_otherUserLastSeen!)
+                            : 'Offline'),
+                    style: TextStyle(
+                      color: _isOtherUserOnline ? Colors.white70 : Colors.white60,
+                      fontSize: 12,
                     ),
+                  ),
                 ],
               ),
             ),

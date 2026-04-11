@@ -1050,6 +1050,11 @@ void main() async {
   // Initialize call state recovery manager
   final callRecoveryManager = CallStateRecoveryManager();
 
+  // Pre-warm the chat message cache so ChatDetailScreen and AdminChatScreen
+  // can read previously-cached messages synchronously on the first frame,
+  // eliminating the skeleton-loader flash when opening a chat.
+  await ChatMessageCache.instance.init();
+
   // Render the first frame as fast as possible.
   runApp(
     MultiProvider(

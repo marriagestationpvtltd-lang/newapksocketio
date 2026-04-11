@@ -142,6 +142,12 @@ class _AdminChatScreenState extends State<AdminChatScreen>
   // Swipe-to-reply offsets (keyed by message ID)
   final Map<String, double> _swipeOffsets = {};
 
+  // Message long-press action overlay state
+  bool _showMsgOverlay = false;
+  Map<String, dynamic>? _selectedMsg;
+  Offset _selectedMsgOffset = Offset.zero;
+  bool _selectedMsgIsMe = false;
+
   // Call history
   List<CallHistory> _callHistory = [];
   bool _showCallHistory = false;
@@ -1135,61 +1141,169 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     _socketService.addReaction(_chatRoomId, messageId, emoji);
   }
 
-  void _showReactionPicker(String messageId, Map<String, dynamic> reactions) {
+  // Facebook Messenger-style overlay: emoji bar near message, actions at bottom
+  Widget _buildMsgActionOverlay() {
     const emojis = ['❤️', '😂', '😮', '😢', '👍', '😡'];
+    final msgId = _selectedMsg?['messageId']?.toString() ??
+        _selectedMsg?['id']?.toString() ?? '';
+    final existingReactions = _selectedMsg?['reactions'];
+    final Map<String, dynamic> reactions = (existingReactions is Map)
+        ? Map<String, dynamic>.from(existingReactions as Map)
+        : {};
     final myReaction = reactions[_mySenderId]?.toString() ?? '';
-    showDialog(
-      context: context,
-      barrierColor: Colors.transparent,
-      barrierDismissible: true,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        insetPadding: EdgeInsets.zero,
-        child: Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(30),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.18),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: emojis.map((e) {
-                final isSelected = myReaction == e;
-                return GestureDetector(
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    _addReaction(messageId, e);
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? _accentColor.withOpacity(0.15)
-                          : Colors.transparent,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Text(
-                      e,
-                      style: TextStyle(
-                        fontSize: isSelected ? 28 : 24,
+    final msgType =
+        _selectedMsg?['messageType']?.toString() ?? _selectedMsg?['type']?.toString() ?? 'text';
+
+    final screenHeight = MediaQuery.of(context).size.height;
+    final tapY = _selectedMsgOffset.dy;
+
+    const double emojiBarHeight = 56.0;
+    const double gap = 10.0;
+    double emojiTop;
+    if (tapY - emojiBarHeight - gap < 80) {
+      emojiTop = tapY + gap;
+    } else {
+      emojiTop = tapY - emojiBarHeight - gap;
+    }
+    emojiTop = emojiTop.clamp(60.0, screenHeight - emojiBarHeight - 180.0);
+
+    return GestureDetector(
+      onTap: () {
+        if (mounted) setState(() => _showMsgOverlay = false);
+      },
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
+        width: double.infinity,
+        height: double.infinity,
+        child: ColoredBox(
+          color: Colors.black.withOpacity(0.45),
+          child: Stack(
+            children: [
+              // Emoji bar near the long-pressed message
+              Positioned(
+                top: emojiTop,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: GestureDetector(
+                    onTap: () {},
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.18),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: emojis.map((e) {
+                          final isSelected = myReaction == e;
+                          return GestureDetector(
+                            onTap: () {
+                              if (mounted) setState(() => _showMsgOverlay = false);
+                              if (msgId.isNotEmpty) _addReaction(msgId, e);
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? _accentColor.withOpacity(0.15)
+                                    : Colors.transparent,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                e,
+                                style: TextStyle(fontSize: isSelected ? 28 : 24),
+                              ),
+                            ),
+                          );
+                        }).toList(),
                       ),
                     ),
                   ),
-                );
-              }).toList(),
-            ),
+                ),
+              ),
+              // Action panel anchored at the bottom
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: () {},
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1E1E1E),
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        if (_selectedMsg != null)
+                          _overlayMenuItem(Icons.reply_rounded, "Reply", () {
+                            if (mounted) setState(() => _showMsgOverlay = false);
+                            if (_selectedMsg != null) {
+                              _setReplyTo(
+                                _selectedMsg!['messageId']?.toString() ??
+                                    _selectedMsg!['id']?.toString() ?? '',
+                                _selectedMsg!,
+                              );
+                            }
+                          }),
+                        if (_selectedMsg != null && msgType == 'text')
+                          _overlayMenuItem(Icons.copy, "Copy", () {
+                            final text = _selectedMsg?['message']?.toString() ?? '';
+                            if (text.isNotEmpty) {
+                              Clipboard.setData(ClipboardData(text: text));
+                              if (mounted) setState(() => _showMsgOverlay = false);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Message copied'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          }),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _overlayMenuItem(IconData icon, String label, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 18),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(width: 14),
+            Text(label, style: const TextStyle(color: Colors.white, fontSize: 15)),
+          ],
         ),
       ),
     );
@@ -1436,8 +1550,16 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       builder: (context, setItemState) {
         swipeOffset = _swipeOffsets[msgID] ?? 0.0;
         return GestureDetector(
-          onDoubleTap: () => _showReactionPicker(msgID, reactions),
-          onLongPress: () => _showReactionPicker(msgID, reactions),
+          onLongPressStart: (details) {
+            if (mounted) {
+              setState(() {
+                _selectedMsg = data;
+                _selectedMsgIsMe = isMe;
+                _selectedMsgOffset = details.globalPosition;
+                _showMsgOverlay = true;
+              });
+            }
+          },
           onHorizontalDragUpdate: (details) {
             if (details.delta.dx > 0) {
               setItemState(() {
@@ -3776,23 +3898,28 @@ class _AdminChatScreenState extends State<AdminChatScreen>
         ],
       ),
       body: SafeArea(
-        child: Container(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [_backgroundColor, _backgroundColor.withOpacity(0.9)],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
-          ),
-          child: Column(
-            children: [
-              Expanded(
-                child: _buildMessageList(),
+        child: Stack(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [_backgroundColor, _backgroundColor.withOpacity(0.9)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
               ),
-              if (_replyToMessage != null) _buildReplyBar(),
-              _buildInputBar(),
-            ],
-          ),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: _buildMessageList(),
+                  ),
+                  if (_replyToMessage != null) _buildReplyBar(),
+                  _buildInputBar(),
+                ],
+              ),
+            ),
+            if (_showMsgOverlay) _buildMsgActionOverlay(),
+          ],
         ),
       ),
     );

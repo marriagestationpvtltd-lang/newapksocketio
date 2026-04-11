@@ -121,6 +121,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   bool showDeletePopup = false;
   Map<String, dynamic>? selectedMessage;
   bool selectedMine = false;
+  Offset _selectedMessageOffset = Offset.zero;
 
   // Reply functionality
   Map<String, dynamic>? repliedMessage;
@@ -1896,12 +1897,13 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     }
 
     Widget messageContent = GestureDetector(
-      onLongPress: () {
+      onLongPressStart: (details) {
         if (mounted) {
           setState(() {
             selectedMessage = messageData;
             selectedMine = isMine;
             showActionOverlay = true;
+            _selectedMessageOffset = details.globalPosition;
           });
         }
       },
@@ -3115,102 +3117,141 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         : {};
     final myReaction = reactions[widget.currentUserId]?.toString() ?? '';
 
+    final screenHeight = MediaQuery.of(context).size.height;
+    final tapY = _selectedMessageOffset.dy;
+
+    // Position emoji bar: show above message if there is room, else below
+    const double emojiBarHeight = 56.0;
+    const double gap = 10.0;
+    double emojiTop;
+    if (tapY - emojiBarHeight - gap < 80) {
+      emojiTop = tapY + gap;
+    } else {
+      emojiTop = tapY - emojiBarHeight - gap;
+    }
+    emojiTop = emojiTop.clamp(60.0, screenHeight - emojiBarHeight - 220.0);
+
     return GestureDetector(
       onTap: () {
         if (mounted) {
           setState(() => showActionOverlay = false);
         }
       },
-      child: Container(
+      behavior: HitTestBehavior.opaque,
+      child: SizedBox(
         width: double.infinity,
         height: double.infinity,
-        color: Colors.black.withOpacity(0.55),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+        child: ColoredBox(
+          color: Colors.black.withOpacity(0.45),
+          child: Stack(
             children: [
-              // Emoji reaction row (Messenger-style)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.18),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: emojis.map((e) {
-                    final isSelected = myReaction == e;
-                    return GestureDetector(
-                      onTap: () {
-                        setState(() => showActionOverlay = false);
-                        if (msgId.isNotEmpty) {
-                          _socketService.addReaction(
-                              widget.chatRoomId, msgId, e);
-                        }
-                      },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        margin: const EdgeInsets.symmetric(horizontal: 4),
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? _accentColor.withOpacity(0.15)
-                              : Colors.transparent,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Text(
-                          e,
-                          style: TextStyle(
-                            fontSize: isSelected ? 28 : 24,
+              // Emoji bar positioned near the message
+              Positioned(
+                top: emojiTop,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: GestureDetector(
+                    onTap: () {}, // absorb taps so background isn't dismissed
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(30),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.18),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
                           ),
-                        ),
+                        ],
                       ),
-                    );
-                  }).toList(),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: emojis.map((e) {
+                          final isSelected = myReaction == e;
+                          return GestureDetector(
+                            onTap: () {
+                              setState(() => showActionOverlay = false);
+                              if (msgId.isNotEmpty) {
+                                _socketService.addReaction(
+                                    widget.chatRoomId, msgId, e);
+                              }
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? _accentColor.withOpacity(0.15)
+                                    : Colors.transparent,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Text(
+                                e,
+                                style: TextStyle(
+                                  fontSize: isSelected ? 28 : 24,
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 12),
-              // Message action buttons
-              Container(
-                width: 320,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E1E),
-                  borderRadius: BorderRadius.circular(22),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Reply is available for all message types
-                    if (selectedMessage != null)
-                      _menuItem(Icons.reply, "Reply", () {
-                        _setReplyMessage(selectedMessage!);
-                      }),
-                    if (selectedMessage != null &&
-                        selectedMessage!['messageType'] == 'text')
-                      _menuItem(Icons.copy, "Copy", _copyMessage),
-                    if (selectedMessage != null &&
-                        selectedMine &&
-                        selectedMessage!['messageType'] == 'text')
-                      _menuItem(Icons.edit, "Edit", () {
-                        _setEditMessage(selectedMessage!);
-                      }),
-                    _menuItem(Icons.delete, "Delete", () {
-                      if (mounted) {
-                        setState(() {
-                          showActionOverlay = false;
-                          showDeletePopup = true;
-                        });
-                      }
-                    }, isDelete: true),
-                  ],
+              // Action panel anchored at the bottom, overlapping the input area
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: () {}, // absorb taps
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF1E1E1E),
+                      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Drag handle
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        if (selectedMessage != null)
+                          _menuItem(Icons.reply, "Reply", () {
+                            _setReplyMessage(selectedMessage!);
+                          }),
+                        if (selectedMessage != null &&
+                            selectedMessage!['messageType'] == 'text')
+                          _menuItem(Icons.copy, "Copy", _copyMessage),
+                        if (selectedMessage != null &&
+                            selectedMine &&
+                            selectedMessage!['messageType'] == 'text')
+                          _menuItem(Icons.edit, "Edit", () {
+                            _setEditMessage(selectedMessage!);
+                          }),
+                        _menuItem(Icons.delete, "Delete", () {
+                          if (mounted) {
+                            setState(() {
+                              showActionOverlay = false;
+                              showDeletePopup = true;
+                            });
+                          }
+                        }, isDelete: true),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ],

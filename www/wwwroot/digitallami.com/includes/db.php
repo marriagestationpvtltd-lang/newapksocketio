@@ -3,17 +3,13 @@
  * Database connection helper for Marriage Station user-facing site.
  * Returns a PDO instance configured for the ms database.
  */
-
-define('MS_DB_HOST', 'localhost');
-define('MS_DB_NAME', 'ms');
-define('MS_DB_USER', 'ms');
-define('MS_DB_PASS', 'ms');
+require_once __DIR__ . '/../config/db.php';
 
 try {
     $pdo = new PDO(
-        'mysql:host=' . MS_DB_HOST . ';dbname=' . MS_DB_NAME . ';charset=utf8mb4',
-        MS_DB_USER,
-        MS_DB_PASS,
+        'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=utf8mb4',
+        DB_USER,
+        DB_PASS,
         [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,

@@ -1,11 +1,11 @@
 const String kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://192.168.1.5/digitallami.com',
+  defaultValue: 'http://192.168.18.214/www/wwwroot/digitallami.com',
 );
 
 const String kSocketServerBaseUrl = String.fromEnvironment(
   'SOCKET_SERVER_URL',
-  defaultValue: 'http://192.168.1.5:3001',
+  defaultValue: 'http://192.168.18.214:3001',
 );
 
 const String kApi2BaseUrl = '$kApiBaseUrl/Api2';

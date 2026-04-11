@@ -1,8 +1,18 @@
 RewriteEngine On
 
-# Handle CORS preflight requests
-RewriteCond %{REQUEST_METHOD} OPTIONS
-RewriteRule ^(.*)$ $1 [R=200,L]
+# CORS headers for Flutter Web and browser-based clients.
+# mod_headers adds CORS headers to every response when the module is available.
+<IfModule mod_headers.c>
+    Header always set Access-Control-Allow-Origin "*"
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+    Header always set Access-Control-Max-Age "3600"
+</IfModule>
+
+# OPTIONS preflight: do NOT intercept here with mod_rewrite.
+# When mod_headers is disabled (common in local XAMPP), a mod_rewrite 200/204
+# response would have no CORS headers, causing Flutter Web "Failed to fetch".
+# PHP files include shared/cors.php (via config/db.php) which handles OPTIONS.
 
 # If the requested resource exists as a file or directory, serve it
 RewriteCond %{REQUEST_FILENAME} !-f
@@ -10,10 +20,3 @@ RewriteCond %{REQUEST_FILENAME} !-d
 
 # Otherwise, route everything to index.php
 RewriteRule ^ index.php [L]
-
-# CORS headers - ADD THESE
-Header set Access-Control-Allow-Origin "*"
-Header set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-Header set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
-Header set Access-Control-Allow-Credentials "true"
-Header set Access-Control-Max-Age "3600"

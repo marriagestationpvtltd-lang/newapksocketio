@@ -1257,7 +1257,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                           ),
                         ),
                         if (_selectedMsg != null)
-                          _adminChatMenuItem(Icons.reply_rounded, "Reply", () {
+                          _overlayMenuItem(Icons.reply_rounded, "Reply", () {
                             if (mounted) setState(() => _showMsgOverlay = false);
                             if (_selectedMsg != null) {
                               _setReplyTo(
@@ -1268,7 +1268,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                             }
                           }),
                         if (_selectedMsg != null && msgType == 'text')
-                          _adminChatMenuItem(Icons.copy, "Copy", () {
+                          _overlayMenuItem(Icons.copy, "Copy", () {
                             final text = _selectedMsg?['message']?.toString() ?? '';
                             if (text.isNotEmpty) {
                               Clipboard.setData(ClipboardData(text: text));
@@ -1293,7 +1293,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
     );
   }
 
-  Widget _adminChatMenuItem(IconData icon, String label, VoidCallback onTap) {
+  Widget _overlayMenuItem(IconData icon, String label, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
       child: Container(

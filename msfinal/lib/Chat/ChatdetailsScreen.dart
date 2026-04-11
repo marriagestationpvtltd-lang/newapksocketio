@@ -175,6 +175,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   int _lastBuiltVersion = -1;
   String? _lastBuiltHighlightId;
   bool _lastBuiltIsLoadingMore = false;
+  bool _lastBuiltIsBlockedByReceiver = false;
 
   // Lazy loading variables
   bool _isLoadingMore = false;
@@ -3303,7 +3304,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             Text(
               _isBlocked
                   ? 'You have blocked this user'
-                  : 'You cannot message this user',
+                  : 'This user has blocked you',
               style: TextStyle(
                 color: Colors.red.shade400,
                 fontSize: 14,
@@ -3911,7 +3912,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     final canUseCache = _cachedMessageWidgets != null &&
         _lastBuiltVersion == _messagesCacheVersion &&
         _lastBuiltHighlightId == _highlightedMessageId &&
-        _lastBuiltIsLoadingMore == _isLoadingMore;
+        _lastBuiltIsLoadingMore == _isLoadingMore &&
+        _lastBuiltIsBlockedByReceiver == _isBlockedByReceiver;
 
     // IMPORTANT: always return the SAME widget-type hierarchy (RefreshIndicator > ListView)
     // regardless of whether we use the cache or not. Changing the widget type at the same
@@ -3947,6 +3949,37 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 valueColor: AlwaysStoppedAnimation<Color>(_accentColor),
               ),
             ),
+          ),
+        ),
+      );
+    }
+
+    // Show a prominent banner when the other user has blocked this user
+    if (_isBlockedByReceiver) {
+      messageWidgets.add(
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.red.shade50,
+            border: Border.all(color: Colors.red.shade200),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.block, color: Colors.red.shade400, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '${widget.receiverName} has blocked you. You cannot send messages or make calls.',
+                  style: TextStyle(
+                    color: Colors.red.shade700,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       );
@@ -4049,6 +4082,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     _lastBuiltVersion = _messagesCacheVersion;
     _lastBuiltHighlightId = _highlightedMessageId;
     _lastBuiltIsLoadingMore = _isLoadingMore;
+    _lastBuiltIsBlockedByReceiver = _isBlockedByReceiver;
 
     return RefreshIndicator(
       onRefresh: _refreshMessages,
@@ -4704,13 +4738,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                     ],
                   ),
                   Text(
-                    _isOtherUserOnline
-                        ? 'online'
-                        : (_otherUserLastSeen != null
-                            ? _formatLastSeen(_otherUserLastSeen!)
-                            : 'Offline'),
+                    _isBlockedByReceiver
+                        ? '—'
+                        : _isOtherUserOnline
+                            ? 'online'
+                            : (_otherUserLastSeen != null
+                                ? _formatLastSeen(_otherUserLastSeen!)
+                                : 'Offline'),
                     style: TextStyle(
-                      color: _isOtherUserOnline ? Colors.white70 : Colors.white60,
+                      color: _isOtherUserOnline && !_isBlockedByReceiver
+                          ? Colors.white70
+                          : Colors.white60,
                       fontSize: 12,
                     ),
                   ),

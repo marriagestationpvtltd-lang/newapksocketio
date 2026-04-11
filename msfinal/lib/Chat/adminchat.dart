@@ -203,7 +203,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       _cachedMessages = syncCached;
       _isFirstLoad = false;
       _streamLoading = false;
-      if (_showSuggestedMessages) _showSuggestedMessages = false;
+      _showSuggestedMessages = false;
       // Position scroll to bottom after the first frame, then unlock.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _initialScrollDone = true;

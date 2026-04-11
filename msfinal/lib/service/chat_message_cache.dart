@@ -92,7 +92,7 @@ class ChatMessageCache {
   void saveMessages(String roomId, List<Map<String, dynamic>> messages) {
     if (_prefs == null) return;
     try {
-      final toSave = messages.length > maxCachedMessages
+      final toSave = messages.length >= maxCachedMessages
           ? messages.sublist(messages.length - maxCachedMessages)
           : messages;
       final encoded = jsonEncode(toSave.map(_serialize).toList());

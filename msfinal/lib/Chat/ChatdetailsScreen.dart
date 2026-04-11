@@ -376,12 +376,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   // ── Local message cache helpers ───────────────────────────────────────────
 
-  // Maximum number of messages to persist in the local cache.
-  // Kept separate from _messagesPerPage so pagination and cache sizes can be
-  // tuned independently.
-  static const int _maxCachedMessages = 30;
-
-  /// Saves the most recent [_maxCachedMessages] messages via the singleton cache.
+  /// Saves the most recent messages via the singleton cache.
   void _saveMessagesToLocalCache() {
     ChatMessageCache.instance.saveMessages(widget.chatRoomId, _cachedMessages);
   }

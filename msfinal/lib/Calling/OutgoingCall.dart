@@ -96,6 +96,7 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
   bool _recipientOffline = false; // true when server confirmed recipient is offline
   bool _recipientBusy = false;    // true when server confirmed recipient is on another call
   bool _isSwitchingToVideo = false; // true while awaiting switch-to-video response
+  bool _navigatingToVideo = false; // true once _navigateToVideoCall has been triggered
 
   static const Duration _kConnectivityLossTimeout = Duration(seconds: 30);
   static const Duration _kOutgoingCallTimeout = Duration(seconds: 45);
@@ -797,7 +798,8 @@ class _CallScreenState extends State<CallScreen> with WidgetsBindingObserver {
   /// Called when the other party accepts the switch.  Leaves the current
   /// Agora audio channel and opens the VideoCallScreen with the same channel.
   Future<void> _navigateToVideoCall() async {
-    if (_ending) return;
+    if (_ending || _navigatingToVideo) return;
+    _navigatingToVideo = true;
     // Cancel all subscriptions so the audio call doesn't interfere with the
     // new video call.
     _callTimer?.cancel();

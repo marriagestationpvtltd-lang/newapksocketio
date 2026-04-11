@@ -118,9 +118,13 @@ class SocketService {
   // ── Connect / Disconnect ──────────────────────────────────────────────────
 
   void connect(String userId) {
-    if (_socket != null && _socket!.connected) {
-      if (_connectedUserId == userId) return;
+    if (_socket != null) {
+      // If already connected with the same user, nothing to do.
+      if (_socket!.connected && _connectedUserId == userId) return;
+      // Always disconnect the old socket (even if it is currently reconnecting)
+      // to avoid having two simultaneous connections that would duplicate events.
       _socket!.disconnect();
+      _socket = null;
     }
 
     _connectedUserId = userId;

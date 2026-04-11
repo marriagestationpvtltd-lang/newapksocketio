@@ -67,6 +67,7 @@ class _ChatWindowState extends State<ChatWindow> {
   StreamSubscription<Map<String, dynamic>>? _deletedMsgSub;
   StreamSubscription<Map<String, dynamic>>? _unsentMsgSub;
   StreamSubscription<Map<String, dynamic>>? _likedMsgSub;
+  StreamSubscription<Map<String, dynamic>>? _reactionMsgSub;
   StreamSubscription<Map<String, dynamic>>? _readMsgSub;
   StreamSubscription<Map<String, dynamic>>? _typingStartSub;
   StreamSubscription<Map<String, dynamic>>? _typingStopSub;
@@ -314,6 +315,9 @@ class _ChatWindowState extends State<ChatWindow> {
       'message': displayMessage,
       'type': msgType,
       'liked': msg['liked'] == true,
+      'reactions': (msg['reactions'] is Map)
+          ? Map<String, dynamic>.from(msg['reactions'] as Map)
+          : <String, dynamic>{},
       'seen': msg['isRead'] == true,
       'deleted': deleted,
       'unsent': msg['isUnsent'] == true,
@@ -458,6 +462,21 @@ class _ChatWindowState extends State<ChatWindow> {
         final idx = _messages.indexWhere((m) => m['messageId'] == msgId);
         if (idx >= 0) {
           _messages[idx] = {..._messages[idx], 'liked': data['liked'] == true};
+        }
+      });
+    });
+
+    _reactionMsgSub?.cancel();
+    _reactionMsgSub = _socketService.onMessageReaction.listen((data) {
+      if (!mounted) return;
+      final String msgId = data['messageId']?.toString() ?? '';
+      if (msgId.isEmpty) return;
+      final Map<String, dynamic> reactions =
+          (data['reactions'] is Map) ? Map<String, dynamic>.from(data['reactions'] as Map) : {};
+      setState(() {
+        final idx = _messages.indexWhere((m) => m['messageId'] == msgId);
+        if (idx >= 0) {
+          _messages[idx] = {..._messages[idx], 'reactions': reactions};
         }
       });
     });
@@ -2929,37 +2948,52 @@ class _ChatWindowState extends State<ChatWindow> {
                                     canMutate: canMutate,
                                   );
                                 },
-                                child: _HighlightableMessageContainer(
-                                  key: _messageKeyFor(msgId),
-                                  isHighlighted: _highlightedMessageId == msgId,
-                                  child: _buildChatBubble(
-                                    data['message'],
-                                    isSentByAdmin,
-                                    timestamp,
-                                    data['type'],
-                                    data.containsKey('profileData')
-                                        ? data['profileData']
-                                        : null,
-                                    data.containsKey('imageUrl') ? data['imageUrl'] : null,
-                                    data['seen'] == true,
-                                    data['callType']?.toString(),
-                                    data['callStatus']?.toString(),
-                                    (data['callDuration'] as num?)?.toInt() ?? 0,
-                                    msgId,
-                                    data['replyto'] is Map<String, dynamic>
-                                        ? data['replyto'] as Map<String, dynamic>
-                                        : null,
-                                    data['edited'] == true,
-                                    data['deleted'] == true,
-                                    data['unsent'] == true,
-                                    canEdit,
-                                    canMutate,
-                                    replyPayload,
-                                    data.containsKey('reportData')
-                                        ? data['reportData'] as Map<String, dynamic>
-                                        : null,
-                                  ),
-                                ),
+                                child: Builder(builder: (_) {
+                                  final Map<String, dynamic> reactions =
+                                      (data['reactions'] is Map)
+                                          ? Map<String, dynamic>.from(data['reactions'] as Map)
+                                          : {};
+                                  return Column(
+                                    crossAxisAlignment: isSentByAdmin
+                                        ? CrossAxisAlignment.end
+                                        : CrossAxisAlignment.start,
+                                    children: [
+                                      _HighlightableMessageContainer(
+                                        key: _messageKeyFor(msgId),
+                                        isHighlighted: _highlightedMessageId == msgId,
+                                        child: _buildChatBubble(
+                                          data['message'],
+                                          isSentByAdmin,
+                                          timestamp,
+                                          data['type'],
+                                          data.containsKey('profileData')
+                                              ? data['profileData']
+                                              : null,
+                                          data.containsKey('imageUrl') ? data['imageUrl'] : null,
+                                          data['seen'] == true,
+                                          data['callType']?.toString(),
+                                          data['callStatus']?.toString(),
+                                          (data['callDuration'] as num?)?.toInt() ?? 0,
+                                          msgId,
+                                          data['replyto'] is Map<String, dynamic>
+                                              ? data['replyto'] as Map<String, dynamic>
+                                              : null,
+                                          data['edited'] == true,
+                                          data['deleted'] == true,
+                                          data['unsent'] == true,
+                                          canEdit,
+                                          canMutate,
+                                          replyPayload,
+                                          data.containsKey('reportData')
+                                              ? data['reportData'] as Map<String, dynamic>
+                                              : null,
+                                        ),
+                                      ),
+                                      if (reactions.isNotEmpty)
+                                        _buildAdminReactionBadge(reactions, isSentByAdmin),
+                                    ],
+                                  );
+                                }),
                               ),
                               );
                             },
@@ -4706,6 +4740,66 @@ class _ChatWindowState extends State<ChatWindow> {
   }
 
   /// WhatsApp-style read receipt tick for admin-sent messages.
+  /// Reaction badge displayed below a message bubble.
+  Widget _buildAdminReactionBadge(Map<String, dynamic> reactions, bool isSentByMe) {
+    const kPrimary = Color(0xFFD81B60);
+    final Map<String, int> emojiCounts = {};
+    for (final emoji in reactions.values) {
+      final e = emoji.toString();
+      emojiCounts[e] = (emojiCounts[e] ?? 0) + 1;
+    }
+    if (emojiCounts.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: EdgeInsets.only(
+        top: 2,
+        left: isSentByMe ? 0 : 8,
+        right: isSentByMe ? 8 : 0,
+        bottom: 2,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment:
+            isSentByMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: emojiCounts.entries.map((entry) {
+          final count = entry.value;
+          return Container(
+            margin: const EdgeInsets.only(right: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: kPrimary.withOpacity(0.3), width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(entry.key, style: const TextStyle(fontSize: 13)),
+                if (count > 1) ...[
+                  const SizedBox(width: 3),
+                  Text(
+                    '$count',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   /// Double grey ticks = delivered (not yet read by user).
   /// Double blue ticks = read by user.
   Widget _buildSeenTick(bool seen) {
@@ -5733,25 +5827,75 @@ class _ChatWindowState extends State<ChatWindow> {
   }) {
     final String? msgType = replyPayload['type']?.toString();
     final bool isImageMsg = msgType == 'image' || msgType == 'image_gallery';
-    // For single images the URL lives in imageUrl; for galleries it's the raw
-    // JSON array stored in message by _messagePreviewText's default branch.
     final String? imagePayload = msgType == 'image'
         ? replyPayload['imageUrl']?.toString()
         : (msgType == 'image_gallery' ? replyPayload['message']?.toString() : null);
     final bool canForward = isImageMsg && imagePayload != null && imagePayload.isNotEmpty;
+
+    // Get the current chat room ID
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final String currentRoomId = AdminSocketService.chatRoomId(chatProvider.id?.toString() ?? '');
+
+    // Get current reactions for this message
+    final msgData = _messages.firstWhere(
+      (m) => m['messageId'] == messageId,
+      orElse: () => <String, dynamic>{},
+    );
+    final Map<String, dynamic> reactions = (msgData['reactions'] is Map)
+        ? Map<String, dynamic>.from(msgData['reactions'] as Map)
+        : {};
+    final String myReaction = reactions[kAdminUserId]?.toString() ?? '';
+    const emojis = ['❤️', '😂', '😮', '😢', '👍', '😡'];
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (context) {
+      builder: (ctx) {
         return Wrap(
           children: [
+            // Emoji reaction row
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: emojis.map((e) {
+                  final isSelected = myReaction == e;
+                  return GestureDetector(
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _socketService.addReaction(
+                        chatRoomId: currentRoomId,
+                        messageId: messageId,
+                        emoji: e,
+                      );
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? const Color(0xFFD81B60).withOpacity(0.15)
+                            : Colors.transparent,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        e,
+                        style: TextStyle(fontSize: isSelected ? 30 : 26),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.reply_rounded, size: 20, color: Color(0xFFD81B60)),
               title: const Text("Reply", style: TextStyle(fontSize: 14)),
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(ctx);
                 _startReply(
                   messageId,
                   replyPayload['message']?.toString() ?? '',
@@ -5766,7 +5910,7 @@ class _ChatWindowState extends State<ChatWindow> {
                 leading: const Icon(Icons.forward_rounded, size: 20, color: Color(0xFF10B981)),
                 title: const Text("Forward", style: TextStyle(fontSize: 14)),
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(ctx);
                   _forwardImage(imagePayload!, msgType ?? 'image');
                 },
               ),
@@ -5775,7 +5919,7 @@ class _ChatWindowState extends State<ChatWindow> {
                 leading: const Icon(Icons.edit, size: 20, color: Color(0xFF0EA5E9)),
                 title: const Text("Edit", style: TextStyle(fontSize: 14)),
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(ctx);
                   _startEdit(messageId, replyPayload['message']?.toString() ?? '');
                 },
               ),
@@ -5785,7 +5929,7 @@ class _ChatWindowState extends State<ChatWindow> {
                 leading: const Icon(Icons.delete, size: 20, color: Color(0xFFEF4444)),
                 title: const Text("Delete", style: TextStyle(fontSize: 14)),
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.pop(ctx);
                   _deleteMessage(messageId);
                 },
               ),
@@ -5794,7 +5938,7 @@ class _ChatWindowState extends State<ChatWindow> {
                 title: const Text("Unsend", style: TextStyle(fontSize: 14)),
                 onTap: () {
                   _unsendMessage(messageId);
-                  Navigator.pop(context);
+                  Navigator.pop(ctx);
                 },
               ),
             ],
@@ -6009,6 +6153,7 @@ class _ChatWindowState extends State<ChatWindow> {
     _deletedMsgSub?.cancel();
     _unsentMsgSub?.cancel();
     _likedMsgSub?.cancel();
+    _reactionMsgSub?.cancel();
     _readMsgSub?.cancel();
     _typingStartSub?.cancel();
     _typingStopSub?.cancel();

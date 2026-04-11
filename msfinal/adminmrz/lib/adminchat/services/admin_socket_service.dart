@@ -37,6 +37,7 @@ class AdminSocketService {
       StreamController<Map<String, dynamic>>.broadcast();
   final _messageUnsentCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _messageLikedCtrl = StreamController<Map<String, dynamic>>.broadcast();
+  final _messageReactionCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _messagesReadCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _typingStartCtrl = StreamController<Map<String, dynamic>>.broadcast();
   final _typingStopCtrl = StreamController<Map<String, dynamic>>.broadcast();
@@ -63,6 +64,7 @@ class AdminSocketService {
       _messageDeletedCtrl.stream;
   Stream<Map<String, dynamic>> get onMessageUnsent => _messageUnsentCtrl.stream;
   Stream<Map<String, dynamic>> get onMessageLiked => _messageLikedCtrl.stream;
+  Stream<Map<String, dynamic>> get onMessageReaction => _messageReactionCtrl.stream;
   Stream<Map<String, dynamic>> get onMessagesRead => _messagesReadCtrl.stream;
   Stream<Map<String, dynamic>> get onTypingStart => _typingStartCtrl.stream;
   Stream<Map<String, dynamic>> get onTypingStop => _typingStopCtrl.stream;
@@ -136,6 +138,10 @@ class AdminSocketService {
 
     _socket!.on('message_liked', (data) {
       if (data is Map) _messageLikedCtrl.add(Map<String, dynamic>.from(data));
+    });
+
+    _socket!.on('message_reaction', (data) {
+      if (data is Map) _messageReactionCtrl.add(Map<String, dynamic>.from(data));
     });
 
     _socket!.on('messages_read', (data) {
@@ -223,6 +229,7 @@ class AdminSocketService {
     _messageDeletedCtrl.close();
     _messageUnsentCtrl.close();
     _messageLikedCtrl.close();
+    _messageReactionCtrl.close();
     _messagesReadCtrl.close();
     _typingStartCtrl.close();
     _typingStopCtrl.close();
@@ -343,6 +350,14 @@ class AdminSocketService {
     _socket?.emit('toggle_like', {
       'chatRoomId': chatRoomId,
       'messageId': messageId,
+    });
+  }
+
+  void addReaction({required String chatRoomId, required String messageId, required String emoji}) {
+    _socket?.emit('add_reaction', {
+      'chatRoomId': chatRoomId,
+      'messageId': messageId,
+      'emoji': emoji,
     });
   }
 

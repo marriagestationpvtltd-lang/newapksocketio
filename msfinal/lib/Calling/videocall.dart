@@ -76,6 +76,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
   bool _isRecipientRinging = false; // true when recipient device is ringing
   bool _recipientOffline = false; // true when server confirmed recipient is offline
   bool _recipientBusy = false;     // true when server confirmed recipient is busy
+  bool _callBlocked = false;       // true when server rejected the call due to block
   bool _foregroundServiceStarted = false;
 
   Timer? _timeoutTimer;
@@ -266,14 +267,40 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
         setState(() => _isRecipientRinging = true);
         _syncOverlayState();
       }
+      // FCM fallback so the call wakes the app if it is truly backgrounded/killed.
+      if (widget.isOutgoingCall && widget.forcedChannelName == null) {
+        unawaited(NotificationService.sendVideoCallNotification(
+          recipientUserId: widget.otherUserId,
+          callerName: widget.currentUserName,
+          channelName: _channel,
+          callerId: widget.currentUserId,
+          callerUid: _localUid.toString(),
+          agoraAppId: AgoraTokenService.appId,
+          agoraCertificate: 'SERVER_ONLY',
+          chatRoomId: widget.chatRoomId,
+        ));
+      }
     });
     // Server confirmed the recipient was offline when the call was sent.
+    // Send FCM push now — this is the primary delivery path for offline users.
     _socketUserOfflineSub = SocketService().onCallUserOffline.listen((data) {
       final channelName = data['channelName']?.toString();
       if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
       if (!_callActive && !_ending && mounted) {
         setState(() => _recipientOffline = true);
         _syncOverlayState();
+      }
+      if (widget.isOutgoingCall && widget.forcedChannelName == null) {
+        unawaited(NotificationService.sendVideoCallNotification(
+          recipientUserId: widget.otherUserId,
+          callerName: widget.currentUserName,
+          channelName: _channel,
+          callerId: widget.currentUserId,
+          callerUid: _localUid.toString(),
+          agoraAppId: AgoraTokenService.appId,
+          agoraCertificate: 'SERVER_ONLY',
+          chatRoomId: widget.chatRoomId,
+        ));
       }
     });
     // Server confirmed the recipient is busy on another call.
@@ -308,6 +335,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
     _socketBlockedSub = SocketService().onCallBlocked.listen((data) {
       final channelName = data['channelName']?.toString();
       if (_channel.isNotEmpty && channelName != null && channelName.isNotEmpty && channelName != _channel) return;
+      _callBlocked = true;
       if (!_ending && mounted) {
         unawaited(_stopRingtone());
         _endCall();
@@ -533,7 +561,10 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
       // ✅ SEND NOTIFICATION AFTER CHANNEL EXISTS
       // Skip invite/notification when this is an audio→video upgrade (forcedChannelName set).
       if (widget.isOutgoingCall && widget.forcedChannelName == null) {
-        // Socket.IO (instant delivery for online users)
+        // Socket.IO (instant delivery for online users).
+        // FCM push is sent later once the server confirms the call is allowed
+        // (see _socketRingingSub / _socketUserOfflineSub handlers below).
+        // This prevents sending a push notification to a blocked user.
         SocketService().emitCallInvite(
           recipientId: widget.otherUserId,
           callerId: widget.currentUserId,
@@ -542,17 +573,6 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
           channelName: _channel,
           callerUid: _localUid.toString(),
           callType: 'video',
-          chatRoomId: widget.chatRoomId,
-        );
-        // FCM (fallback for offline users)
-        await NotificationService.sendVideoCallNotification(
-          recipientUserId: widget.otherUserId,
-          callerName: widget.currentUserName,
-          channelName: _channel,
-          callerId: widget.currentUserId,
-          callerUid: _localUid.toString(),
-          agoraAppId: AgoraTokenService.appId,
-          agoraCertificate: 'SERVER_ONLY',
           chatRoomId: widget.chatRoomId,
         );
 
@@ -802,7 +822,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> with WidgetsBindingOb
         duration: _duration.inSeconds,
         channelName: _channel,
       ));
-    } else if (!_callActive && !_recipientBusy && widget.isOutgoingCall && _channel.isNotEmpty) {
+    } else if (!_callActive && !_recipientBusy && !_callBlocked && widget.isOutgoingCall && _channel.isNotEmpty) {
       SocketService().emitCallCancel(
         recipientId: widget.otherUserId,
         callerId: widget.currentUserId,

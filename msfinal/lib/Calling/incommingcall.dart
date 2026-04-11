@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart'
     if (dart.library.html) 'package:ms2026/utils/web_local_notifications_stub.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:ms2026/config/app_endpoints.dart';
 import '../Chat/ChatlistScreen.dart';
 import '../Chat/call_overlay_manager.dart';
 import '../navigation/app_navigation.dart';
@@ -284,7 +285,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       if (userId.isEmpty) return false; // unknown user — allow
 
       final response = await http.get(
-        Uri.https('digitallami.com', '/Api2/masterdata.php', {'userid': userId}),
+        Uri.parse('$kApi2BaseUrl/masterdata.php?userid=$userId'),
       ).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);

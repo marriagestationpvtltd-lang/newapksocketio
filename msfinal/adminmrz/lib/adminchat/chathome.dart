@@ -3457,6 +3457,7 @@ class _ChatWindowState extends State<ChatWindow> {
     const kPrimary = Color(0xFFD81B60);
     const kText = Color(0xFF1E293B);
     const kMuted = Color(0xFF64748B);
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
     final replyPreview = _buildReplyPreview(
       replyTo: replyTo,
       isSentByMe: isSentByMe,
@@ -4138,9 +4139,74 @@ class _ChatWindowState extends State<ChatWindow> {
       final reportReason = rd['reportReason']?.toString() ?? '';
       final reportedUserName = rd['reportedUserName']?.toString() ?? '';
       final reportedUserId = rd['reportedUserId']?.toString() ?? '';
-      final initials = reportedUserName.isNotEmpty
-          ? reportedUserName.trim().split(' ').map((w) => w.isEmpty ? '' : w[0].toUpperCase()).take(2).join()
+      final reporterName = rd['reporterName']?.toString().isNotEmpty == true
+          ? rd['reporterName']!.toString()
+          : (chatProvider.namee ?? 'Unknown');
+      final reporterId = rd['reporterId']?.toString().isNotEmpty == true
+          ? rd['reporterId']!.toString()
+          : (chatProvider.id?.toString() ?? '');
+      final reporterImage = rd['reporterImage']?.toString() ?? '';
+      final customMessage = rd['reportMessage']?.toString() ?? '';
+
+      String _initials(String name) => name.isNotEmpty
+          ? name.trim().split(' ').map((w) => w.isEmpty ? '' : w[0].toUpperCase()).take(2).join()
           : '?';
+
+      Widget _userRow({
+        required String name,
+        required String userId,
+        String imageUrl = '',
+        required Color avatarColor,
+        required Color nameColor,
+        required Color idColor,
+      }) {
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: avatarColor,
+              backgroundImage: imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+              child: imageUrl.isEmpty
+                  ? Text(
+                      _initials(name),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (name.isNotEmpty)
+                    Text(
+                      name,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: nameColor,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  if (userId.isNotEmpty)
+                    Text(
+                      'ID: $userId',
+                      style: TextStyle(fontSize: 10, color: idColor),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        );
+      }
+
+      final formattedTs = DateFormat('MMM d, yyyy • h:mm a').format(timestamp);
 
       final reportBubble = Column(
         crossAxisAlignment: isSentByMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
@@ -4166,136 +4232,365 @@ class _ChatWindowState extends State<ChatWindow> {
             )
           else
             Container(
-              width: MediaQuery.of(context).size.width * 0.72,
+              width: MediaQuery.of(context).size.width * 0.75,
               margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFFDE7),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFF9A825), width: 1.2),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFFFCDD2), width: 1.2),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.amber.withOpacity(0.18),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
+                    color: Colors.red.withOpacity(0.10),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Header
+                  // ── Red header ──────────────────────────────────────────
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: const BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [Color(0xFFF9A825), Color(0xFFF57F17)],
+                        colors: [Color(0xFFD32F2F), Color(0xFFB71C1C)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
                       borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(15),
-                        topRight: Radius.circular(15),
+                        topLeft: Radius.circular(13),
+                        topRight: Radius.circular(13),
                       ),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.flag_rounded, color: Colors.white, size: 15),
+                        const Icon(Icons.warning_rounded, color: Colors.white, size: 16),
                         const SizedBox(width: 6),
-                        const Text(
-                          'PROFILE REPORTED',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Reported user card
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        CircleAvatar(
-                          radius: 22,
-                          backgroundColor: const Color(0xFFF9A825),
+                        const Expanded(
                           child: Text(
-                            initials,
-                            style: const TextStyle(
+                            'USER REPORTED',
+                            style: TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
-                              fontSize: 15,
+                              fontSize: 12,
+                              letterSpacing: 0.8,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        // Status badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.25),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (reportedUserName.isNotEmpty)
-                                Text(
-                                  reportedUserName,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: Color(0xFF4A3000),
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                              Icon(Icons.circle, color: Color(0xFFFFEB3B), size: 7),
+                              SizedBox(width: 4),
+                              Text(
+                                'Pending',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                              if (reportedUserId.isNotEmpty)
-                                Text(
-                                  'User ID: $reportedUserId',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
+                              ),
                             ],
                           ),
                         ),
                       ],
                     ),
                   ),
-                  // Divider
+
+                  // ── Reporter section ─────────────────────────────────────
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Divider(color: const Color(0xFFF9A825).withOpacity(0.4), height: 1),
-                  ),
-                  // Reason
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'REPORT REASON',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFFF57F17),
-                            letterSpacing: 0.6,
+                        Row(
+                          children: [
+                            const Icon(Icons.person_outline, size: 11, color: Color(0xFF757575)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'REPORTED BY',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.grey.shade600,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        _userRow(
+                          name: reporterName,
+                          userId: reporterId,
+                          imageUrl: reporterImage,
+                          avatarColor: const Color(0xFF1565C0),
+                          nameColor: const Color(0xFF0D47A1),
+                          idColor: Colors.grey.shade500,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Divider(color: Colors.grey.shade200, height: 12),
+                  ),
+
+                  // ── Reported user section ────────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.flag_outlined, size: 11, color: Color(0xFFD32F2F)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'REPORTED USER',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.red.shade700,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        _userRow(
+                          name: reportedUserName.isNotEmpty ? reportedUserName : 'Unknown',
+                          userId: reportedUserId,
+                          avatarColor: const Color(0xFFD32F2F),
+                          nameColor: const Color(0xFF7F0000),
+                          idColor: Colors.grey.shade500,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Divider(color: Colors.grey.shade200, height: 12),
+                  ),
+
+                  // ── Report reason ────────────────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.report_gmailerrorred_outlined, size: 11, color: Color(0xFFE65100)),
+                            const SizedBox(width: 4),
+                            Text(
+                              'REASON',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.orange.shade800,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF3E0),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            reportReason.isNotEmpty ? reportReason : 'No reason provided',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF4E342E),
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 3),
+                        if (customMessage.isNotEmpty &&
+                            !customMessage.startsWith('I have reported')) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            customMessage,
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+
+                  // ── Timestamp ────────────────────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
+                    child: Row(
+                      children: [
+                        Icon(Icons.access_time_rounded, size: 11, color: Colors.grey.shade500),
+                        const SizedBox(width: 4),
                         Text(
-                          reportReason.isNotEmpty ? reportReason : 'No reason provided',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF4A3000),
+                          formattedTs,
+                          style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Divider(color: Colors.grey.shade200, height: 8),
+                  ),
+
+                  // ── Action buttons ───────────────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 4, 10, 10),
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        // View Profile
+                        if (reportedUserId.isNotEmpty)
+                          SizedBox(
+                            height: 30,
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                final uid = int.tryParse(reportedUserId);
+                                if (uid != null) {
+                                  kIsWeb
+                                      ? _openProfileInNewTab(context, uid)
+                                      : _navigateToProfile(context, uid);
+                                }
+                              },
+                              icon: const Icon(Icons.person_search_rounded, size: 13),
+                              label: const Text('View Profile', style: TextStyle(fontSize: 11)),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF1565C0),
+                                side: const BorderSide(color: Color(0xFF1565C0), width: 1),
+                                padding: const EdgeInsets.symmetric(horizontal: 10),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              ),
+                            ),
+                          ),
+                        // Take Action
+                        SizedBox(
+                          height: 30,
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              showModalBottomSheet<void>(
+                                context: context,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                                ),
+                                builder: (_) => Padding(
+                                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Take Action',
+                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                                      ),
+                                      if (reportedUserName.isNotEmpty)
+                                        Text(
+                                          'Against: $reportedUserName',
+                                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                        ),
+                                      const SizedBox(height: 12),
+                                      _ActionTile(
+                                        icon: Icons.notifications_off_outlined,
+                                        color: Colors.orange,
+                                        label: 'Warn User',
+                                        onTap: () {
+                                          Navigator.pop(context);
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Warning sent to $reportedUserName'),
+                                              backgroundColor: Colors.orange,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                      _ActionTile(
+                                        icon: Icons.block_rounded,
+                                        color: Colors.red,
+                                        label: 'Ban User',
+                                        onTap: () {
+                                          Navigator.pop(context);
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('$reportedUserName has been banned'),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                      _ActionTile(
+                                        icon: Icons.pause_circle_outline_rounded,
+                                        color: Colors.deepOrange,
+                                        label: 'Suspend User',
+                                        onTap: () {
+                                          Navigator.pop(context);
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('$reportedUserName has been suspended'),
+                                              backgroundColor: Colors.deepOrange,
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.gavel_rounded, size: 13),
+                            label: const Text('Take Action', style: TextStyle(fontSize: 11)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFD32F2F),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              elevation: 0,
+                            ),
+                          ),
+                        ),
+                        // Ignore
+                        SizedBox(
+                          height: 30,
+                          child: TextButton.icon(
+                            onPressed: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Report marked as ignored'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
+                            },
+                            icon: Icon(Icons.close_rounded, size: 13, color: Colors.grey.shade600),
+                            label: Text(
+                              'Ignore',
+                              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                            ),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  footer(),
-                  const SizedBox(height: 4),
                 ],
               ),
             ),
@@ -7647,6 +7942,39 @@ class _ForwardUserPickerDialogState extends State<_ForwardUserPickerDialog> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// A compact action tile used in the "Take Action" bottom sheet of report cards.
+class _ActionTile extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String label;
+  final VoidCallback onTap;
+
+  const _ActionTile({
+    required this.icon,
+    required this.color,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        radius: 18,
+        backgroundColor: color.withOpacity(0.12),
+        child: Icon(icon, color: color, size: 18),
+      ),
+      title: Text(
+        label,
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: color),
+      ),
+      onTap: onTap,
     );
   }
 }

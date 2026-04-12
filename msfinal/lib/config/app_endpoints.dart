@@ -20,3 +20,7 @@ const String kApi2BaseUrl = '$kApiBaseUrl/Api2';
 const String kApi3BaseUrl = '$kApiBaseUrl/Api3';
 const String kApi9BaseUrl = '$kApiBaseUrl/api9';
 const String kRequestBaseUrl = '$kApiBaseUrl/request';
+const String kPaymentBaseUrl = String.fromEnvironment(
+  'PAYMENT_BASE_URL',
+  defaultValue: 'https://react.marriagestation.com.np',
+);

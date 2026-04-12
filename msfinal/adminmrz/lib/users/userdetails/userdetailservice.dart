@@ -16,11 +16,12 @@ class UserDetailsService {
 
   Future<UserDetailsResponse> getUserDetails(int userId, int myId) async {
     try {
+      final token = await _getToken();
       final response = await http.get(
-        Uri.parse('$_baseUrl/other_profile.php?userid=$userId&myid=$myId'),
+        Uri.parse('$_adminBaseUrl/get_user_profile.php?userid=$userId'),
         headers: {
-          'Content-Type': 'application/json',
           'Accept': 'application/json',
+          if (token != null) 'Authorization': token,
         },
       );
 

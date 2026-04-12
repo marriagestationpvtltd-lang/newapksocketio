@@ -1,9 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 header("Content-Type: application/json");
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
 
 $servername = DB_HOST;
 $username = DB_USER;

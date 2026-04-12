@@ -4,9 +4,6 @@ require_once __DIR__ . '/../../config/db.php';
     ini_set('display_errors', 0);
 
 header('Content-Type: application/json');
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST");
-header("Access-Control-Allow-Headers: Content-Type");
 
 // Database connection
 $host = DB_HOST;

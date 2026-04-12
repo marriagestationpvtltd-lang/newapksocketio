@@ -2,7 +2,6 @@
 
 require_once __DIR__ . '/../config/db.php';
 header("Content-Type: application/json");
-header("Access-Control-Allow-Origin: *");
 
 // DB Config
 $host = DB_HOST;

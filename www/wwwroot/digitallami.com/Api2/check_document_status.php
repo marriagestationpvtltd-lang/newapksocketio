@@ -1,9 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
-header('Access-Control-Allow-Headers: Content-Type');
 
 // Database configuration - Update these with your actual credentials
 $host = 'localhost';
@@ -19,10 +16,6 @@ try {
 }
 
 // Handle preflight requests
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
 
 // Check request method
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

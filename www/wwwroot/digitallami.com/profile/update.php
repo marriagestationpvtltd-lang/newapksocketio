@@ -1,9 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
 header("Content-Type: application/json; charset=UTF-8");
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST");
-header("Access-Control-Allow-Headers: Content-Type");
 
 // Database connection
 $host = DB_HOST;

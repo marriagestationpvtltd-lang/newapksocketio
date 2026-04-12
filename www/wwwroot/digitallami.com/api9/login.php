@@ -81,8 +81,13 @@ try {
     ]);
 
 } catch (PDOException $e) {
-    error_log('api9/login.php DB error [SQLSTATE ' . $e->getCode() . ']');
-    response(false, 'Database error. Check server logs.', [], 500);
+    $sqlstate = $e->getCode();
+    error_log('api9/login.php DB error [SQLSTATE ' . $sqlstate . ']: ' . $e->getMessage());
+    // SQLSTATE 42S02 = table not found – hint the admin to run the migration.
+    $hint = ($sqlstate === '42S02')
+        ? 'The admins table is missing. Run migrations/001_create_admins_table.sql on the ms database.'
+        : 'Database error. Check server logs.';
+    response(false, $hint, [], 500);
 } catch (Exception $e) {
     error_log('api9/login.php Exception: ' . $e->getMessage());
     response(false, 'Server error', [], 500);

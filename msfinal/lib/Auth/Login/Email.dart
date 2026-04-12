@@ -112,7 +112,8 @@ class _PrefilledEmailScreenState extends State<PrefilledEmailScreen> with Single
       );
       try {
         return jsonDecode(response.body);
-      } catch (_) {
+      } catch (parseError) {
+        debugPrint('Login response parse error (status ${response.statusCode}): $parseError');
         return null;
       }
     } catch (e) {

@@ -109,6 +109,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   final SocketService _socketService = SocketService();
   final Uuid _uuid = Uuid();
 
+  static const String _kUnsentPlaceholder = 'This message was unsent.';
+
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _messageFocusNode = FocusNode();
@@ -197,6 +199,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   StreamSubscription? _messagesSubscription;
   StreamSubscription? _messageEditedSubscription;
   StreamSubscription? _messageDeletedSubscription;
+  StreamSubscription? _messageUnsentSubscription;
   StreamSubscription? _messageReactionSubscription;
 
   // Incoming-message debounce: buffer rapid socket events and flush them in a
@@ -514,6 +517,25 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
       if (idx >= 0) {
         setState(() {
           _cachedMessages[idx] = {..._cachedMessages[idx], 'reactions': reactions};
+          _messagesCacheVersion++;
+        });
+        _saveMessagesToLocalCache();
+      }
+    });
+
+    _messageUnsentSubscription?.cancel();
+    _messageUnsentSubscription = _socketService.onMessageUnsent.listen((data) {
+      if (!mounted) return;
+      if (data['chatRoomId']?.toString() != widget.chatRoomId) return;
+      final msgId = data['messageId']?.toString();
+      final idx = _cachedMessages.indexWhere((m) => m['messageId']?.toString() == msgId);
+      if (idx >= 0) {
+        setState(() {
+          _cachedMessages[idx] = {
+            ..._cachedMessages[idx],
+            'isUnsent': true,
+            'message': _kUnsentPlaceholder,
+          };
           _messagesCacheVersion++;
         });
         _saveMessagesToLocalCache();
@@ -859,6 +881,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     _incomingMessageDebounce?.cancel();
     _messageEditedSubscription?.cancel();
     _messageDeletedSubscription?.cancel();
+    _messageUnsentSubscription?.cancel();
     _messageReactionSubscription?.cancel();
     _otherUserStatusSub?.cancel();
     _callHistorySubscription?.cancel();
@@ -1421,6 +1444,47 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     }
   }
 
+  Future<void> _unsendMessage() async {
+    if (selectedMessage == null) return;
+    final messageId = selectedMessage!['messageId']?.toString() ?? '';
+    if (messageId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to unsend: message ID not found.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    try {
+      _socketService.unsendMessage(
+        chatRoomId: widget.chatRoomId,
+        messageId: messageId,
+        userId: widget.currentUserId,
+      );
+      if (mounted) {
+        setState(() {
+          showActionOverlay = false;
+          selectedMessage = null;
+        });
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Message unsent'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      print('Error unsending message: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to unsend message. Please try again.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   // REPLY FUNCTIONALITY
   void _setReplyMessage(Map<String, dynamic> message) {
     if (mounted) {
@@ -1802,7 +1866,40 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
     required Map<String, dynamic>? repliedTo,
     required bool isEdited,
     bool isDeleted = false,
+    bool isUnsent = false,
   }) {
+    // Show a "This message was unsent" placeholder
+    if (isUnsent) {
+      return Row(
+        mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 3, horizontal: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade300, width: 1),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.undo, size: 14, color: Colors.grey.shade500),
+                const SizedBox(width: 6),
+                Text(
+                  _kUnsentPlaceholder,
+                  style: TextStyle(
+                    color: Colors.grey.shade500,
+                    fontSize: 14,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
     // Show a WhatsApp-style "This message was deleted" placeholder
     if (isDeleted) {
       return Row(
@@ -3242,6 +3339,11 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                           _menuItem(Icons.edit, "Edit", () {
                             _setEditMessage(selectedMessage!);
                           }),
+                        if (selectedMessage != null &&
+                            selectedMine &&
+                            selectedMessage!['isUnsent'] != true)
+                          _menuItem(Icons.undo, "Unsend", _unsendMessage,
+                              isDelete: true),
                         _menuItem(Icons.delete, "Delete", () {
                           if (mounted) {
                             setState(() {
@@ -4111,6 +4213,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         } else {
           final isMine = data['senderId'] == widget.currentUserId;
           final isDeletedForEveryone = data['deletedForEveryone'] == true;
+          final isUnsent = data['isUnsent'] == true;
           messageWidgets.add(_messageBubble(
             isMine: isMine,
             text: data['message'],
@@ -4123,6 +4226,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
             repliedTo: data['repliedTo'],
             isEdited: data['isEdited'] ?? false,
             isDeleted: isDeletedForEveryone,
+            isUnsent: isUnsent,
           ));
         }
       }

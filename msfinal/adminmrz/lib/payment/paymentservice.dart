@@ -4,13 +4,11 @@ import 'package:http/http.dart' as http;
 import 'package:adminmrz/config/app_endpoints.dart';
 
 class PaymentService {
-  static const String _baseUrl = '${kAdminApiBaseUrl}/api9';
-
   // Get payment history
   Future<PaymentHistoryResponse> getPaymentHistory() async {
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/get_payments.php'),
+        Uri.parse('${AdminAppConfig.api9PaymentBase}/get_payments.php'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -51,7 +49,7 @@ class PaymentService {
         params['status'] = status;
       }
 
-      final uri = Uri.parse('$_baseUrl/get_payments.php').replace(
+      final uri = Uri.parse('${AdminAppConfig.api9PaymentBase}/get_payments.php').replace(
         queryParameters: params.isNotEmpty ? params : null,
       );
 

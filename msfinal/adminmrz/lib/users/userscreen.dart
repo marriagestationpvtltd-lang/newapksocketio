@@ -91,7 +91,7 @@ class _UsersPageState extends State<UsersPage> {
   /// server-relative path (e.g. "/uploads/photo.jpg").  The chat section uses
   /// ${kAdminApiBaseUrl}/get.php which returns full URLs; the admin API
   /// may return relative paths – we handle both here.
-  static const _kImgBase = '${kAdminApiBaseUrl}';
+  static const _kImgBase = AdminAppConfig.imageBase;
 
   String? _normaliseImageUrl(String? raw) {
     if (raw == null || raw.isEmpty || raw == 'null') return null;

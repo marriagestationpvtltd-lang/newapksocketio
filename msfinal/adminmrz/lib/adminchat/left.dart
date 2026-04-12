@@ -150,7 +150,7 @@ class _ChatSidebarState extends State<ChatSidebar> {
         queryParams['search'] = _searchQuery;
       }
 
-      final uri = Uri.parse('${kAdminApiBaseUrl}/get.php')
+      final uri = Uri.parse(AdminAppConfig.getUsers)
           .replace(queryParameters: queryParams);
       final response = await http.get(uri);
 
@@ -366,7 +366,7 @@ class _ChatSidebarState extends State<ChatSidebar> {
     if (_fetchingUserIds.contains(userId)) return;
     _fetchingUserIds.add(userId);
     try {
-      final uri = Uri.parse('${kAdminApiBaseUrl}/get.php')
+      final uri = Uri.parse(AdminAppConfig.getUsers)
           .replace(queryParameters: {'userId': userId});
       final response = await http.get(uri);
       if (response.statusCode == 200 && mounted) {

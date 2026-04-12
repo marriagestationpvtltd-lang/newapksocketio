@@ -8,7 +8,7 @@ import 'package:adminmrz/config/app_endpoints.dart';
 /// URL of the Node.js Socket.IO server.
 /// ⚠️  Replace this with your actual deployed server URL before building.
 /// Example: 'https://socket.yourserver.com:3001'
-const String kAdminSocketUrl = kAdminSocketBaseUrl;
+const String kAdminSocketUrl = AdminAppConfig.socketUrl;
 
 /// Admin user ID — always '1'.
 const String kAdminUserId = '1';

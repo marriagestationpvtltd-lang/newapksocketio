@@ -1519,7 +1519,7 @@ class _ChatWindowState extends State<ChatWindow> {
 
     try {
       final response = await http.get(
-          Uri.parse('${kAdminApiBaseUrl}/get_match_details.php?user_id=${chatProvider.id}')
+          Uri.parse('${AdminAppConfig.getMatchDetails}?user_id=${chatProvider.id}')
       );
 
       if (response.statusCode == 200) {
@@ -2201,7 +2201,7 @@ class _ChatWindowState extends State<ChatWindow> {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
       final response = await http.post(
-        Uri.parse('$kAdminApi2BaseUrl/getusers.php'),
+        Uri.parse(AdminAppConfig.getUsers2),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'access_token': token}),
       );
@@ -4064,7 +4064,7 @@ class _ChatWindowState extends State<ChatWindow> {
                           children: [
                             Expanded(
                               child: GestureDetector(
-                                onTap: () => openUrl("${kAdminApiBaseUrl}/profile.php?id=${pId ?? ''}"),
+                                onTap: () => openUrl("${AdminAppConfig.userProfile}?id=${pId ?? ''}"),
                                 child: Container(
                                   height: 32,
                                   decoration: BoxDecoration(

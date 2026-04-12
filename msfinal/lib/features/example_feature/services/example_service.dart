@@ -1,17 +1,13 @@
-/// Example Service - Template for API Integration
-///
-/// Shows proper error handling, timeout configuration,
-/// and response parsing patterns.
-
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
 import 'package:http/http.dart' as http;
 import '../../../core/api/api_response.dart';
+import '../../../config/app_endpoints.dart';
 import '../models/example_model.dart';
 
 class ExampleService {
-  final String baseUrl = 'YOUR_API_BASE_URL/api';
+  final String baseUrl = '$kApiBaseUrl/api';
   final Duration timeout = const Duration(seconds: 30);
 
   /// Fetch list of items

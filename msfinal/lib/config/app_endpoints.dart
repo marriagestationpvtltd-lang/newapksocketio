@@ -49,4 +49,5 @@ const String kPaymentBaseUrl = String.fromEnvironment(
 const String kApi2BaseUrl = '$kApiBaseUrl/Api2';
 const String kApi3BaseUrl = '$kApiBaseUrl/Api3';
 const String kApi9BaseUrl = '$kApiBaseUrl/api9';
+const String kApi19BaseUrl = '$kApiBaseUrl/api19';
 const String kRequestBaseUrl = '$kApiBaseUrl/request';

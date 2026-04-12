@@ -124,9 +124,12 @@ try {
     
     // Check if expires_at column exists, if not, add it
     $checkColumn = $mysqli->query("SHOW COLUMNS FROM user_tokens LIKE 'expires_at'");
-    if ($checkColumn !== false && $checkColumn->num_rows === 0) {
-        // Add expires_at column
-        $mysqli->query("ALTER TABLE user_tokens ADD COLUMN expires_at DATETIME NULL");
+    if ($checkColumn !== false) {
+        if ($checkColumn->num_rows === 0) {
+            // Add expires_at column
+            $mysqli->query("ALTER TABLE user_tokens ADD COLUMN expires_at DATETIME NULL");
+        }
+        $checkColumn->free();
     }
     
     // Delete old tokens (older than 30 days)
@@ -166,8 +169,11 @@ try {
     
     // 4) Update last login time (add column if needed)
     $checkLastLogin = $mysqli->query("SHOW COLUMNS FROM users LIKE 'last_login'");
-    if ($checkLastLogin !== false && $checkLastLogin->num_rows === 0) {
-        $mysqli->query("ALTER TABLE users ADD COLUMN last_login DATETIME NULL");
+    if ($checkLastLogin !== false) {
+        if ($checkLastLogin->num_rows === 0) {
+            $mysqli->query("ALTER TABLE users ADD COLUMN last_login DATETIME NULL");
+        }
+        $checkLastLogin->free();
     }
     
     $updateLogin = $mysqli->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");

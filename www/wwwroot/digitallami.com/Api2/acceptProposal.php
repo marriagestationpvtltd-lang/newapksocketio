@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 header("Content-Type: application/json");
 
 require_once __DIR__ . '/../shared/activity_logger.php';
@@ -26,7 +27,7 @@ try {
     $checkStmt = $conn->prepare($checkSql);
     $checkStmt->bind_param("i", $proposalId);
     $checkStmt->execute();
-    $checkResult = $checkStmt->get_result();
+    $checkResult = stmt_get_result($checkStmt);
 
     if ($checkResult->num_rows === 0) {
         echo json_encode(["success" => false, "message" => "Proposal not found or already processed"]);
@@ -50,7 +51,7 @@ try {
         $senderStmt = $conn->prepare($senderSql);
         $senderStmt->bind_param("i", $proposalId);
         $senderStmt->execute();
-        $senderResult = $senderStmt->get_result();
+        $senderResult = stmt_get_result($senderStmt);
         
         if ($senderResult->num_rows > 0) {
             $senderData = $senderResult->fetch_assoc();

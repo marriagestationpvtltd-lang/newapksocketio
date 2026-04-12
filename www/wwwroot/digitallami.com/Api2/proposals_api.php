@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 // Turn off error reporting to avoid HTML output
 error_reporting(0);
 ini_set('display_errors', 0);
@@ -112,7 +113,7 @@ try {
     }
 
     $stmt->execute();
-    $result = $stmt->get_result();
+    $result = stmt_get_result($stmt);
     if ($result === false) {
         error_log('proposals_api.php stmt error: ' . $stmt->error);
         throw new Exception("Failed to fetch proposals");

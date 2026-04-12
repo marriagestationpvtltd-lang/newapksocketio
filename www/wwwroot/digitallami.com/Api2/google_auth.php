@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 // google_auth_mobile.php - Simplified for mobile app
 header('Content-Type: application/json; charset=utf-8');
 
@@ -65,7 +66,7 @@ try {
     
     $stmt->bind_param('s', $input['email']);
     $stmt->execute();
-    $result = $stmt->get_result();
+    $result = stmt_get_result($stmt);
     
     if ($result->num_rows > 0) {
         // User exists - LOGIN
@@ -151,7 +152,7 @@ try {
         
         $stmt->bind_param('i', $userId);
         $stmt->execute();
-        $result = $stmt->get_result();
+        $result = stmt_get_result($stmt);
         $user = $result->fetch_assoc();
         $stmt->close();
     }

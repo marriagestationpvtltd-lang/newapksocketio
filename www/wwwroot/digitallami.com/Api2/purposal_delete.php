@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 header("Content-Type: application/json");
 
 // DB CONNECTION
@@ -32,7 +33,7 @@ $stmt_check = $conn->prepare("SELECT id FROM proposals
               AND status IN ('pending','rejected')");
 $stmt_check->bind_param("iii", $proposal_id, $user_id, $user_id);
 $stmt_check->execute();
-$result = $stmt_check->get_result();
+$result = stmt_get_result($stmt_check);
 $stmt_check->close();
 
 if ($result->num_rows == 0) {

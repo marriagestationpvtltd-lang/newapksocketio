@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 header('Content-Type: application/json');
 
 // Database configuration
@@ -35,7 +36,7 @@ $checkSql = "SELECT userid FROM userpersonaldetail WHERE userid = ?";
 $stmt = $conn->prepare($checkSql);
 $stmt->bind_param("i", $userid);
 $stmt->execute();
-$result = $stmt->get_result();
+$result = stmt_get_result($stmt);
 
 if ($result->num_rows > 0) {
     // Update existing record

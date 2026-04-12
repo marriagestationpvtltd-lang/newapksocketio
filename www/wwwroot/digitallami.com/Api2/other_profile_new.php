@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 header('Content-Type: application/json');
 
 $base_url = APP_API2_BASE_URL;
@@ -37,7 +38,7 @@ $current_plan = "free";
 $planStmt = $conn->prepare("SELECT usertype FROM users WHERE id=?");
 $planStmt->bind_param("i",$myid);
 $planStmt->execute();
-$planRes = $planStmt->get_result();
+$planRes = stmt_get_result($planStmt);
 if($planRes->num_rows>0){
     $p = $planRes->fetch_assoc();
     if($p['usertype']=="paid") $current_plan="paid";
@@ -61,7 +62,7 @@ ORDER BY id DESC LIMIT 1
 ");
 $photoStmt->bind_param("iiii",$myid,$userid,$userid,$myid);
 $photoStmt->execute();
-$photoRes=$photoStmt->get_result();
+$photoRes=stmt_get_result($photoStmt);
 
 if($photoRes->num_rows>0){
     $photoRow=$photoRes->fetch_assoc();
@@ -96,7 +97,7 @@ ORDER BY id DESC LIMIT 1
 ");
 $chatStmt->bind_param("iiii",$myid,$userid,$userid,$myid);
 $chatStmt->execute();
-$chatRes=$chatStmt->get_result();
+$chatRes=stmt_get_result($chatStmt);
 
 if($chatRes->num_rows>0){
     $chatRow=$chatRes->fetch_assoc();
@@ -184,7 +185,7 @@ WHERE u.id=?";
 $stmt=$conn->prepare($sql);
 $stmt->bind_param("i",$userid);
 $stmt->execute();
-$res=$stmt->get_result();
+$res=stmt_get_result($stmt);
 
 if($res->num_rows==0){
     echo json_encode(["status"=>"error","message"=>"User not found"]);
@@ -213,7 +214,7 @@ WHERE u.id=?
 ");
 $currentUserStmt->bind_param("i", $myid);
 $currentUserStmt->execute();
-$currentUser = $currentUserStmt->get_result()->fetch_assoc();
+$currentUser = stmt_get_result($currentUserStmt)->fetch_assoc();
 $currentUserStmt->close();
 
 function age($dob){
@@ -243,7 +244,7 @@ if($can_view_photo){
  $g=$conn->prepare("SELECT id,imageurl,status,reject_reason FROM user_gallery WHERE userid=? AND status='approved'");
  $g->bind_param("i",$userid);
  $g->execute();
- $gr=$g->get_result();
+ $gr=stmt_get_result($g);
  while($img=$gr->fetch_assoc()){
   $gallery[]=[
    "id"=>$img['id'],

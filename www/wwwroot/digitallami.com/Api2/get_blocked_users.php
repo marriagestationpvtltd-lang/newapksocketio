@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 header('Content-Type: application/json');
 
 $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
@@ -21,7 +22,7 @@ $stmt = $conn->prepare("
 ");
 $stmt->bind_param("i", $myId);
 $stmt->execute();
-$result = $stmt->get_result();
+$result = stmt_get_result($stmt);
 
 $users = [];
 while ($row = $result->fetch_assoc()) {

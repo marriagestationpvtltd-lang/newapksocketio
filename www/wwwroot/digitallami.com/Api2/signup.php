@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 header('Content-Type: application/json; charset=utf-8');
 
 // Suppress PHP notices/warnings so they never corrupt the JSON response.
@@ -170,7 +171,7 @@ try {
     if (!$stmt) throw new Exception("Prepare failed (fetch): " . $mysqli->error);
     $stmt->bind_param('i', $userid);
     $stmt->execute();
-    $res = $stmt->get_result();
+    $res = stmt_get_result($stmt);
     $userRow = $res->fetch_assoc();
     $stmt->close();
 

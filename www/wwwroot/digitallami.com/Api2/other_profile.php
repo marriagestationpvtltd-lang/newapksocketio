@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 header('Content-Type: application/json');
 header("Content-Type: application/json");
 
@@ -52,7 +53,7 @@ LIMIT 1
 $photoStmt = $conn->prepare($photoSql);
 $photoStmt->bind_param("iiii", $myid, $userid, $userid, $myid);
 $photoStmt->execute();
-$photoResult = $photoStmt->get_result();
+$photoResult = stmt_get_result($photoStmt);
 
 if ($photoResult->num_rows > 0) {
     $photoRow = $photoResult->fetch_assoc();
@@ -73,7 +74,7 @@ LIMIT 1
 $chatStmt = $conn->prepare($chatSql);
 $chatStmt->bind_param("ii", $myid, $userid);
 $chatStmt->execute();
-$chatResult = $chatStmt->get_result();
+$chatResult = stmt_get_result($chatStmt);
 
 if ($chatResult->num_rows > 0) {
     $chatRow = $chatResult->fetch_assoc();
@@ -143,7 +144,7 @@ WHERE u.id = ?
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("i", $userid);
 $stmt->execute();
-$result = $stmt->get_result();
+$result = stmt_get_result($stmt);
 
 if ($result->num_rows > 0) {
     $row = $result->fetch_assoc();

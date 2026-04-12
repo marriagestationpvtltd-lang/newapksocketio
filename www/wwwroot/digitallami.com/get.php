@@ -53,7 +53,11 @@ $totalUsers = $countResult->fetch_assoc()['total'];
    STEP 2: Get paginated users with optional search or userId
 ---------------------------------------------------------- */
 $userQuery = "SELECT u.*,
-    (SELECT MAX(created_at) FROM chats WHERE sender_id = u.id OR receiver_id = u.id) as last_chat_time
+    (SELECT MAX(cm.created_at)
+     FROM " . ADMINCHAT_DB_NAME . ".chat_messages cm
+     WHERE (cm.sender_id = u.id AND cm.receiver_id = '1')
+        OR (cm.sender_id = '1' AND cm.receiver_id = u.id)
+    ) as last_chat_time
     FROM users u
     WHERE u.id != 1";
 
@@ -78,6 +82,18 @@ $userParams[] = $offset;
 $userTypes .= "ii";
 
 $userStmt = $conn->prepare($userQuery);
+if ($userStmt === false) {
+    // Fallback: cross-database query failed (e.g. different DB server or missing privileges).
+    // Sort by lastLogin only.
+    $userQueryFallback = "SELECT u.*, NULL as last_chat_time FROM users u WHERE u.id != 1";
+    if ($userIdFilter > 0) {
+        $userQueryFallback .= " AND u.id = ?";
+    } elseif (!empty($search)) {
+        $userQueryFallback .= " AND (u.firstName LIKE ? OR u.lastName LIKE ? OR CONCAT(u.firstName, ' ', u.lastName) LIKE ?)";
+    }
+    $userQueryFallback .= " ORDER BY u.lastLogin DESC LIMIT ? OFFSET ?";
+    $userStmt = $conn->prepare($userQueryFallback);
+}
 if (!empty($userParams)) {
     $userStmt->bind_param($userTypes, ...$userParams);
 }
@@ -111,19 +127,22 @@ while ($user = $userResult->fetch_assoc()) {
     $chat_message = "";
     $chat_message_type = "text";
     $chatQuery = $conn->prepare("
-        SELECT message, messageType
-        FROM chats
-        WHERE sender_id = ? OR receiver_id = ?
+        SELECT message, message_type
+        FROM " . ADMINCHAT_DB_NAME . ".chat_messages
+        WHERE (sender_id = ? AND receiver_id = '1')
+           OR (sender_id = '1' AND receiver_id = ?)
         ORDER BY created_at DESC
         LIMIT 1
     ");
-    $chatQuery->bind_param("ii", $userId, $userId);
-    $chatQuery->execute();
-    $chatRes = $chatQuery->get_result();
-    if ($chatRes->num_rows > 0) {
-        $chatRow = $chatRes->fetch_assoc();
-        $chat_message = $chatRow['message'];
-        $chat_message_type = $chatRow['messageType'] ?? 'text';
+    if ($chatQuery !== false) {
+        $chatQuery->bind_param("ss", $userId, $userId);
+        $chatQuery->execute();
+        $chatRes = $chatQuery->get_result();
+        if ($chatRes->num_rows > 0) {
+            $chatRow = $chatRes->fetch_assoc();
+            $chat_message = $chatRow['message'] ?? '';
+            $chat_message_type = $chatRow['message_type'] ?? 'text';
+        }
     }
 
     // ===============================

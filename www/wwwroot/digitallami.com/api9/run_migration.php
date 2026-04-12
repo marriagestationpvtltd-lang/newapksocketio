@@ -7,7 +7,7 @@
  * ----------
  * 1. Open  http://<your-server>/digitallami/api9/run_migration.php?token=<SETUP_TOKEN>
  *    where <SETUP_TOKEN> is the value you set for SETUP_TOKEN in your .env file.
- * 2. After the migration succeeds, DELETE this file from the server.
+ * 2. After the migration succeeds, DELETE this file from the server immediately.
  *
  * SECURITY
  * --------
@@ -50,7 +50,7 @@ try {
     $sql        = file_get_contents($migrationFile);
     $statements = array_filter(
         array_map('trim', explode(';', $sql)),
-        fn($s) => $s !== '' && $s[0] !== '-' && ltrim($s) !== ''
+        fn($s) => $s !== '' && ltrim($s) !== '' && $s[0] !== '-'
     );
 
     $executed = 0;

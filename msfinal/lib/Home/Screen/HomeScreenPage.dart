@@ -64,7 +64,7 @@ class MatrimonyHomeScreen extends StatefulWidget {
 }
 
 class _MatrimonyHomeScreenState extends State<MatrimonyHomeScreen> {
-  static const String _apiBaseUrl = '${kApiBaseUrl}/Api2';
+  static final String _apiBaseUrl = '$kApiBaseUrl/Api2';
   static const String _placeholderProfileImage =
       'https://via.placeholder.com/150';
   static const Color _brandRed = AppColors.primary;

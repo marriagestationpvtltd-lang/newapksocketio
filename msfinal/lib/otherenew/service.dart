@@ -9,7 +9,7 @@ import '../otherenew/modelfile.dart';
 import 'package:ms2026/config/app_endpoints.dart';
 
 class ProfileService {
-  static const String baseUrl = '${kApiBaseUrl}/Api2';
+  static final String baseUrl = '$kApiBaseUrl/Api2';
 
   /// Fetch profile data from API
   Future<ProfileResponse> fetchProfile({

@@ -7,9 +7,10 @@ class UserPartnerPreferenceService {
   final String fetchUrl;
 
   UserPartnerPreferenceService({
-    this.saveUrl = '${kApiBaseUrl}/Api2/user_partner.php',
-    this.fetchUrl = '${kApiBaseUrl}/Api2/get_partner_preferences.php',
-  });
+    String? saveUrl,
+    String? fetchUrl,
+  })  : saveUrl = saveUrl ?? '$kApiBaseUrl/Api2/user_partner.php',
+        fetchUrl = fetchUrl ?? '$kApiBaseUrl/Api2/get_partner_preferences.php';
 
   Future<Map<String, dynamic>?> fetchPartnerPreference({
     required int userId,

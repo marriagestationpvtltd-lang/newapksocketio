@@ -4,7 +4,7 @@ import 'Purposalmodel.dart';
 import 'package:ms2026/config/app_endpoints.dart';
 
 class ProposalService {
-  static const String baseUrl = "${kApiBaseUrl}/Api2/proposals_api.php";
+  static final String baseUrl = "$kApiBaseUrl/Api2/proposals_api.php";
 
   static Future<List<ProposalModel>> fetchProposals(
       String userId, String type) async {

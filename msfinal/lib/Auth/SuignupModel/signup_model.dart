@@ -105,13 +105,14 @@ class SignupModel extends ChangeNotifier {
 
 
   /// Submit multipart/form-data to signup endpoint
-  Future<bool> submitSignup({String url = '${kApiBaseUrl}/Api2/signup.php'}) async {
+  Future<bool> submitSignup({String? url}) async {
+    final resolvedUrl = url ?? '$kApiBaseUrl/Api2/signup.php';
     isSubmitting = true;
     error = null;
     notifyListeners();
 
     try {
-      final uri = Uri.parse(url);
+      final uri = Uri.parse(resolvedUrl);
       final req = http.MultipartRequest('POST', uri);
 
       // Add text fields

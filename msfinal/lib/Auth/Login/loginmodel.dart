@@ -21,13 +21,14 @@ class LoginModel extends ChangeNotifier {
   void clearError() { error = null; notifyListeners(); }
 
   // Login method
-  Future<bool> login({String url = '${kApiBaseUrl}/Api2/signin.php'}) async {
+  Future<bool> login({String? url}) async {
+    final resolvedUrl = url ?? '$kApiBaseUrl/Api2/signin.php';
     isSubmitting = true;
     error = null;
     notifyListeners();
 
     try {
-      final uri = Uri.parse(url);
+      final uri = Uri.parse(resolvedUrl);
       final headers = {'Content-Type': 'application/json'};
       final body = jsonEncode({
         'email': email,

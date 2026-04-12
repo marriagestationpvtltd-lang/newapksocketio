@@ -61,7 +61,7 @@ if ($userid <= 0) {
 $sql = "
 SELECT
     u.id, u.firstName, u.lastName, u.profile_picture, u.usertype, u.isVerified,
-    u.privacy, u.email, u.phone, u.status, u.gender, u.lastLogin,
+    u.privacy, u.email, u.contactNo AS phone, u.status, u.gender, u.lastLogin,
 
     pa.city, pa.country,
 

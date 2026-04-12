@@ -20,7 +20,7 @@ try {
             firstName,
             lastName,
             email,
-            phone,
+            contactNo AS phone,
             isVerified,
             status,
             privacy,

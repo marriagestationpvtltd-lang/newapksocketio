@@ -50,7 +50,7 @@ try {
     $sql        = file_get_contents($migrationFile);
     $statements = array_filter(
         array_map('trim', explode(';', $sql)),
-        fn($s) => $s !== '' && ltrim($s) !== '' && $s[0] !== '-'
+        function ($s) { return $s !== '' && ltrim($s) !== '' && $s[0] !== '-'; }
     );
 
     $executed = 0;

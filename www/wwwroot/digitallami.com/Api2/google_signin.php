@@ -4,6 +4,10 @@
 require_once __DIR__ . '/../config/db.php';
 header('Content-Type: application/json; charset=utf-8');
 
+// Suppress PHP notices/warnings so they never corrupt the JSON response.
+ini_set('display_errors', '0');
+error_reporting(E_ERROR);
+
 require_once __DIR__ . '/../shared/activity_logger.php';
 
 $dbHost = DB_HOST;
@@ -52,6 +56,12 @@ if ($mysqli->connect_errno) {
     respond(500, ['success' => false, 'message' => 'DB connection failed: ' . $mysqli->connect_error]);
 }
 $mysqli->set_charset('utf8mb4');
+
+// Ensure google_id column exists (it is absent from the original schema).
+$colCheck = $mysqli->query("SHOW COLUMNS FROM users LIKE 'google_id'");
+if ($colCheck && $colCheck->num_rows === 0) {
+    $mysqli->query("ALTER TABLE users ADD COLUMN google_id VARCHAR(128) DEFAULT NULL");
+}
 
 try {
     // 1) Look up existing user by email

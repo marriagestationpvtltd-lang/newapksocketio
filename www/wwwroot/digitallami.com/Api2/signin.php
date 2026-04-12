@@ -1,7 +1,10 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
-// signin.php - FIXED VERSION
 header('Content-Type: application/json; charset=utf-8');
+
+// Suppress PHP notices/warnings so they never corrupt the JSON response.
+ini_set('display_errors', '0');
+error_reporting(E_ERROR);
 
 require_once __DIR__ . '/../shared/activity_logger.php';
 
@@ -57,6 +60,7 @@ try {
     $stmt = $mysqli->prepare("
         SELECT u.id, u.firstName, u.lastName, u.email, u.password, u.contactNo, 
                u.gender, u.languages, u.nationality, u.profile_picture,
+               u.isDelete, u.isDisable,
                up.birthDate, up.profileForId
         FROM users u
         LEFT JOIN userpersonaldetail up ON up.userid = u.id
@@ -76,13 +80,26 @@ try {
     
     $user = $result->fetch_assoc();
     $stmt->close();
+
+    // 2) Check account status before verifying password
+    if (!empty($user['isDelete'])) {
+        respond(401, ['success' => false, 'message' => 'This account no longer exists. Please contact support.']);
+    }
+    if (!empty($user['isDisable'])) {
+        respond(403, ['success' => false, 'message' => 'Your account has been disabled. Please contact support.']);
+    }
     
-    // 2) Verify password
+    // 3) Verify password
+    if (empty($user['password'])) {
+        // Password field missing or empty — data integrity issue
+        respond(500, ['success' => false, 'message' => 'Account data is incomplete. Please contact support.']);
+    }
     if (!password_verify($input['password'], $user['password'])) {
         respond(401, ['success' => false, 'message' => 'Invalid email or password']);
     }
     
-    unset($user['password']); // Remove password from response
+    // Remove internal fields from response
+    unset($user['password'], $user['isDelete'], $user['isDisable']);
     
     // 3) Generate new token
     $token = bin2hex(random_bytes(30));

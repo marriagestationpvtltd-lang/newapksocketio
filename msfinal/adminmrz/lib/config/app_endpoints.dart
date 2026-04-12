@@ -1,7 +1,6 @@
 const String kAdminApiBaseUrl = String.fromEnvironment(
   'ADMIN_API_BASE_URL',
-  defaultValue:
-      'http://192.168.18.214/newapksocketio/www/wwwroot/digitallami.com',
+  defaultValue: 'http://192.168.18.214/digitallami',
 );
 
 const String kAdminSocketBaseUrl = String.fromEnvironment(

@@ -1,7 +1,7 @@
 // ⚠️  IMPORTANT: Change the defaultValue IP to your machine's LAN IP before
 // building for a physical device or running on an emulator (use 10.0.2.2 for
 // Android emulator instead of the LAN IP).
-// Pass at build time without editing: --dart-define=API_BASE_URL=http://X.X.X.X/...
+// Pass at build time without editing: --dart-define=API_BASE_URL=https://react.marriagestation.com.np
 const String kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
   defaultValue: 'https://react.marriagestation.com.np',
@@ -20,7 +20,3 @@ const String kApi2BaseUrl = '$kApiBaseUrl/Api2';
 const String kApi3BaseUrl = '$kApiBaseUrl/Api3';
 const String kApi9BaseUrl = '$kApiBaseUrl/api9';
 const String kRequestBaseUrl = '$kApiBaseUrl/request';
-const String kPaymentBaseUrl = String.fromEnvironment(
-  'PAYMENT_BASE_URL',
-  defaultValue: 'https://react.marriagestation.com.np',
-);

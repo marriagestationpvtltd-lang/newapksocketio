@@ -40,7 +40,11 @@ if (!defined('DB_HOST')) define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
 if (!defined('DB_NAME')) define('DB_NAME', getenv('DB_NAME') ?: 'ms');
 if (!defined('DB_USER')) define('DB_USER', getenv('DB_USER') ?: 'ms');
 // TODO: Move to environment variable - SECURITY RISK: hardcoded password fallback
-if (!defined('DB_PASS')) define('DB_PASS', getenv('DB_PASS') ?: 'ms');
+// Use !== false so that an empty password (DB_PASS= in .env) is honoured instead
+// of being overridden by the 'ms' fallback (the ?: operator treats '' as falsy).
+$_dbPass = getenv('DB_PASS');
+if (!defined('DB_PASS')) define('DB_PASS', $_dbPass !== false ? $_dbPass : 'ms');
+unset($_dbPass);
 
 // ── Public URL constants (for absolute media/profile links) ──────────────────
 if (!defined('APP_PUBLIC_BASE_URL')) define('APP_PUBLIC_BASE_URL', rtrim(getenv('APP_PUBLIC_BASE_URL') ?: 'https://digitallami.com', '/'));
@@ -51,7 +55,10 @@ if (!defined('ADMINCHAT_DB_HOST')) define('ADMINCHAT_DB_HOST', getenv('ADMINCHAT
 if (!defined('ADMINCHAT_DB_NAME')) define('ADMINCHAT_DB_NAME', getenv('ADMINCHAT_DB_NAME') ?: 'adminchat');
 if (!defined('ADMINCHAT_DB_USER')) define('ADMINCHAT_DB_USER', getenv('ADMINCHAT_DB_USER') ?: 'adminchat');
 // TODO: Move to environment variable - SECURITY RISK: hardcoded password fallback
-if (!defined('ADMINCHAT_DB_PASS')) define('ADMINCHAT_DB_PASS', getenv('ADMINCHAT_DB_PASS') ?: 'adminchat');
+// Use !== false so that an empty password is honoured (see DB_PASS note above).
+$_adminchatDbPass = getenv('ADMINCHAT_DB_PASS');
+if (!defined('ADMINCHAT_DB_PASS')) define('ADMINCHAT_DB_PASS', $_adminchatDbPass !== false ? $_adminchatDbPass : 'adminchat');
+unset($_adminchatDbPass);
 
 // ── Agora constants (server-side token generation only) ──────────────────────
 if (!defined('AGORA_APP_ID'))   define('AGORA_APP_ID',   getenv('AGORA_APP_ID')   ?: '');

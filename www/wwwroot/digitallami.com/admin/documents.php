@@ -130,7 +130,7 @@ $rejectedDocs = array_filter($documents, fn($doc) => $doc['status'] === 'rejecte
                                         <!-- Document Image -->
                                         <div class="document-image mb-3">
                                             <?php if (!empty($doc['photo'])): ?>
-                                                <img src="<?php echo htmlspecialchars(APP_PUBLIC_BASE_URL . '/' . ltrim($doc['photo'], '/')); ?>" 
+                                                <img src="<?php echo htmlspecialchars(rtrim(APP_PUBLIC_BASE_URL, '/') . '/' . ltrim($doc['photo'], '/')); ?>" 
                                                      alt="Document" class="img-fluid" 
                                                      style="max-height: 200px; object-fit: contain;">
                                             <?php else: ?>

@@ -1,4 +1,8 @@
 <?php
+// Load CORS headers FIRST so that OPTIONS preflight requests (sent by browsers
+// and Flutter Web before every cross-origin GET/POST) receive the correct
+// Access-Control-Allow-* headers and the actual request is not blocked.
+require_once __DIR__ . '/../shared/cors.php';
 header("Content-Type: application/json; charset=UTF-8");
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {

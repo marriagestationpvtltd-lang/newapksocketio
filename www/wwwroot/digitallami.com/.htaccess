@@ -2,11 +2,17 @@
 # Using only PHP header() calls avoids the duplicate "*, *" value that results when
 # both mod_headers and PHP emit the same header concurrently.
 
-# Deny direct HTTP access to environment and configuration files.
+# Deny direct HTTP access to environment, configuration, and migration files.
 <FilesMatch "^(\.env|\.env\.example)$">
     Order allow,deny
     Deny from all
 </FilesMatch>
+
+# Block browser access to the migrations directory.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^migrations/ - [F,L]
+</IfModule>
 
 # Redirect browser's automatic favicon.ico lookup to the Flutter web app favicon.
 <IfModule mod_rewrite.c>

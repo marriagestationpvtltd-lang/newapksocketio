@@ -71,7 +71,14 @@ class AuthProvider with ChangeNotifier {
           return false;
         }
       } else {
-        _error = 'Server error: ${response.statusCode}';
+        String errorMsg = 'Server error: ${response.statusCode}';
+        try {
+          final body = json.decode(response.body);
+          if (body['message'] != null) {
+            errorMsg = body['message'] as String;
+          }
+        } catch (_) {}
+        _error = errorMsg;
         _isLoading = false;
         notifyListeners();
         return false;

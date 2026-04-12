@@ -139,7 +139,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
     setState(() => loading = true);
 
-    final url = Uri.parse('${kApiBaseUrl}/Api2/forgot_password_send_otp.php');
+    final url = Uri.parse(AppConfig.forgotPasswordSendOtp);
     final resp = await http.post(url, body: {'email': emailController.text.trim()});
     final data = json.decode(resp.body);
 
@@ -171,7 +171,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
     setState(() => loading = true);
 
-    final url = Uri.parse('${kApiBaseUrl}/Api2/forgot_password_verify_otp.php');
+    final url = Uri.parse(AppConfig.forgotPasswordVerifyOtp);
     final resp = await http.post(url, body: {
       'email': emailController.text.trim(),
       'otp': otpController.text.trim(),
@@ -206,7 +206,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
 
     setState(() => loading = true);
 
-    final url = Uri.parse('${kApiBaseUrl}/Api2/forgot_password_reset.php');
+    final url = Uri.parse(AppConfig.forgotPasswordReset);
     final resp = await http.post(url, body: {
       'email': emailController.text.trim(),
       'password': passwordController.text.trim(),

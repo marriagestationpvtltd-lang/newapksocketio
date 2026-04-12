@@ -286,7 +286,7 @@ class _ChatListScreenState extends State<ChatListScreen>
 
   Future<UserMasterData> fetchUserMasterData(String userId) async {
     final url = Uri.parse(
-      "${kApiBaseUrl}/Api2/masterdata.php?userid=$userId",
+      "${AppConfig.masterData}?userid=$userId",
     );
 
     final response = await http.get(url);

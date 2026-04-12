@@ -36,7 +36,7 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final url = Uri.parse('${kAdminApiBaseUrl}/api9/login.php');
+      final url = Uri.parse(AdminAppConfig.login);
 
       final response = await http.post(
         url,

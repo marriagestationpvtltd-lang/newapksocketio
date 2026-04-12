@@ -106,7 +106,7 @@ class _PersonalDetailsPageeState extends State<PersonalDetailsPagee> {
   void initState() {
     super.initState();
     _detailService = UserPersonalDetailService(
-      baseUrl: '${kApiBaseUrl}/Api2/get_personal_detail.php', // Use same endpoint
+      baseUrl: AppConfig.getPersonalDetail, // Use same endpoint
     );
     if (widget.initialData != null && widget.initialData!.isNotEmpty) {
       _populateFormWithData(widget.initialData!);
@@ -1205,7 +1205,7 @@ class _PersonalDetailsPageeState extends State<PersonalDetailsPagee> {
 
       // Create save service instance (different URL for save)
       final saveService = UserPersonalDetailService(
-        baseUrl: '${kApiBaseUrl}/Api2/save_personal_detail.php',
+        baseUrl: AppConfig.savePersonalDetail,
       );
 
       final result = await saveService.saveUserPersonalDetail(

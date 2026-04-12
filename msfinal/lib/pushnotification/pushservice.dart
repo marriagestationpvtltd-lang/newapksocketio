@@ -43,7 +43,7 @@ class NotificationService {
 
 
   // Your existing PHP API endpoint
-  static final String _notificationUrl = '$kApiBaseUrl/Api2/send_notification.php';
+  static final String _notificationUrl = AppConfig.sendNotification;
 
   // Stream for call responses (listen in outgoing call screen)
   static void triggerCallResponse(Map<String, dynamic> data) {

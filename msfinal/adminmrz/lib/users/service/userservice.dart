@@ -6,8 +6,6 @@ import '../model/usermodel.dart';
 import 'package:adminmrz/config/app_endpoints.dart';
 
 class UserService {
-  static const String baseUrl = '${kAdminApiBaseUrl}/api9';
-
   Future<UserListResponse> getUsers() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -20,7 +18,7 @@ class UserService {
       };
 
       final response = await http.get(
-        Uri.parse('$baseUrl/get_users.php'),
+        Uri.parse('${AdminAppConfig.api9base}/get_users.php'),
         headers: headers,
       );
 

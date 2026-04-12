@@ -76,48 +76,53 @@ $sql = "
 $result = $conn->query($sql);
 
 $users_data = [];
-
+$fetchedUsers = [];
 while ($user = $result->fetch_assoc()) {
+    $fetchedUsers[] = $user;
+}
+
+if (empty($fetchedUsers)) {
+    echo json_encode(['status' => 'success', 'data' => []]);
+    $conn->close();
+    exit;
+}
+
+$fetchedIds = array_map(fn($u) => (int)$u['id'], $fetchedUsers);
+$fetchedIdsStr = implode(',', $fetchedIds);
+
+/* ── Pre-fetch photo requests (avoid N+1) ───────────────────── */
+$sqlPhoto = "
+    SELECT sender_id, receiver_id, status
+    FROM proposals
+    WHERE request_type = 'Photo'
+      AND ((sender_id = $user_id AND receiver_id IN ($fetchedIdsStr))
+           OR (sender_id IN ($fetchedIdsStr) AND receiver_id = $user_id))
+    ORDER BY id DESC
+";
+$resPhoto = $conn->query($sqlPhoto);
+$photoMap = [];
+while ($pr = $resPhoto->fetch_assoc()) {
+    $otherId = ($pr['sender_id'] == $user_id) ? (int)$pr['receiver_id'] : (int)$pr['sender_id'];
+    if (!isset($photoMap[$otherId])) {
+        $photoMap[$otherId] = ($pr['status'] === 'accepted') ? 'accepted' : 'pending';
+    }
+}
+
+/* ── Pre-fetch cities (avoid N+1) ──────────────────────────── */
+$sqlAddr = "SELECT userid, city FROM permanent_address WHERE userid IN ($fetchedIdsStr) GROUP BY userid";
+$resAddr = $conn->query($sqlAddr);
+$addrMap = [];
+while ($a = $resAddr->fetch_assoc()) { $addrMap[(int)$a['userid']] = $a['city']; }
+
+/* ── Pre-fetch designations (avoid N+1) ─────────────────────── */
+$sqlEdu = "SELECT userid, designation FROM educationcareer WHERE userid IN ($fetchedIdsStr) GROUP BY userid";
+$resEdu = $conn->query($sqlEdu);
+$eduMap = [];
+while ($e = $resEdu->fetch_assoc()) { $eduMap[(int)$e['userid']] = $e['designation']; }
+
+foreach ($fetchedUsers as $user) {
 
     $uid = (int)$user['id'];
-
-    /* -------- PHOTO REQUEST -------- */
-    $photo_request = "not sent";
-
-    $stmtPhoto = $conn->prepare("
-        SELECT status
-        FROM proposals
-        WHERE request_type = 'Photo'
-        AND (
-            (sender_id = ? AND receiver_id = ?)
-            OR
-            (sender_id = ? AND receiver_id = ?)
-        )
-        ORDER BY id DESC
-        LIMIT 1
-    ");
-    $stmtPhoto->bind_param("iiii", $user_id, $uid, $uid, $user_id);
-    $stmtPhoto->execute();
-    $resPhoto = stmt_get_result($stmtPhoto);
-
-    if ($row = $resPhoto->fetch_assoc()) {
-        $photo_request = ($row['status'] === 'accepted') ? 'accepted' : 'pending';
-    }
-    $stmtPhoto->close();
-
-    /* -------- CITY -------- */
-    $stmtAddr = $conn->prepare("SELECT city FROM permanent_address WHERE userid = ?");
-    $stmtAddr->bind_param("i", $uid);
-    $stmtAddr->execute();
-    $addr = stmt_get_result($stmtAddr)->fetch_assoc();
-    $stmtAddr->close();
-
-    /* -------- DESIGNATION -------- */
-    $stmtEdu = $conn->prepare("SELECT designation FROM educationcareer WHERE userid = ?");
-    $stmtEdu->bind_param("i", $uid);
-    $stmtEdu->execute();
-    $edu = stmt_get_result($stmtEdu)->fetch_assoc();
-    $stmtEdu->close();
 
     /* -------- FINAL USER OBJECT -------- */
     $users_data[] = [
@@ -127,9 +132,9 @@ while ($user = $result->fetch_assoc()) {
         "isVerified" => (int)$user['isVerified'],
         "privacy" => (string)$user['privacy'],
         "profile_picture" => $imageurl . ($user['profile_picture'] ?? 'default.jpg'),
-        "city" => $addr['city'] ?? null,
-        "designation" => $edu['designation'] ?? null,
-        "photo_request" => $photo_request            // ✅ ADDED
+        "city" => $addrMap[$uid] ?? null,
+        "designation" => $eduMap[$uid] ?? null,
+        "photo_request" => $photoMap[$uid] ?? "not sent"   // ✅ pre-fetched
     ];
 }
 

@@ -18,7 +18,7 @@ class NotificationService {
 
 
   // Your existing PHP API endpoint
-  static const String _notificationUrl = '${kAdminApiBaseUrl}/Api2/send_notification.php';
+  static const String _notificationUrl = AdminAppConfig.sendNotification;
 
   // Stream for call responses (listen in outgoing call screen)
   static final StreamController<Map<String, dynamic>> _callResponseController = StreamController.broadcast();

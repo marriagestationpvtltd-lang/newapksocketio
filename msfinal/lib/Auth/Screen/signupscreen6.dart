@@ -846,7 +846,7 @@ class _EducationCareerPageState extends State<EducationCareerPage> with SingleTi
       print("Sending request: $requestBody");
 
       var response = await http.post(
-        Uri.parse("${kApiBaseUrl}/Api2/educationcareer.php"),
+        Uri.parse(AppConfig.educationCareer),
         body: requestBody,
       ).timeout(const Duration(seconds: 30));
 

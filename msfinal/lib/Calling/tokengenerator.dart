@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:ms2026/config/app_endpoints.dart';
 
 class AgoraTokenService {
-  static final String tokenUrl = '$kApiBaseUrl/Api2/test_token.php';
+  static final String tokenUrl = AppConfig.testToken;
   static const String appId = '7750d283e6794eebba06e7d021e8a01c'; // Your Agora App ID
 
   /// Fetches an Agora token from your PHP server.

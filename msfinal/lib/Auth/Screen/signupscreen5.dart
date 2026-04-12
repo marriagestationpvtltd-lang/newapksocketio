@@ -1127,7 +1127,7 @@ class _FamilyDetailsPageState extends State<FamilyDetailsPage>
 
       var response = await http
           .post(
-            Uri.parse("${kApiBaseUrl}/Api2/updatefamily.php"),
+            Uri.parse(AppConfig.updateFamily),
             body: requestBody,
           )
           .timeout(const Duration(seconds: 30));

@@ -463,7 +463,7 @@ class _TermsContent extends StatelessWidget {
           'If you have questions about these Terms or our Privacy Policy, please contact us:\n\n'
           'Marriage Station (Digitallami Pvt. Ltd.)\n'
           'Email: support@digitallami.com\n'
-          'Website: ${kApiBaseUrl}\n\n'
+          'Website: ${AppConfig.baseUrl}\n\n'
           'By scrolling to the bottom and pressing "I Accept & Continue", you confirm that you '
           'have read, understood, and agree to these Terms of Service and Privacy Policy.',
         ),

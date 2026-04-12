@@ -25,6 +25,47 @@ error_reporting(E_ERROR);
 $pidx   = isset($_GET['pidx'])   ? trim($_GET['pidx'])   : '';
 $status = isset($_GET['status']) ? trim($_GET['status']) : '';
 
+// --- Khalti Lookup Verification ---
+// Verify the pidx against Khalti's lookup API before trusting the redirect status.
+// This prevents replay attacks where someone crafts a URL with status=Completed.
+$verifiedCompleted = false;
+if ($pidx !== '') {
+    $khaltiSecretKey = getenv('KHALTI_SECRET_KEY') ?: '';
+    if ($khaltiSecretKey !== '') {
+        try {
+            $ch = curl_init('https://a.khalti.com/api/v2/epayment/lookup/');
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => json_encode(['pidx' => $pidx]),
+                CURLOPT_HTTPHEADER     => [
+                    'Authorization: Key ' . $khaltiSecretKey,
+                    'Content-Type: application/json',
+                ],
+                CURLOPT_TIMEOUT => 10,
+            ]);
+            $lookupBody = curl_exec($ch);
+            $curlErr    = curl_error($ch);
+            curl_close($ch);
+
+            if ($curlErr === '' && $lookupBody !== false) {
+                $lookup = json_decode($lookupBody, true);
+                if (isset($lookup['status']) && strtolower($lookup['status']) === 'completed') {
+                    $verifiedCompleted = true;
+                }
+            } else {
+                error_log('khalti_success.php lookup curl error: ' . $curlErr);
+            }
+        } catch (Throwable $e) {
+            error_log('khalti_success.php lookup error: ' . $e->getMessage());
+        }
+    } else {
+        // No secret key configured — fall back to redirect status (dev/sandbox only)
+        $verifiedCompleted = (strtolower($status) === 'completed');
+        error_log('khalti_success.php: KHALTI_SECRET_KEY not set; skipping server-side verification');
+    }
+}
+
 // Update payment record status if we have a pidx
 if ($pidx !== '') {
     try {
@@ -35,10 +76,9 @@ if ($pidx !== '') {
             [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
         );
 
-        // 'completed' → success; anything with 'cancel' → cancelled;
-        // empty or unknown → treat as failed/incomplete
+        // Use verified status for 'completed'; fall back to redirect for cancelled
         $dbStatus = 'failed';
-        if (strtolower($status) === 'completed') {
+        if ($verifiedCompleted) {
             $dbStatus = 'completed';
         } elseif ($status !== '' && stripos($status, 'cancel') !== false) {
             $dbStatus = 'cancelled';
@@ -56,7 +96,7 @@ if ($pidx !== '') {
 // This page is opened inside the Flutter WebView.
 // The WebView listener watches URL changes; this response is only shown if
 // the WebView fails to intercept the navigation (e.g. on web/desktop).
-$isSuccess = (strtolower($status) === 'completed');
+$isSuccess = $verifiedCompleted;
 ?><!DOCTYPE html>
 <html lang="en">
 <head>

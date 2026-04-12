@@ -123,7 +123,7 @@ class _SearchPageState extends State<SearchPage>
   Future<void> _checkDocumentStatus(int userId) async {
     try {
       final response = await http.post(
-        Uri.parse("${kApiBaseUrl}/Api2/check_document_status.php"),
+        Uri.parse(AppConfig.checkDocumentStatus),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'user_id': userId}),
       );
@@ -152,7 +152,7 @@ class _SearchPageState extends State<SearchPage>
       final myId = userData["id"].toString();
 
       final response = await http.post(
-        Uri.parse('${kApiBaseUrl}/Api2/get_blocked_users.php'),
+        Uri.parse(AppConfig.getBlockedUsers),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'my_id': myId}),
       );
@@ -182,7 +182,7 @@ class _SearchPageState extends State<SearchPage>
         _errorMessage = '';
       });
 
-      final url = Uri.parse('${kApiBaseUrl}/Api2/match.php?userid=$userId');
+      final url = Uri.parse('${AppConfig.match}?userid=$userId');
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -282,7 +282,7 @@ class _SearchPageState extends State<SearchPage>
     }
     try {
       final url = Uri.parse(
-          '${kApiBaseUrl}/Api2/search_opposite_gender.php?user_id=$_currentUserId');
+          '${AppConfig.searchOppositeGender}?user_id=$_currentUserId');
       final response = await http.get(url);
       if (response.statusCode == 200) {
         final result = jsonDecode(response.body);
@@ -399,7 +399,7 @@ class _SearchPageState extends State<SearchPage>
         };
         final queryString = Uri(queryParameters: params).query;
         final url = Uri.parse(
-            '${kApiBaseUrl}/Api2/search_opposite_gender.php?$queryString');
+            '${AppConfig.searchOppositeGender}?$queryString');
         final response = await http.get(url);
         if (response.statusCode == 200) {
           final result = jsonDecode(response.body);
@@ -1315,7 +1315,7 @@ class _SearchPageState extends State<SearchPage>
     final profession = profile['designation']?.toString() ?? '–';
     final city = profile['city']?.toString() ?? '';
     final location = city.isNotEmpty ? city : 'Nepal';
-    final baseImageUrl = '${kApiBaseUrl}/Api2/';
+    final baseImageUrl = '${AppConfig.imageBase}/';
     final profilePicture = profile['profile_picture']?.toString() ?? '';
     final imageUrl = profilePicture.isNotEmpty
         ? baseImageUrl + profilePicture

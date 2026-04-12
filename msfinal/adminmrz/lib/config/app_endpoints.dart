@@ -1,12 +1,19 @@
-const String kAdminApiBaseUrl = String.fromEnvironment(
-  'ADMIN_API_BASE_URL',
-  defaultValue: 'https://react.marriagestation.com.np',
-);
+// ─────────────────────────────────────────────────────────────────────────────
+// app_endpoints.dart — backward-compatible re-exports derived from AdminAppConfig.
+//
+// New code should import app_config.dart and use AdminAppConfig.* directly.
+// These constants are kept so existing callers continue to compile unchanged.
+// ─────────────────────────────────────────────────────────────────────────────
+export 'app_config.dart';
 
-const String kAdminSocketBaseUrl = String.fromEnvironment(
-  'ADMIN_SOCKET_URL',
-  defaultValue: 'https://adminnew.marriagestation.com.np',
-);
+import 'app_config.dart';
 
-const String kAdminApi2BaseUrl = '$kAdminApiBaseUrl/Api2';
-const String kAdminApi9BaseUrl = '$kAdminApiBaseUrl/api9';
+/// Single base URL for the admin app (env-configurable at build time).
+const String kAdminApiBaseUrl = AdminAppConfig.baseUrl;
+
+/// Socket server URL for the admin app.
+const String kAdminSocketBaseUrl = AdminAppConfig.socketUrl;
+
+/// Convenience namespace roots (derived from AdminAppConfig).
+const String kAdminApi2BaseUrl = '${AdminAppConfig.baseUrl}/Api2';
+const String kAdminApi9BaseUrl = '${AdminAppConfig.baseUrl}/api9';

@@ -52,7 +52,7 @@ class _PaymentPageState extends State<PaymentPage> {
   Future<void> _fetchVatSettings() async {
     try {
       final response = await http.get(
-        Uri.parse('${kApiBaseUrl}/Api2/app_settings.php'),
+        Uri.parse(AppConfig.appSettings),
       );
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -729,7 +729,8 @@ class _PaymentPageState extends State<PaymentPage> {
   Future<void> _processKhaltiPayment() async {
     final prefs = await SharedPreferences.getInstance();
     final userDataString = prefs.getString('user_data');
-    final userData = jsonDecode(userDataString!);
+    if (userDataString == null) return;
+    final userData = jsonDecode(userDataString);
     final userId = int.tryParse(userData["id"].toString());
 
     setState(() {
@@ -748,7 +749,7 @@ class _PaymentPageState extends State<PaymentPage> {
 
     // Call Khalti API
     final response = await http.post(
-      Uri.parse('$kPaymentBaseUrl/khalti_payment.php'),
+      Uri.parse(AppConfig.khaltiPayment),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -781,7 +782,8 @@ class _PaymentPageState extends State<PaymentPage> {
   Future<void> _processHBLPayment() async {
     final prefs = await SharedPreferences.getInstance();
     final userDataString = prefs.getString('user_data');
-    final userData = jsonDecode(userDataString!);
+    if (userDataString == null) return;
+    final userData = jsonDecode(userDataString);
     final userId = int.tryParse(userData["id"].toString());
 
     setState(() {
@@ -789,7 +791,7 @@ class _PaymentPageState extends State<PaymentPage> {
     });
 
     // Create HBL payment URL with query parameters
-    final paymentUrl = Uri.parse('$kPaymentBaseUrl/hbl/index.php')
+    final paymentUrl = Uri.parse(AppConfig.hblPayment)
         .replace(queryParameters: {
       'input_amount': totalAmount.toStringAsFixed(0),
       'userid': userId.toString(),
@@ -956,7 +958,7 @@ class _PaymentPageState extends State<PaymentPage> {
     required int packageId,
     String? transactionId,
   }) async {
-    final queryParams = {
+    final Map<String, dynamic> body = {
       "userid": userId.toString(),
       "paidby": paidBy,
       "packageid": packageId.toString(),
@@ -964,15 +966,17 @@ class _PaymentPageState extends State<PaymentPage> {
 
     // Add transaction ID if provided
     if (transactionId != null && transactionId.isNotEmpty) {
-      queryParams["transaction_id"] = transactionId;
+      body["transaction_id"] = transactionId;
     }
 
-    final Uri url = Uri.parse(
-        "${kApiBaseUrl}/Api3/purchase_package.php"
-    ).replace(queryParameters: queryParams);
+    final Uri url = Uri.parse(AppConfig.purchasePackage);
 
     try {
-      final response = await http.get(url);
+      final response = await http.post(
+        url,
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
+      );
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -996,7 +1000,7 @@ class _PaymentPageState extends State<PaymentPage> {
     required int packageId,
   }) async {
     final Uri url = Uri.parse(
-        "${kApiBaseUrl}/Api3/cancel_payment.php"
+        AppConfig.cancelPayment
     ).replace(queryParameters: {
       "userid": userId.toString(),
       "paidby": paidBy,

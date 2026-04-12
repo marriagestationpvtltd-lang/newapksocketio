@@ -4,12 +4,10 @@ import 'dashmodel.dart';
 import 'package:adminmrz/config/app_endpoints.dart';
 
 class DashboardService {
-  static const String _baseUrl = '${kAdminApiBaseUrl}/api9';
-
   Future<DashboardResponse> getDashboardData() async {
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/get_dashboard.php'),
+        Uri.parse('${AdminAppConfig.api9base}/get_dashboard.php'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',

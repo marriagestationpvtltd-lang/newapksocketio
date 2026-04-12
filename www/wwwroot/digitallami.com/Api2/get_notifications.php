@@ -12,8 +12,12 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS
 $database = new Database();
 $db = $database->getConnection();
 
-// Assuming user_id comes from authentication token or request
-$user_id = isset($_GET['user_id']) ? $_GET['user_id'] : 1; // Default to 1 for demo
+// user_id is required; never fall back to a default value
+$user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : 0;
+if ($user_id <= 0) {
+    echo json_encode(["status" => "error", "message" => "user_id is required"]);
+    exit;
+}
 
 // Get notifications
 $query = "SELECT * FROM user_notifications WHERE user_id = :user_id ORDER BY created_at DESC";

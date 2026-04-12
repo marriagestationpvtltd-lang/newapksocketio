@@ -1,53 +1,25 @@
-// ⚠️  IMPORTANT: Change the defaultValue IP to your machine's LAN IP before
-// building for a physical device or running on an emulator (use 10.0.2.2 for
-// Android emulator instead of the LAN IP).
-// Pass at build time without editing: --dart-define=API_BASE_URL=https://react.marriagestation.com.np
-const String kApiBaseUrl = String.fromEnvironment(
-  'API_BASE_URL',
-  defaultValue: 'https://react.marriagestation.com.np',
-);
+// ─────────────────────────────────────────────────────────────────────────────
+// app_endpoints.dart — backward-compatible re-exports derived from AppConfig.
+//
+// New code should import app_config.dart and use AppConfig.* directly.
+// These constants are kept so existing callers continue to compile unchanged.
+// ─────────────────────────────────────────────────────────────────────────────
+export 'app_config.dart';
 
-const String _socketServerEnv = String.fromEnvironment(
-  'SOCKET_SERVER_URL',
-  defaultValue: '',
-);
+import 'app_config.dart';
 
-const String _defaultProdSocketUrl = 'https://react.marriagestation.com.np';
+/// Single base URL for the entire user app (env-configurable at build time).
+const String kApiBaseUrl = AppConfig.baseUrl;
 
-/// Determines the socket server URL.
-/// Priority:
-/// 1) Explicit SOCKET_SERVER_URL dart-define
-/// 2) For custom API hosts, fall back to the same host on port 3001
-/// 3) For the production marriagestation host, keep the existing admin domain
-String _resolveSocketServerBaseUrl() {
-  if (_socketServerEnv.isNotEmpty) return _socketServerEnv;
+/// Convenience namespace roots (derived from AppConfig).
+const String kApi2BaseUrl = '${AppConfig.baseUrl}/Api2';
+const String kApi3BaseUrl = '${AppConfig.baseUrl}/Api3';
+const String kApi9BaseUrl = '${AppConfig.baseUrl}/api9';
+const String kApi19BaseUrl = '${AppConfig.baseUrl}/api19';
+const String kRequestBaseUrl = '${AppConfig.baseUrl}/request';
 
-  final apiUri = Uri.tryParse(kApiBaseUrl);
-  if (apiUri != null && apiUri.host.isNotEmpty) {
-    if (apiUri.host.contains('marriagestation.com.np')) {
-      return _defaultProdSocketUrl;
-    }
-    final scheme = apiUri.scheme.isNotEmpty ? apiUri.scheme : 'https';
-    final port = apiUri.hasPort ? apiUri.port : 3001;
-    return Uri(
-      scheme: scheme,
-      host: apiUri.host,
-      port: port,
-    ).toString();
-  }
+/// Payment base URL (may differ from API base).
+const String kPaymentBaseUrl = AppConfig.paymentBaseUrl;
 
-  return _defaultProdSocketUrl;
-}
-
-final String kSocketServerBaseUrl = _resolveSocketServerBaseUrl();
-
-const String kPaymentBaseUrl = String.fromEnvironment(
-  'PAYMENT_BASE_URL',
-  defaultValue: 'https://react.marriagestation.com.np',
-);
-
-const String kApi2BaseUrl = '$kApiBaseUrl/Api2';
-const String kApi3BaseUrl = '$kApiBaseUrl/Api3';
-const String kApi9BaseUrl = '$kApiBaseUrl/api9';
-const String kApi19BaseUrl = '$kApiBaseUrl/api19';
-const String kRequestBaseUrl = '$kApiBaseUrl/request';
+/// Socket server base URL (runtime-resolved — see AppConfig.socketUrl).
+String get kSocketServerBaseUrl => AppConfig.socketUrl;

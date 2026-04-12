@@ -874,7 +874,7 @@ class _LivingStatusPageState extends State<LivingStatusPage> {
 
       final response = await http
           .post(
-            Uri.parse('${kApiBaseUrl}/Api2/updateadress.php'),
+            Uri.parse(AppConfig.updateAddress),
             body: body,
           )
           .timeout(const Duration(seconds: 30));

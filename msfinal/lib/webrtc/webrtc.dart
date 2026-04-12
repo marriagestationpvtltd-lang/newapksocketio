@@ -18,7 +18,7 @@ class Webrtc {
 
 
 Future<Webrtc?> fetchWebrtc() async {
-  final String apiUrl = "${kApiBaseUrl}/Api2/webrtc.php";
+  final String apiUrl = AppConfig.webrtc;
 
   final response = await http.get(Uri.parse(apiUrl));
 

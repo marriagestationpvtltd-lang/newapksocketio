@@ -39,7 +39,7 @@ class ChatProvider extends ChangeNotifier {
 
   // Fetch chat list from API
   Future<void> fetchChatList() async {
-    final url = Uri.parse('${kAdminApiBaseUrl}/get.php');
+    final url = Uri.parse(AdminAppConfig.getUsers);
 
     try {
       final response = await http.get(url);
@@ -90,7 +90,7 @@ class ChatProvider extends ChangeNotifier {
 
     try {
       // You'll need to create this API endpoint on your server
-      final url = Uri.parse('${kAdminApiBaseUrl}/get_matches.php?user_id=$userId');
+      final url = Uri.parse('${AdminAppConfig.getMatches}?user_id=$userId');
 
       final response = await http.get(url);
 

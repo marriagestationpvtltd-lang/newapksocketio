@@ -51,7 +51,7 @@ class _RequestCardDynamicState extends State<RequestCardDynamic> {
 
   Future<UserMasterData> fetchUserMasterData(String userId) async {
     final url = Uri.parse(
-      "${kApiBaseUrl}/Api2/masterdata.php?userid=$userId",
+      "${AppConfig.masterData}?userid=$userId",
     );
 
     final response = await http.get(url);
@@ -72,7 +72,8 @@ class _RequestCardDynamicState extends State<RequestCardDynamic> {
   void loadMasterData() async {
     final prefs = await SharedPreferences.getInstance();
     final userDataString = prefs.getString('user_data');
-    final userData = jsonDecode(userDataString!);
+    if (userDataString == null) return;
+    final userData = jsonDecode(userDataString);
     final userId = int.tryParse(userData["id"].toString());
 
     try {
@@ -99,11 +100,12 @@ class _RequestCardDynamicState extends State<RequestCardDynamic> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userDataString = prefs.getString('user_data');
-      final userData = jsonDecode(userDataString!);
+      if (userDataString == null) { setState(() { _isCheckingStatus = false; _isLoading = false; }); return; }
+      final userData = jsonDecode(userDataString);
       final userId = int.tryParse(userData["id"].toString());
 
       final response = await http.post(
-        Uri.parse("${kApiBaseUrl}/Api2/check_document_status.php"),
+        Uri.parse(AppConfig.checkDocumentStatus),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'user_id': userId}),
       );

@@ -6,9 +6,6 @@ import 'detailmodel.dart';
 import 'package:adminmrz/config/app_endpoints.dart';
 
 class UserDetailsService {
-  static const String _baseUrl = '${kAdminApiBaseUrl}/Api2';
-  static const String _adminBaseUrl = '${kAdminApiBaseUrl}/api9';
-
   Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('token');
@@ -18,7 +15,7 @@ class UserDetailsService {
     try {
       final token = await _getToken();
       final response = await http.get(
-        Uri.parse('$_adminBaseUrl/get_user_profile.php?userid=$userId'),
+        Uri.parse('${AdminAppConfig.api9base}/get_user_profile.php?userid=$userId'),
         headers: {
           'Accept': 'application/json',
           if (token != null) 'Authorization': token,
@@ -50,7 +47,7 @@ class UserDetailsService {
     try {
       final token = await _getToken();
       final response = await http.post(
-        Uri.parse('$_adminBaseUrl/update_user_profile.php'),
+        Uri.parse('${AdminAppConfig.api9base}/update_user_profile.php'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -80,7 +77,7 @@ class UserDetailsService {
     try {
       final token = await _getToken();
       final response = await http.get(
-        Uri.parse('$_adminBaseUrl/get_user_activity.php?userid=$userId'),
+        Uri.parse('${AdminAppConfig.api9base}/get_user_activity.php?userid=$userId'),
         headers: {
           'Accept': 'application/json',
           if (token != null) 'Authorization': token,
@@ -109,7 +106,7 @@ class UserDetailsService {
     try {
       final token = await _getToken();
       final response = await http.post(
-        Uri.parse('$_adminBaseUrl/approve_profile_photo.php'),
+        Uri.parse('${AdminAppConfig.api9base}/approve_profile_photo.php'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -141,7 +138,7 @@ class UserDetailsService {
     try {
       final token = await _getToken();
       final response = await http.post(
-        Uri.parse('$_adminBaseUrl/send_admin_notification.php'),
+        Uri.parse('${AdminAppConfig.api9base}/send_admin_notification.php'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',

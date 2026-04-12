@@ -80,7 +80,7 @@ class _PaidUsersListPageState extends State<PaidUsersListPage> {
 
   Future<UserMasterData> fetchUserMasterData(String userId) async {
     final url = Uri.parse(
-      "${kApiBaseUrl}/Api2/masterdata.php?userid=$userId",
+      "${AppConfig.masterData}?userid=$userId",
     );
     final response = await http.get(url);
     if (response.statusCode != 200) {
@@ -96,7 +96,8 @@ class _PaidUsersListPageState extends State<PaidUsersListPage> {
   void loadMasterData() async {
     final prefs = await SharedPreferences.getInstance();
     final userDataString = prefs.getString('user_data');
-    final userData = jsonDecode(userDataString!);
+    if (userDataString == null) return;
+    final userData = jsonDecode(userDataString);
     final userId = int.tryParse(userData["id"].toString());
     try {
       UserMasterData user = await fetchUserMasterData(userId.toString());
@@ -129,7 +130,7 @@ class _PaidUsersListPageState extends State<PaidUsersListPage> {
 
     try {
       final response = await http.get(
-        Uri.parse('${kApiBaseUrl}/Api2/premiuimmember.php?user_id=${widget.userId}&page=$_currentPage'),
+        Uri.parse('${AppConfig.premiumMembers}?user_id=${widget.userId}&page=$_currentPage'),
       );
 
       if (response.statusCode == 200) {
@@ -259,7 +260,7 @@ class _PaidUsersListPageState extends State<PaidUsersListPage> {
     final isVerified = user['isVerified'] == 1;
     final profilePic = user['profile_picture'];
     final imageUrl = profilePic != null && profilePic.toString().isNotEmpty
-        ? '${kApiBaseUrl}/Api2/$profilePic'
+        ? '${AppConfig.imageBase}/$profilePic'
         : 'https://via.placeholder.com/150?text=No+Image';
 
     // Use profile owner's privacy setting, not viewer's subscription

@@ -4,8 +4,6 @@ import 'activity_model.dart';
 import 'package:adminmrz/config/app_endpoints.dart';
 
 class ActivityService {
-  static const String _baseUrl = '${kAdminApiBaseUrl}/api9';
-
   Future<ActivityFeedResponse> getActivities({
     int page = 1,
     int limit = 50,
@@ -25,7 +23,7 @@ class ActivityService {
     if (dateTo != null)       queryParams['date_to']       = dateTo;
     if (search != null && search.isNotEmpty) queryParams['search'] = search;
 
-    final uri = Uri.parse('$_baseUrl/get_user_activities.php')
+    final uri = Uri.parse('${AdminAppConfig.api9base}/get_user_activities.php')
         .replace(queryParameters: queryParams);
 
     final response = await http.get(uri, headers: {'Accept': 'application/json'});

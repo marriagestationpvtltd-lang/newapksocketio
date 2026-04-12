@@ -1573,7 +1573,7 @@ class _ProfileCard extends StatelessWidget {
                       Expanded(
                         child: GestureDetector(
                           onTap: () => html.window.open(
-                            '${kAdminApiBaseUrl}/profile.php?id=$profileId',
+                            '${AdminAppConfig.userProfile}?id=$profileId',
                             '_blank',
                           ),
                           child: Container(

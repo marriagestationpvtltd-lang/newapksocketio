@@ -34,7 +34,7 @@ ProfileScreen({super.key, required this.userId,});
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  static final String _requestBaseUrl = '$kApiBaseUrl/request';
+  static final String _requestBaseUrl = '${AppConfig.baseUrl}/request';
 
   bool _isBlocked = false;
   bool _isLoadingBlock = false;

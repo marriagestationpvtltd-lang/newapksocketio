@@ -263,7 +263,7 @@ class _PartnerPreferencesPageeState extends State<PartnerPreferencesPagee> {
     setState(() => _loadingCountries = true);
     try {
       final response = await http.get(
-        Uri.parse("${kApiBaseUrl}/Api3/countries.php"),
+        Uri.parse(AppConfig.countries),
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
@@ -311,7 +311,7 @@ class _PartnerPreferencesPageeState extends State<PartnerPreferencesPagee> {
         if (countryId == '0') continue; // Skip "Any"
 
         final response = await http.get(
-          Uri.parse("${kApiBaseUrl}/Api3/states.php?country_id=$countryId"),
+          Uri.parse("${AppConfig.states}?country_id=$countryId"),
         ).timeout(const Duration(seconds: 30));
 
         if (response.statusCode == 200) {
@@ -360,7 +360,7 @@ class _PartnerPreferencesPageeState extends State<PartnerPreferencesPagee> {
         if (stateId == 'Any' || stateId == '0') continue;
 
         final response = await http.get(
-          Uri.parse("${kApiBaseUrl}/Api3/cities.php?state_id=$stateId"),
+          Uri.parse("${AppConfig.cities}?state_id=$stateId"),
         ).timeout(const Duration(seconds: 30));
 
         if (response.statusCode == 200) {
@@ -2340,7 +2340,7 @@ class _PartnerPreferencesPageeState extends State<PartnerPreferencesPagee> {
       // This fixes the issue where editing multiple times causes data to disappear
       try {
         final response = await http.get(
-          Uri.parse("${kApiBaseUrl}/Api2/get_partner_preferences.php?userid=$userId"),
+          Uri.parse("${AppConfig.getPartnerPreferences}?userid=$userId"),
         ).timeout(const Duration(seconds: 30));
 
         if (response.statusCode == 200) {
@@ -2429,7 +2429,7 @@ class _PartnerPreferencesPageeState extends State<PartnerPreferencesPagee> {
       print("Sending JSON data: $body");
 
       final response = await http.post(
-        Uri.parse("${kApiBaseUrl}/Api2/user_partner.php"),
+        Uri.parse(AppConfig.userPartner),
         body: jsonEncode(body),
         headers: {
           "Content-Type": "application/json; charset=UTF-8",

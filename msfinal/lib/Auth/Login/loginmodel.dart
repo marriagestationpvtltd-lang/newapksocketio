@@ -22,7 +22,7 @@ class LoginModel extends ChangeNotifier {
 
   // Login method
   Future<bool> login({String? url}) async {
-    final resolvedUrl = url ?? '$kApiBaseUrl/Api2/signin.php';
+    final resolvedUrl = url ?? AppConfig.signIn;
     isSubmitting = true;
     error = null;
     notifyListeners();

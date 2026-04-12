@@ -133,7 +133,7 @@ class MatchedProfile {
   String get imageUrl {
     if (profilePicture == null || profilePicture!.isEmpty) return '';
     if (profilePicture!.startsWith('http')) return profilePicture!;
-    return '${kApiBaseUrl}/Api2/$profilePicture';
+    return '${AppConfig.imageBase}/$profilePicture';
   }
 
   bool get isVerifiedBool => isVerified == 1;

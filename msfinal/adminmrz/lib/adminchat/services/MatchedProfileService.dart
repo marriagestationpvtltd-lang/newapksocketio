@@ -84,7 +84,7 @@ class MatchedProfileProvider with ChangeNotifier {
 
     try {
       final response = await http.post(
-        Uri.parse('${kAdminApiBaseUrl}/match_admin.php'),
+        Uri.parse(AdminAppConfig.matchAdmin),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'user_id': userId,
@@ -136,7 +136,7 @@ class MatchedProfileProvider with ChangeNotifier {
 
     try {
       final response = await http.post(
-        Uri.parse('${kAdminApiBaseUrl}/match_admin.php'),
+        Uri.parse(AdminAppConfig.matchAdmin),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'user_id': _currentUserId,
@@ -221,7 +221,7 @@ class MatchedProfileProvider with ChangeNotifier {
 
     try {
       final response = await http.post(
-        Uri.parse('${kAdminApiBaseUrl}/match_admin.php'),
+        Uri.parse(AdminAppConfig.matchAdmin),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'user_id': _currentUserId,

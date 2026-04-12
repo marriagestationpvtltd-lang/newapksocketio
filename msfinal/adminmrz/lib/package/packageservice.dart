@@ -6,13 +6,11 @@ import 'package:adminmrz/config/app_endpoints.dart';
 
 
 class PackageService {
-  static const String _baseUrl = '${kAdminApiBaseUrl}/api9';
-
   // Get all packages
   Future<PackageListResponse> getPackages() async {
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/get_packages.php'),
+        Uri.parse('${AdminAppConfig.api9PackageBase}/get_packages.php'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -34,7 +32,7 @@ class PackageService {
   Future<CreatePackageResponse> createPackage(Package package) async {
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/create_package.php'),
+        Uri.parse('${AdminAppConfig.api9PackageBase}/create_package.php'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -57,7 +55,7 @@ class PackageService {
   Future<bool> updatePackage(Package package) async {
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/update_package.php'),
+        Uri.parse('${AdminAppConfig.api9PackageBase}/update_package.php'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -83,7 +81,7 @@ class PackageService {
   Future<bool> deletePackage(int packageId) async {
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/delete_package.php'),
+        Uri.parse('${AdminAppConfig.api9PackageBase}/delete_package.php'),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',

@@ -391,7 +391,7 @@ class _ProfileSwipeUIState extends State<ProfileSwipeUI> {
 
   Future<UserMasterData> fetchUserMasterData(String userId) async {
     final url = Uri.parse(
-      "${kApiBaseUrl}/Api2/masterdata.php?userid=$userId",
+      "${AppConfig.masterData}?userid=$userId",
     );
 
     final response = await http.get(url);
@@ -445,13 +445,18 @@ class _ProfileSwipeUIState extends State<ProfileSwipeUI> {
       final prefs = await SharedPreferences.getInstance();
       final userDataString = prefs.getString('user_data');
 
-      final userData = jsonDecode(userDataString!);
+      if (userDataString == null) {
+        setState(() { _isCheckingStatus = false; _isLoading = false; });
+        return;
+      }
+
+      final userData = jsonDecode(userDataString);
       final userId = int.tryParse(userData["id"].toString());
 
       print("Checking document status for user ID: $userId");
 
       final response = await http.post(
-        Uri.parse("${kApiBaseUrl}/Api2/check_document_status.php"),
+        Uri.parse(AppConfig.checkDocumentStatus),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'user_id': userId}),
       );
@@ -496,7 +501,8 @@ class _ProfileSwipeUIState extends State<ProfileSwipeUI> {
   void loadMasterData() async {
     final prefs = await SharedPreferences.getInstance();
     final userDataString = prefs.getString('user_data');
-    final userData = jsonDecode(userDataString!);
+    if (userDataString == null) return;
+    final userData = jsonDecode(userDataString);
     final userId = int.tryParse(userData["id"].toString());
     try {
       UserMasterData user = await fetchUserMasterData(userId.toString());
@@ -541,7 +547,8 @@ class _ProfileSwipeUIState extends State<ProfileSwipeUI> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userDataString = prefs.getString('user_data');
-      final userData = jsonDecode(userDataString!);
+      if (userDataString == null) { setState(() { _isProcessingLike = false; }); return; }
+      final userData = jsonDecode(userDataString);
       final senderId = int.tryParse(userData["id"].toString());
 
       if (senderId == null) {
@@ -1051,7 +1058,8 @@ class _ProfileSwipeUIState extends State<ProfileSwipeUI> {
                                 await SharedPreferences.getInstance();
                             final userDataString =
                                 prefs.getString('user_data');
-                            final userData = jsonDecode(userDataString!);
+                            if (userDataString == null) return;
+                            final userData = jsonDecode(userDataString);
                             final senderId = int.tryParse(
                                 userData["id"].toString());
                             if (docstatus == 'approved') {

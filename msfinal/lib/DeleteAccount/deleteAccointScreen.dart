@@ -102,7 +102,7 @@ class _DeleteAccountPageState extends State<DeleteAccountPage> {
       final userId = user["id"].toString();
 
       final response = await http.post(
-        Uri.parse("${kApiBaseUrl}/Api2/send_delete_request.php"),
+        Uri.parse(AppConfig.sendDeleteRequest),
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },

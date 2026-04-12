@@ -6,7 +6,10 @@
  * GET /api9/get_user_profile.php?userid=<id>
  */
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../shared/admin_auth.php';
 header('Content-Type: application/json');
+
+admin_auth_guard();
 
 $base_url = APP_API2_BASE_URL;
 
@@ -23,33 +26,6 @@ try {
     exit;
 }
 
-// ── Admin token verification ─────────────────────────────────────────────────
-$authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
-if (empty($authHeader)) {
-    http_response_code(401);
-    echo json_encode(['status' => 'error', 'message' => 'Unauthorized']);
-    exit;
-}
-
-$tokenSecret = getenv('ADMIN_TOKEN_SECRET') ?: 'CHANGE_THIS_SECRET_KEY';
-$tokenParts  = explode('.', $authHeader, 2);
-$tokenValid  = false;
-if (count($tokenParts) === 2) {
-    $payloadJson = base64_decode($tokenParts[0]);
-    $expected    = hash_hmac('sha256', $payloadJson, $tokenSecret);
-    if (hash_equals($expected, $tokenParts[1])) {
-        $payload = json_decode($payloadJson, true);
-        if (is_array($payload) && isset($payload['exp']) && $payload['exp'] >= time()) {
-            $tokenValid = true;
-        }
-    }
-}
-if (!$tokenValid) {
-    http_response_code(401);
-    echo json_encode(['status' => 'error', 'message' => 'Unauthorized']);
-    exit;
-}
-
 $userid = isset($_GET['userid']) ? intval($_GET['userid']) : 0;
 if ($userid <= 0) {
     http_response_code(400);
@@ -61,7 +37,7 @@ if ($userid <= 0) {
 $sql = "
 SELECT
     u.id, u.firstName, u.lastName, u.profile_picture, u.usertype, u.isVerified,
-    u.privacy, u.email, u.phone, u.status, u.gender, u.lastLogin,
+    u.privacy, u.email, u.contactNo AS phone, u.status, u.gender, u.lastLogin,
 
     pa.city, pa.country,
 

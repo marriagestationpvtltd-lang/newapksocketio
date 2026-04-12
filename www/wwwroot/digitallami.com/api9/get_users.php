@@ -1,6 +1,9 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../shared/admin_auth.php';
 header("Content-Type: application/json");
+
+admin_auth_guard();
 
 // ================= DB CONFIG =================
 // ✅ BASE URL FOR PROFILE PICTURES
@@ -20,7 +23,7 @@ try {
             firstName,
             lastName,
             email,
-            phone,
+            contactNo AS phone,
             isVerified,
             status,
             privacy,

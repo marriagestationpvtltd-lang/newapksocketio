@@ -110,10 +110,12 @@ class _PrefilledEmailScreenState extends State<PrefilledEmailScreen> with Single
           'password': password,
         }),
       );
-      if (response.statusCode == 200) {
+      try {
         return jsonDecode(response.body);
+      } catch (parseError) {
+        debugPrint('Login response parse error (status ${response.statusCode}): $parseError');
+        return null;
       }
-      return null;
     } catch (e) {
       debugPrint('Login error: $e');
       return null;

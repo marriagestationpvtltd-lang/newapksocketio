@@ -27,14 +27,14 @@ class Document {
 
   factory Document.fromJson(Map<String, dynamic> json) {
     return Document(
-      userId: json['user_id'] ?? 0,
+      userId: int.tryParse(json['user_id']?.toString() ?? '') ?? 0,
       email: json['email'] ?? '',
       firstName: json['firstName'] ?? '',
       lastName: json['lastName'] ?? '',
       gender: json['gender'] ?? '',
       status: json['status'] ?? '',
-      isVerified: json['isVerified'] ?? 0,
-      documentId: json['document_id'] ?? 0,
+      isVerified: int.tryParse(json['isVerified']?.toString() ?? '') ?? 0,
+      documentId: int.tryParse(json['document_id']?.toString() ?? '') ?? 0,
       documentType: json['documenttype'] ?? '',
       documentIdNumber: json['documentidnumber'] ?? '',
       photo: json['photo'] ?? '',

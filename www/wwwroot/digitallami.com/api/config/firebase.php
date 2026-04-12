@@ -10,9 +10,10 @@ class FirebaseConfig {
     public static function init() {
         if (self::$firebase === null) {
             $serviceAccount = ServiceAccount::fromJsonFile(__DIR__ . '/../../firebase-credentials.json');
+            $firebaseDatabaseUrl = getenv('FIREBASE_DATABASE_URL') ?: 'https://digitallamicomnp-default-rtdb.firebaseio.com/';
             self::$firebase = (new Factory)
                 ->withServiceAccount($serviceAccount)
-                ->withDatabaseUri('https://digitallamicomnp-default-rtdb.firebaseio.com/')
+                ->withDatabaseUri($firebaseDatabaseUrl)
                 ->create();
         }
         return self::$firebase;

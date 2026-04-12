@@ -66,7 +66,7 @@ class CallToneSettingsService {
 
   static final CallToneSettingsService instance = CallToneSettingsService._();
 
-  static const _settingsUrl = '${kApiBaseUrl}/Api2/app_settings.php';
+  static final _settingsUrl = '$kApiBaseUrl/Api2/app_settings.php';
   static const _cachedToneIdKey = 'cached_call_tone_id';
   static const _cachedCustomToneUrlKey = 'cached_custom_call_tone_url';
 

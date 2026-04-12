@@ -7,7 +7,7 @@ import 'package:uuid/uuid.dart';
 
 /// Base URL of the Node.js Socket.IO server (same as SocketService).
 /// Kept in sync with [kSocketServerUrl] in socket_service.dart.
-const String _kCallApiBase = kSocketServerUrl;
+final String _kCallApiBase = kSocketServerUrl;
 
 class CallHistoryService {
   // Log a new call – writes to MySQL via REST

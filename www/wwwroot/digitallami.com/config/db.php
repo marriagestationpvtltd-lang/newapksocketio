@@ -35,15 +35,16 @@ if (file_exists($_dbEnvFile)) {
 unset($_dbEnvFile);
 
 // ── Main "ms" database constants ─────────────────────────────────────────────
-// TODO: Move to environment variable - SECURITY RISK: fallback credentials below must not be used in production
+// Fallback credentials work for local dev (XAMPP/WAMP: root / no password).
+// On PRODUCTION / SHARED HOSTING always supply real credentials via .env —
+// the root fallback must never be used in production.
 if (!defined('DB_HOST')) define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
 if (!defined('DB_NAME')) define('DB_NAME', getenv('DB_NAME') ?: 'ms');
-if (!defined('DB_USER')) define('DB_USER', getenv('DB_USER') ?: 'ms');
-// TODO: Move to environment variable - SECURITY RISK: hardcoded password fallback
+if (!defined('DB_USER')) define('DB_USER', getenv('DB_USER') ?: 'root');
 // Use !== false so that an empty password (DB_PASS= in .env) is honoured instead
-// of being overridden by the 'ms' fallback (the ?: operator treats '' as falsy).
+// of being overridden by the fallback (the ?: operator treats '' as falsy).
 $_dbPass = getenv('DB_PASS');
-if (!defined('DB_PASS')) define('DB_PASS', $_dbPass !== false ? $_dbPass : 'ms');
+if (!defined('DB_PASS')) define('DB_PASS', $_dbPass !== false ? $_dbPass : '');
 unset($_dbPass);
 
 // ── Public URL constants (for absolute media/profile links) ──────────────────
@@ -51,13 +52,13 @@ if (!defined('APP_PUBLIC_BASE_URL')) define('APP_PUBLIC_BASE_URL', rtrim(getenv(
 if (!defined('APP_API2_BASE_URL')) define('APP_API2_BASE_URL', APP_PUBLIC_BASE_URL . '/Api2/');
 
 // ── "adminchat" database constants ───────────────────────────────────────────
+// Falls back to the same credentials as the main DB if not set separately.
 if (!defined('ADMINCHAT_DB_HOST')) define('ADMINCHAT_DB_HOST', getenv('ADMINCHAT_DB_HOST') ?: DB_HOST);
 if (!defined('ADMINCHAT_DB_NAME')) define('ADMINCHAT_DB_NAME', getenv('ADMINCHAT_DB_NAME') ?: 'adminchat');
-if (!defined('ADMINCHAT_DB_USER')) define('ADMINCHAT_DB_USER', getenv('ADMINCHAT_DB_USER') ?: 'adminchat');
-// TODO: Move to environment variable - SECURITY RISK: hardcoded password fallback
+if (!defined('ADMINCHAT_DB_USER')) define('ADMINCHAT_DB_USER', getenv('ADMINCHAT_DB_USER') ?: DB_USER);
 // Use !== false so that an empty password is honoured (see DB_PASS note above).
 $_adminchatDbPass = getenv('ADMINCHAT_DB_PASS');
-if (!defined('ADMINCHAT_DB_PASS')) define('ADMINCHAT_DB_PASS', $_adminchatDbPass !== false ? $_adminchatDbPass : 'adminchat');
+if (!defined('ADMINCHAT_DB_PASS')) define('ADMINCHAT_DB_PASS', $_adminchatDbPass !== false ? $_adminchatDbPass : DB_PASS);
 unset($_adminchatDbPass);
 
 // ── Agora constants (server-side token generation only) ──────────────────────

@@ -1,7 +1,10 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
-// signup.php
 header('Content-Type: application/json; charset=utf-8');
+
+// Suppress PHP notices/warnings so they never corrupt the JSON response.
+ini_set('display_errors', '0');
+error_reporting(E_ERROR);
 
 // ==== CONFIG - update these ====
 $dbHost = DB_HOST;

@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 header('Content-Type: application/json; charset=utf-8');
 
 $dbHost = DB_HOST;
@@ -31,7 +32,7 @@ $stmt = $mysqli->prepare("
 ");
 $stmt->bind_param('ss', $email, $otp);
 $stmt->execute();
-$res = $stmt->get_result();
+$res = stmt_get_result($stmt);
 $row = $res->fetch_assoc();
 $stmt->close();
 

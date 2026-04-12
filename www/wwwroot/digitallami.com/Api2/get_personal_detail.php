@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 declare(strict_types=1);
 header("Content-Type: application/json; charset=UTF-8");
 
@@ -85,7 +86,7 @@ try {
     
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
-    $result = $stmt->get_result();
+    $result = stmt_get_result($stmt);
     
     if ($result->num_rows > 0) {
         $data = $result->fetch_assoc();

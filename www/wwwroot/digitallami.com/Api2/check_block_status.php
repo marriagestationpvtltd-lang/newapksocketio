@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 header('Content-Type: application/json');
 
 $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
@@ -24,7 +25,7 @@ $stmt = $conn->prepare("
 ");
 $stmt->bind_param("iiiiiiii", $myId, $userId, $userId, $myId, $myId, $userId, $userId, $myId);
 $stmt->execute();
-$row = $stmt->get_result()->fetch_assoc();
+$row = stmt_get_result($stmt)->fetch_assoc();
 $stmt->close();
 
 $isBlocked   = (bool)($row['is_blocked']   ?? false);

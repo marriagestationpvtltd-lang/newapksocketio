@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 header("Content-Type: application/json");
 
 $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
@@ -27,7 +28,7 @@ if ($userid <= 0) {
 $stmt = $conn->prepare("SELECT * FROM user_partner WHERE userid = ?");
 $stmt->bind_param("i", $userid);
 $stmt->execute();
-$result = $stmt->get_result();
+$result = stmt_get_result($stmt);
 
 if ($result && $result->num_rows > 0) {
     $row = $result->fetch_assoc();
@@ -45,7 +46,7 @@ if ($result && $result->num_rows > 0) {
                 $s = $conn->prepare("SELECT name FROM countries WHERE id = ?");
                 $s->bind_param("i", $id);
                 $s->execute();
-                $r = $s->get_result();
+                $r = stmt_get_result($s);
                 if ($r && $r->num_rows > 0) {
                     $names[] = $r->fetch_assoc()['name'];
                 } else {
@@ -70,7 +71,7 @@ if ($result && $result->num_rows > 0) {
                 $s = $conn->prepare("SELECT name FROM state WHERE id = ?");
                 $s->bind_param("i", $id);
                 $s->execute();
-                $r = $s->get_result();
+                $r = stmt_get_result($s);
                 if ($r && $r->num_rows > 0) {
                     $names[] = $r->fetch_assoc()['name'];
                 } else {
@@ -95,7 +96,7 @@ if ($result && $result->num_rows > 0) {
                 $s = $conn->prepare("SELECT name FROM districts WHERE id = ?");
                 $s->bind_param("i", $id);
                 $s->execute();
-                $r = $s->get_result();
+                $r = stmt_get_result($s);
                 if ($r && $r->num_rows > 0) {
                     $names[] = $r->fetch_assoc()['name'];
                 } else {

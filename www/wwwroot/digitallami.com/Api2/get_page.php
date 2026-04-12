@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 header("Content-Type: application/json");
 
 // DATABASE CONNECTION --------------------
@@ -32,7 +33,7 @@ $user_id = intval($_GET['user_id']);
 $stmt = $conn->prepare("SELECT pageno FROM users WHERE id = ? LIMIT 1");
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
-$result = $stmt->get_result();
+$result = stmt_get_result($stmt);
 
 if ($result->num_rows > 0) {
 

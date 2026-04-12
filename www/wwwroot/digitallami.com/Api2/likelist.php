@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 header('Content-Type: application/json');
 
 // Database connection
@@ -50,7 +51,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete') {
 $stmt = $conn->prepare("SELECT receiver_id FROM likes WHERE sender_id = ?");
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
-$res = $stmt->get_result();
+$res = stmt_get_result($stmt);
 
 $receiver_ids = [];
 while ($row = $res->fetch_assoc()) {
@@ -96,7 +97,7 @@ while ($user = $result->fetch_assoc()) {
     ");
     $stmtPhoto->bind_param("iiii", $user_id, $uid, $uid, $user_id);
     $stmtPhoto->execute();
-    $resPhoto = $stmtPhoto->get_result();
+    $resPhoto = stmt_get_result($stmtPhoto);
 
     if ($row = $resPhoto->fetch_assoc()) {
         $photo_request = ($row['status'] === 'accepted') ? 'accepted' : 'pending';
@@ -107,14 +108,14 @@ while ($user = $result->fetch_assoc()) {
     $stmtAddr = $conn->prepare("SELECT city FROM permanent_address WHERE userid = ?");
     $stmtAddr->bind_param("i", $uid);
     $stmtAddr->execute();
-    $addr = $stmtAddr->get_result()->fetch_assoc();
+    $addr = stmt_get_result($stmtAddr)->fetch_assoc();
     $stmtAddr->close();
 
     /* -------- DESIGNATION -------- */
     $stmtEdu = $conn->prepare("SELECT designation FROM educationcareer WHERE userid = ?");
     $stmtEdu->bind_param("i", $uid);
     $stmtEdu->execute();
-    $edu = $stmtEdu->get_result()->fetch_assoc();
+    $edu = stmt_get_result($stmtEdu)->fetch_assoc();
     $stmtEdu->close();
 
     /* -------- FINAL USER OBJECT -------- */

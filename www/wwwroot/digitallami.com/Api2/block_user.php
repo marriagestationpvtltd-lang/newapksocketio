@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 header('Content-Type: application/json');
 
 $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
@@ -17,7 +18,7 @@ if ($myId <= 0 || $userId <= 0) {
 $check = $conn->prepare("SELECT id FROM blocks WHERE blocker_id = ? AND blocked_id = ?");
 $check->bind_param("ii", $myId, $userId);
 $check->execute();
-$result = $check->get_result();
+$result = stmt_get_result($check);
 
 if ($result->num_rows > 0) {
     echo json_encode(["status" => "error", "message" => "User already blocked"]);

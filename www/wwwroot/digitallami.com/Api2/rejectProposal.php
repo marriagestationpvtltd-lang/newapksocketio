@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 header("Content-Type: application/json");
 
 require_once __DIR__ . '/../shared/activity_logger.php';
@@ -31,7 +32,7 @@ try {
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("i", $proposalId);
     $stmt->execute();
-    $result = $stmt->get_result();
+    $result = stmt_get_result($stmt);
 
     if ($result->num_rows === 0) {
         echo json_encode(["success" => false, "message" => "Proposal not found"]);

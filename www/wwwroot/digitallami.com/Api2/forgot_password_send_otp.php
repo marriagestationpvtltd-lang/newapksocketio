@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 header('Content-Type: application/json; charset=utf-8');
 
 // DB CONFIG
@@ -38,7 +39,7 @@ $mysqli->set_charset('utf8mb4');
 $stmt = $mysqli->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
 $stmt->bind_param('s', $email);
 $stmt->execute();
-$res = $stmt->get_result();
+$res = stmt_get_result($stmt);
 $user = $res->fetch_assoc();
 $stmt->close();
 

@@ -72,14 +72,34 @@ try {
     
     $stmt->bind_param('s', $input['email']);
     $stmt->execute();
-    $result = $stmt->get_result();
-    
-    if ($result->num_rows === 0) {
+    $stmt->bind_result(
+        $col_id, $col_firstName, $col_lastName, $col_email, $col_password,
+        $col_contactNo, $col_gender, $col_languages, $col_nationality,
+        $col_profile_picture, $col_isDelete, $col_isDisable,
+        $col_birthDate, $col_profileForId
+    );
+
+    if (!$stmt->fetch()) {
         $stmt->close();
         respond(401, ['success' => false, 'message' => 'Invalid email or password']);
     }
-    
-    $user = $result->fetch_assoc();
+
+    $user = [
+        'id'              => $col_id,
+        'firstName'       => $col_firstName,
+        'lastName'        => $col_lastName,
+        'email'           => $col_email,
+        'password'        => $col_password,
+        'contactNo'       => $col_contactNo,
+        'gender'          => $col_gender,
+        'languages'       => $col_languages,
+        'nationality'     => $col_nationality,
+        'profile_picture' => $col_profile_picture,
+        'isDelete'        => $col_isDelete,
+        'isDisable'       => $col_isDisable,
+        'birthDate'       => $col_birthDate,
+        'profileForId'    => $col_profileForId,
+    ];
     $stmt->close();
 
     // 2) Check account status before verifying password

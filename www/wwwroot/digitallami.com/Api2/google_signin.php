@@ -2,6 +2,7 @@
 // google_signin.php — Google / Firebase sign-in for Flutter Web
 // Flutter sends: email, google_id (Firebase UID), firebase_token, displayName
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/mysqli_compat.php';
 header('Content-Type: application/json; charset=utf-8');
 
 // Suppress PHP notices/warnings so they never corrupt the JSON response.
@@ -75,7 +76,7 @@ try {
     if (!$stmt) throw new Exception("Prepare failed: " . $mysqli->error);
     $stmt->bind_param('s', $email);
     $stmt->execute();
-    $result = $stmt->get_result();
+    $result = stmt_get_result($stmt);
 
     if ($result->num_rows > 0) {
         // Existing user — update google_id if needed
@@ -126,7 +127,7 @@ try {
         if (!$stmt) throw new Exception("Prepare failed (fetch new user): " . $mysqli->error);
         $stmt->bind_param('i', $newId);
         $stmt->execute();
-        $result = $stmt->get_result();
+        $result = stmt_get_result($stmt);
         $user   = $result->fetch_assoc();
         $stmt->close();
     }

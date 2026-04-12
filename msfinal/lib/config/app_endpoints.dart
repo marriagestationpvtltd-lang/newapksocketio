@@ -12,7 +12,7 @@ const String _socketServerEnv = String.fromEnvironment(
   defaultValue: '',
 );
 
-const String _defaultProdSocketUrl = 'https://adminnew.marriagestation.com.np';
+const String _defaultProdSocketUrl = 'https://react.marriagestation.com.np';
 
 /// Determines the socket server URL.
 /// Priority:

@@ -39,7 +39,9 @@ npm run dev      # development (auto-reload)
 ### 3. Flutter app — point to the correct server URL
 
 Edit `msfinal/lib/config/app_endpoints.dart` and change the default IP to your
-machine's LAN IP address:
+machine's LAN IP address. If you only override `API_BASE_URL` for a custom
+environment, the Flutter app will now automatically fall back to the same host
+on port **3001** for the socket server unless `SOCKET_SERVER_URL` is set.
 
 ```dart
 const String kSocketServerBaseUrl = String.fromEnvironment(

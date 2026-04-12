@@ -206,6 +206,24 @@ class _ChatWindowState extends State<ChatWindow> {
     _initializeWebSpeech();
     _initializeRecorder();
     final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+
+    // Set the ChatProvider.id from the widget's receiverIdd parameter
+    // to ensure messages are loaded for the correct user
+    if (widget.receiverIdd != null) {
+      final receiverId = widget.receiverIdd is int
+          ? widget.receiverIdd as int
+          : int.tryParse(widget.receiverIdd.toString());
+      if (receiverId != null) {
+        chatProvider.updateidd(receiverId);
+      }
+    }
+
+    // Update the ChatProvider name and online status from widget parameters
+    if (widget.name.isNotEmpty) {
+      chatProvider.updateName(widget.name);
+    }
+    chatProvider.updateonline(widget.isOnline);
+
     if (chatProvider.id != null) {
       _fetchMatchDetails();
     }

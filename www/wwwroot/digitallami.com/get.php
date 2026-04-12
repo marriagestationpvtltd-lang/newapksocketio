@@ -135,8 +135,7 @@ while ($user = $userResult->fetch_assoc()) {
         LIMIT 1
     ");
     if ($chatQuery !== false) {
-        $userIdStr = (string)$userId;
-        $chatQuery->bind_param("ss", $userIdStr, $userIdStr);
+        $chatQuery->bind_param("ss", $userId, $userId);
         $chatQuery->execute();
         $chatRes = $chatQuery->get_result();
         if ($chatRes->num_rows > 0) {

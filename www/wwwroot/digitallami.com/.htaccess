@@ -7,3 +7,9 @@
     Order allow,deny
     Deny from all
 </FilesMatch>
+
+# Redirect browser's automatic favicon.ico lookup to the Flutter web app favicon.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^favicon\.ico$ /adminp/favicon.png [R=301,L]
+</IfModule>

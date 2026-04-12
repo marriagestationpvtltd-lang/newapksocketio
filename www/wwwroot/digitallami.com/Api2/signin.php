@@ -61,7 +61,7 @@ try {
     $stmt = $mysqli->prepare("
         SELECT u.id, u.firstName, u.lastName, u.email, u.password, u.contactNo, 
                u.gender, u.languages, u.nationality, u.profile_picture,
-               u.isDelete, u.isDisable,
+               u.isDelete, u.isDisable, u.createdDate,
                up.birthDate, up.profileForId
         FROM users u
         LEFT JOIN userpersonaldetail up ON up.userid = u.id
@@ -75,7 +75,7 @@ try {
     $stmt->bind_result(
         $col_id, $col_firstName, $col_lastName, $col_email, $col_password,
         $col_contactNo, $col_gender, $col_languages, $col_nationality,
-        $col_profile_picture, $col_isDelete, $col_isDisable,
+        $col_profile_picture, $col_isDelete, $col_isDisable, $col_createdDate,
         $col_birthDate, $col_profileForId
     );
 
@@ -97,6 +97,7 @@ try {
         'profile_picture' => $col_profile_picture,
         'isDelete'        => $col_isDelete,
         'isDisable'       => $col_isDisable,
+        'createdDate'     => $col_createdDate,
         'birthDate'       => $col_birthDate,
         'profileForId'    => $col_profileForId,
     ];

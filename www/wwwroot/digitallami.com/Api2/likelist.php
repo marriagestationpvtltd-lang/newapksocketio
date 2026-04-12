@@ -71,6 +71,7 @@ $sql = "
     SELECT id, firstName, lastName, profile_picture, isVerified, privacy
     FROM users
     WHERE id IN ($ids)
+      AND isActive = 1 AND isDelete = 0
 ";
 $result = $conn->query($sql);
 

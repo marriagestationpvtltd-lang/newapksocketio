@@ -51,7 +51,7 @@ try {
         us.firstName AS senderFirst,
         us.lastName AS senderLast,
         us.profile_picture AS senderPic,
-        us.status AS senderVerified,
+        us.isVerified AS senderVerified,
         us.id AS senderMemberId,
 
         ec_sender.designation AS senderDesignation,
@@ -63,7 +63,7 @@ try {
         ur.firstName AS receiverFirst,
         ur.lastName AS receiverLast,
         ur.profile_picture AS receiverPic,
-        ur.status AS receiverVerified,
+        ur.isVerified AS receiverVerified,
         ur.id AS receiverMemberId,
 
         ec_receiver.designation AS receiverDesignation,
@@ -74,15 +74,15 @@ try {
 
     -- SENDER JOINS
     JOIN users us ON us.id = p.sender_id
-    LEFT JOIN educationcareer ec_sender ON ec_sender.userid = us.id
-    LEFT JOIN permanent_address pa_sender ON pa_sender.userid = us.id
+    LEFT JOIN (SELECT userid, designation FROM educationcareer GROUP BY userid) ec_sender ON ec_sender.userid = us.id
+    LEFT JOIN (SELECT userid, city FROM permanent_address GROUP BY userid) pa_sender ON pa_sender.userid = us.id
     LEFT JOIN userpersonaldetail upd_sender ON upd_sender.userid = us.id
     LEFT JOIN maritalstatus ms_sender ON ms_sender.id = upd_sender.maritalStatusId
 
     -- RECEIVER JOINS
     JOIN users ur ON ur.id = p.receiver_id
-    LEFT JOIN educationcareer ec_receiver ON ec_receiver.userid = ur.id
-    LEFT JOIN permanent_address pa_receiver ON pa_receiver.userid = ur.id
+    LEFT JOIN (SELECT userid, designation FROM educationcareer GROUP BY userid) ec_receiver ON ec_receiver.userid = ur.id
+    LEFT JOIN (SELECT userid, city FROM permanent_address GROUP BY userid) pa_receiver ON pa_receiver.userid = ur.id
     LEFT JOIN userpersonaldetail upd_receiver ON upd_receiver.userid = ur.id
     LEFT JOIN maritalstatus ms_receiver ON ms_receiver.id = upd_receiver.maritalStatusId
 

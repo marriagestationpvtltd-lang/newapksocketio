@@ -52,10 +52,11 @@ try {
             pa.city
         FROM users u
         LEFT JOIN userpersonaldetail ud ON ud.userId = u.id
-        LEFT JOIN permanent_address pa ON pa.userId = u.id
+        LEFT JOIN (SELECT userid, city FROM permanent_address GROUP BY userid) pa ON pa.userid = u.id
         WHERE TRIM(LOWER(u.gender)) = :opp_gender
           AND TRIM(LOWER(u.usertype)) = 'paid'
           AND u.id != :me
+          AND u.isActive = 1 AND u.isDelete = 0
         ORDER BY u.id DESC
     ";
 

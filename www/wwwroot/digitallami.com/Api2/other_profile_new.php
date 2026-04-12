@@ -180,7 +180,8 @@ LEFT JOIN user_astrologic ua ON u.id=ua.userid
 LEFT JOIN user_family uf ON u.id=uf.userid
 LEFT JOIN user_lifestyle ul ON u.id=ul.userid
 LEFT JOIN user_partner upa ON u.id=upa.userid
-WHERE u.id=?";
+WHERE u.id=?
+GROUP BY u.id";
 
 $stmt=$conn->prepare($sql);
 $stmt->bind_param("i",$userid);
@@ -329,8 +330,6 @@ echo json_encode([
 "partner" => [
         "minage" => $row['minage'] ?? $default,
         "maxage" => $row['maxage'] ?? $default,
-        "minweight" => $row['minweight'] ?? $default,
-        "maxweight" => $row['maxweight'] ?? $default,
         "maritalstatus" => $row['maritalstatus'] ?? $default,
         "profilewithchild" => $row['profilewithchild'] ?? $default,
         "familytype" => $row['partnerFamilyType'] ?? $default,

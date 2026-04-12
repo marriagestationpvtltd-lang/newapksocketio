@@ -82,6 +82,7 @@ try {
         LEFT JOIN (SELECT userid, drinks, smoke FROM user_lifestyle GROUP BY userid) ul ON ul.userid = u.id
         WHERE TRIM(LOWER(u.gender)) = :opp_gender
           AND u.id != :me
+          AND u.isActive = 1 AND u.isDelete = 0
     ";
 
     $params = [

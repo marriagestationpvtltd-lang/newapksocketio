@@ -378,7 +378,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
       }
 
       final response = await http
-          .get(Uri.parse('${kApiBaseUrl}/app.php'))
+          .get(Uri.parse(AppConfig.appCheck))
           .timeout(const Duration(seconds: 5));
 
       // Always update the cache after a real HTTP attempt so that a server
@@ -831,7 +831,7 @@ class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMix
 
   Future<void> updateFcmToken(String userId, String token) async {
     final response = await http.post(
-      Uri.parse("${kApiBaseUrl}/Api2/update_token.php"),
+      Uri.parse(AppConfig.updateToken),
       body: {
         "user_id": userId,
         "fcm_token": token,

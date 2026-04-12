@@ -45,9 +45,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _currentPrivacy = 'Private';
   bool _loadingPrivacy = true;
 
-  final String _baseUrl = '${kApiBaseUrl}/Api2';
-  final String _privacyGetUrl = '${kApiBaseUrl}/Api3/get_privacy.php';
-  final String _privacyUpdateUrl = '${kApiBaseUrl}/Api3/privacy.php';
+  final String _baseUrl = AppConfig.imageBase;
+  final String _privacyGetUrl = AppConfig.getPrivacy;
+  final String _privacyUpdateUrl = AppConfig.updatePrivacy;
 
   @override
   void initState() {

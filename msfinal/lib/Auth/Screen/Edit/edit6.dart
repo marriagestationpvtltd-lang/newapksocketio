@@ -154,7 +154,7 @@ class _FamilyDetailsPageeState extends State<FamilyDetailsPagee> {
       print("Loading family data for user ID: $userId");
 
       // Call GET API
-      var url = Uri.parse("${kApiBaseUrl}/Api2/get_family_details.php?userid=$userId");
+      var url = Uri.parse("${AppConfig.getFamilyDetails}?userid=$userId");
       var response = await http.get(url);
 
       print("API Response Status: ${response.statusCode}");
@@ -1210,7 +1210,7 @@ class _FamilyDetailsPageeState extends State<FamilyDetailsPagee> {
       print("Sending request: $requestBody");
 
       var response = await http.post(
-        Uri.parse("${kApiBaseUrl}/Api2/updatefamily.php"),
+        Uri.parse(AppConfig.updateFamily),
         body: requestBody,
       ).timeout(const Duration(seconds: 30));
 

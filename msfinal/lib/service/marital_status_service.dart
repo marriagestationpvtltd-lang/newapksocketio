@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:ms2026/config/app_endpoints.dart';
 
 class MaritalStatusService {
-  static final String _baseUrl = kApi19BaseUrl;
+  static final String _baseUrl = '${AppConfig.baseUrl}/api19';
 
   /// Fetch the marital status for a given [userId] from api19/get.php.
   /// Returns a map with `maritalStatusId` and `maritalStatusName` on success.

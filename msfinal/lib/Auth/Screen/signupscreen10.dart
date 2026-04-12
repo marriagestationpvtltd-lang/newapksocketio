@@ -114,7 +114,7 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
         return;
       }
       final response = await http.post(
-        Uri.parse('${kApiBaseUrl}/Api2/check_document_status.php'),
+        Uri.parse(AppConfig.checkDocumentStatus),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'user_id': userId}),
       );
@@ -166,7 +166,7 @@ class _IDVerificationScreenState extends State<IDVerificationScreen>
       final userId = int.tryParse(userData['id'].toString());
 
       final uri =
-          Uri.parse('${kApiBaseUrl}/Api2/upload_document.php');
+          Uri.parse(AppConfig.uploadDocument);
       final request = http.MultipartRequest('POST', uri);
       request.fields['userid'] = userId.toString();
       request.fields['documenttype'] = _selectedDocumentType!;

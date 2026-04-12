@@ -433,7 +433,7 @@ class _CommunityDetailsPageEditState extends State<CommunityDetailsPageEdit> {
     required int subCommunityId,
     required String castLanguage,
   }) async {
-    final url = Uri.parse("${kApiBaseUrl}/Api2/update_religion.php");
+    final url = Uri.parse(AppConfig.updateReligion);
 
     try {
       final response = await http.post(

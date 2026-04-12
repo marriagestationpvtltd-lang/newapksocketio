@@ -62,7 +62,7 @@ class _SubscriptionPageState extends State<SubscriptionPage>
       final userId = userData["id"].toString();
 
       final response = await http.get(
-        Uri.parse('${kApiBaseUrl}/Api2/user_package.php?userid=$userId'),
+        Uri.parse('${AppConfig.userPackage}?userid=$userId'),
       );
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -85,7 +85,7 @@ class _SubscriptionPageState extends State<SubscriptionPage>
   Future<void> fetchPackages() async {
     try {
       final response = await http.get(
-        Uri.parse('${kApiBaseUrl}/Api2/packagelist.php'),
+        Uri.parse(AppConfig.packageList),
       );
       if (response.statusCode == 200) {
         final data = json.decode(response.body);

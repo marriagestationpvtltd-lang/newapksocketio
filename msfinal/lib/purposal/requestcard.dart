@@ -51,7 +51,7 @@ class _RequestCardDynamicState extends State<RequestCardDynamic> {
 
   Future<UserMasterData> fetchUserMasterData(String userId) async {
     final url = Uri.parse(
-      "${kApiBaseUrl}/Api2/masterdata.php?userid=$userId",
+      "${AppConfig.masterData}?userid=$userId",
     );
 
     final response = await http.get(url);
@@ -105,7 +105,7 @@ class _RequestCardDynamicState extends State<RequestCardDynamic> {
       final userId = int.tryParse(userData["id"].toString());
 
       final response = await http.post(
-        Uri.parse("${kApiBaseUrl}/Api2/check_document_status.php"),
+        Uri.parse(AppConfig.checkDocumentStatus),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'user_id': userId}),
       );

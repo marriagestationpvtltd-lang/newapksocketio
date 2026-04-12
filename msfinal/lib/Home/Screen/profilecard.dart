@@ -391,7 +391,7 @@ class _ProfileSwipeUIState extends State<ProfileSwipeUI> {
 
   Future<UserMasterData> fetchUserMasterData(String userId) async {
     final url = Uri.parse(
-      "${kApiBaseUrl}/Api2/masterdata.php?userid=$userId",
+      "${AppConfig.masterData}?userid=$userId",
     );
 
     final response = await http.get(url);
@@ -456,7 +456,7 @@ class _ProfileSwipeUIState extends State<ProfileSwipeUI> {
       print("Checking document status for user ID: $userId");
 
       final response = await http.post(
-        Uri.parse("${kApiBaseUrl}/Api2/check_document_status.php"),
+        Uri.parse(AppConfig.checkDocumentStatus),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'user_id': userId}),
       );

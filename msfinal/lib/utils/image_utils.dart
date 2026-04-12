@@ -1,5 +1,5 @@
 import 'package:ms2026/config/app_endpoints.dart';
-final String _apiBaseUrl = '$kApiBaseUrl/Api2';
+final String _apiBaseUrl = AppConfig.imageBase;
 
 /// Resolves a raw image path returned by the PHP API into a full URL.
 ///

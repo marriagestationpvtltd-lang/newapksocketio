@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:ms2026/config/app_endpoints.dart';
 
 class PageService {
-  static final String apiUrl = "$kApiBaseUrl/Api2/get_page.php";
+  static final String apiUrl = AppConfig.getPage;
 
   static Future<int?> getPageNo(int userId) async {
     try {

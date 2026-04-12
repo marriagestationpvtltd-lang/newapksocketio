@@ -58,7 +58,7 @@ class _RecentMembersPageState extends State<RecentMembersPage> {
       final userId = int.tryParse(userData["id"].toString());
 
       final response = await http.post(
-        Uri.parse("${kApiBaseUrl}/Api2/check_document_status.php"),
+        Uri.parse(AppConfig.checkDocumentStatus),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'user_id': userId}),
       );
@@ -106,7 +106,7 @@ class _RecentMembersPageState extends State<RecentMembersPage> {
       _userCreatedDate = userData["createdDate"] ?? userData["created_at"] ?? "";
 
       final url = Uri.parse(
-          '${kApiBaseUrl}/Api2/search_opposite_gender.php?user_id=$userid&sort_by=recent&limit=${_perPage * _currentPage}');
+          '${AppConfig.searchOppositeGender}?user_id=$userid&sort_by=recent&limit=${_perPage * _currentPage}');
       final response = await http.get(url);
 
       if (response.statusCode == 200) {
@@ -134,7 +134,7 @@ class _RecentMembersPageState extends State<RecentMembersPage> {
             final rawImage = member['profile_picture'] ?? '';
             final imageUrl = rawImage.startsWith('http')
                 ? rawImage
-                : '${kApiBaseUrl}/Api2/$rawImage';
+                : '${AppConfig.imageBase}/$rawImage';
 
             return {
               'userId': member['userid'] ?? member['id'],

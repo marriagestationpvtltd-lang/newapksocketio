@@ -113,7 +113,7 @@ class _LifestylePageeState extends State<LifestylePagee> {
       print("Loading lifestyle data for user ID: $userId");
 
       // Call GET API
-      var url = Uri.parse("${kApiBaseUrl}/Api2/get_lifestyle.php?userid=$userId");
+      var url = Uri.parse("${AppConfig.getLifestyle}?userid=$userId");
       var response = await http.get(url);
 
       print("API Response Status: ${response.statusCode}");
@@ -581,7 +581,7 @@ SizedBox(width: 80,),
       body.removeWhere((key, value) => value.isEmpty);
 
       // API URL
-      String url = "${kApiBaseUrl}/Api2/user_lifestyle.php";
+      String url = AppConfig.userLifestyle;
 
       print("Submitting lifestyle data: $body");
 

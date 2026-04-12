@@ -299,7 +299,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
       if (userId.isEmpty) return;
 
       final url = Uri.parse(
-        '${kApiBaseUrl}/Api2/masterdata.php?userid=$userId',
+        '${AppConfig.masterData}?userid=$userId',
       );
       final response = await http.get(url);
       if (response.statusCode == 200) {
@@ -3657,7 +3657,7 @@ class _AdminChatScreenState extends State<AdminChatScreen>
                             }
                             final response = await http.post(
                               Uri.parse(
-                                  '${kApiBaseUrl}/Api2/send_request.php'),
+                                  AppConfig.sendRequest),
                               headers: {
                                 'Content-Type': 'application/json'
                               },

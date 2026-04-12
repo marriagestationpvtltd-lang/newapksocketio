@@ -285,7 +285,7 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
       if (userId.isEmpty) return false; // unknown user — allow
 
       final response = await http.get(
-        Uri.parse('$kApi2BaseUrl/masterdata.php?userid=$userId'),
+        Uri.parse('${AppConfig.masterData}?userid=$userId'),
       ).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);

@@ -12,7 +12,7 @@ import 'package:ms2026/config/app_endpoints.dart';
 /// URL of the Node.js Socket.IO server.
 /// ⚠️  IMPORTANT: Replace this with your actual deployed server URL before
 /// building for production. Example: 'https://socket.yourserver.com:3001'
-final String kSocketServerUrl = kSocketServerBaseUrl;
+final String kSocketServerUrl = AppConfig.socketUrl;
 
 /// ---------------------------------------------------------------------------
 /// SocketService — singleton that manages the Socket.IO connection and

@@ -100,7 +100,7 @@ class _FilterPageState extends State<FilterPage> {
 
     try {
       // Fetch without any filter parameters
-      final url = Uri.parse('${kApiBaseUrl}/Api2/search_opposite_gender.php?user_id=$_currentUserId');
+      final url = Uri.parse('${AppConfig.searchOppositeGender}?user_id=$_currentUserId');
 
       print('Fetching initial count from: $url'); // Debug log
 
@@ -260,7 +260,7 @@ class _FilterPageState extends State<FilterPage> {
 
         // Build URL
         final queryString = Uri(queryParameters: params).query;
-        final url = Uri.parse('${kApiBaseUrl}/Api2/search_opposite_gender.php?$queryString');
+        final url = Uri.parse('${AppConfig.searchOppositeGender}?$queryString');
 
         print('Fetching filtered count from: $url'); // Debug log
 

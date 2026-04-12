@@ -31,7 +31,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('${kApiBaseUrl}/Api2/get_blocked_users.php'),
+        Uri.parse(AppConfig.getBlockedUsers),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'my_id': myId}),
       );
@@ -60,7 +60,7 @@ class _BlockedUsersScreenState extends State<BlockedUsersScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse('${kApiBaseUrl}/Api2/unblock_user.php'),
+        Uri.parse(AppConfig.unblockUser),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'my_id': myId,

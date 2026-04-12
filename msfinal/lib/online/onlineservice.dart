@@ -16,7 +16,7 @@ class OnlineStatusService {
   String? _currentUserId;
 
   final String _apiUrl =
-      "${kApiBaseUrl}/request/update_last_login.php";
+      AppConfig.updateLastLogin;
 
   /// 🔥 Start tracking (call on app start / app resume)
   void start() {

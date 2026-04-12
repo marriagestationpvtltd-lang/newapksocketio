@@ -98,7 +98,7 @@ class SignupModel extends ChangeNotifier {
 
   /// Submit multipart/form-data to signup endpoint
   Future<bool> submitSignup({String? url}) async {
-    final resolvedUrl = url ?? '$kApiBaseUrl/Api2/signup.php';
+    final resolvedUrl = url ?? AppConfig.signUp;
     isSubmitting = true;
     error = null;
     notifyListeners();

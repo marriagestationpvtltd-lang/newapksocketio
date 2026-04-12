@@ -7,7 +7,7 @@ import '../../../config/app_endpoints.dart';
 import '../models/example_model.dart';
 
 class ExampleService {
-  final String baseUrl = '$kApiBaseUrl/api';
+  final String baseUrl = '${AppConfig.baseUrl}/api';
   final Duration timeout = const Duration(seconds: 30);
 
   /// Fetch list of items

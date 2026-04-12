@@ -836,7 +836,7 @@ class _PersonalDetailsPageEditState extends State<PersonalDetailsPageEdit> {
       final userId = int.tryParse(userData["id"].toString());
       // Call the reusable service
       final service = UserPersonalDetailService(
-        baseUrl: '${kApiBaseUrl}/Api2/save_personal_detail.php',
+        baseUrl: AppConfig.savePersonalDetail,
       );
 
       final result = await service.saveUserPersonalDetail(

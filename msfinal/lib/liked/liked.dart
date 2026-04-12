@@ -83,7 +83,7 @@ class _FavoritePeoplePageState extends State<FavoritePeoplePage> {
 
     try {
       final response = await http.post(
-        Uri.parse("${kApiBaseUrl}/Api2/check_document_status.php"),
+        Uri.parse(AppConfig.checkDocumentStatus),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'user_id': userId}),
       );
@@ -126,7 +126,7 @@ class _FavoritePeoplePageState extends State<FavoritePeoplePage> {
 
     try {
       final url = Uri.parse(
-          '${kApiBaseUrl}/Api2/likelist.php?user_id=$userId');
+          '${AppConfig.likeList}?user_id=$userId');
 
       final response = await http.get(url);
 
@@ -166,7 +166,7 @@ class _FavoritePeoplePageState extends State<FavoritePeoplePage> {
 
     try {
       final url = Uri.parse(
-          '${kApiBaseUrl}/Api2/likelist.php?user_id=$userId&action=delete&receiver_id=$receiverId');
+          '${AppConfig.likeList}?user_id=$userId&action=delete&receiver_id=$receiverId');
 
       final response = await http.get(url);
 
@@ -210,7 +210,7 @@ class _FavoritePeoplePageState extends State<FavoritePeoplePage> {
       print('Request data (JSON): $requestData');
 
       final response = await http.post(
-        Uri.parse('${kApiBaseUrl}/Api2/send_request.php'),
+        Uri.parse(AppConfig.sendRequest),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -956,7 +956,7 @@ class _FavoritePeoplePageState extends State<FavoritePeoplePage> {
 
   Future<UserMasterData> fetchUserMasterData(String userId) async {
     final url = Uri.parse(
-      "${kApiBaseUrl}/Api2/masterdata.php?userid=$userId",
+      "${AppConfig.masterData}?userid=$userId",
     );
 
     final response = await http.get(url);

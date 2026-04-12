@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:ms2026/config/app_endpoints.dart';
 
 class UpdateService {
-  static final String baseUrl = "$kApiBaseUrl/Api2"; // change to your domain
+  static final String baseUrl = AppConfig.imageBase; // change to your domain
 
   // Reusable function to update page number
   static Future<bool> updatePageNumber({

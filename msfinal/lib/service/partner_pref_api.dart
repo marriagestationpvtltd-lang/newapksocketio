@@ -9,8 +9,8 @@ class UserPartnerPreferenceService {
   UserPartnerPreferenceService({
     String? saveUrl,
     String? fetchUrl,
-  })  : saveUrl = saveUrl ?? '$kApiBaseUrl/Api2/user_partner.php',
-        fetchUrl = fetchUrl ?? '$kApiBaseUrl/Api2/get_partner_preferences.php';
+  })  : saveUrl = saveUrl ?? AppConfig.userPartner,
+        fetchUrl = fetchUrl ?? AppConfig.getPartnerPreferences;
 
   Future<Map<String, dynamic>?> fetchPartnerPreference({
     required int userId,

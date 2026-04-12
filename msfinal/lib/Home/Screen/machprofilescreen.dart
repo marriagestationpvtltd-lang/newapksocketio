@@ -31,7 +31,7 @@ class _MatchedProfilesPageeState extends State<MatchedProfilesPagee> {
   bool _isRefreshing = false;
   String _errorMessage = '';
   bool _isBlurred = true;
-  final String _apiUrl = '${kApiBaseUrl}/Api2/match.php';
+  final String _apiUrl = AppConfig.match;
   String _userName = '';
   String _userLastName = '';
   int _userId = 0;
@@ -126,7 +126,7 @@ class _MatchedProfilesPageeState extends State<MatchedProfilesPagee> {
   Future<void> _handleLikeProfile(int profileId, bool isCurrentlyLiked) async {
     try {
       final response = await http.post(
-        Uri.parse('${kApiBaseUrl}/Api2/like_profile.php'),
+        Uri.parse(AppConfig.likeProfile),
         body: {
           'sender_id': widget.currentUserId.toString(),
           'receiver_id': profileId.toString(),
@@ -182,7 +182,7 @@ class _MatchedProfilesPageeState extends State<MatchedProfilesPagee> {
     final photoRequestStatus = profile['photo_request']?.toString().toLowerCase() ?? 'not_sent';
 
     // Construct image URL
-    final baseImageUrl = '${kApiBaseUrl}/Api2/';
+    final baseImageUrl = '${AppConfig.imageBase}/';
     final profilePicture = profile['profile_picture'] ?? '';
     final imageUrl = profilePicture.isNotEmpty
         ? baseImageUrl + profilePicture

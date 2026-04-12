@@ -30,8 +30,8 @@ class _MatrimonyNotificationPageState
   List<Map<String, dynamic>> _notifications = [];
   bool _isLoading = true;
   bool _isRefreshing = false;
-  final String _baseUrl = "${kApiBaseUrl}/Api2";
-  final String _requestUrl = "${kApiBaseUrl}/request/request_list.php";
+  final String _baseUrl = AppConfig.imageBase;
+  final String _requestUrl = AppConfig.requestList;
 
   @override
   void initState() {

@@ -37,6 +37,9 @@ CREATE TABLE IF NOT EXISTS `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Seed default admin account.
+-- ⚠️  SECURITY: Change this password immediately after the first login!
+--     Default password is "admin123" (bcrypt hash below).
+--     Use the /register endpoint or UPDATE users SET password_hash = ? to replace it.
 -- Password hash is for "admin123" (bcrypt, cost 10).
 INSERT IGNORE INTO `users`
   (`id`, `username`, `email`, `password_hash`, `role`, `status`)
@@ -51,7 +54,7 @@ CREATE TABLE IF NOT EXISTS `memorial_profiles` (
   `id`               VARCHAR(50)  NOT NULL,
   `name`             VARCHAR(200) NOT NULL,
   `avatar_url`       VARCHAR(500) DEFAULT NULL,
-  `match_percentage` INT          NOT NULL DEFAULT 0,
+  `match_percentage` INT          NOT NULL DEFAULT 0 CHECK (`match_percentage` BETWEEN 0 AND 100),
   `membership_status` VARCHAR(50) DEFAULT 'free',
   `status`           VARCHAR(50)  DEFAULT 'newProfile',
   `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,

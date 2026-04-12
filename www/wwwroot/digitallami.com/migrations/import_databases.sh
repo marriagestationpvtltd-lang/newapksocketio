@@ -98,7 +98,8 @@ while [[ $# -gt 0 ]]; do
         --skip-ms)           SKIP_MS=true;       shift   ;;
         --skip-adminchat)    SKIP_ADMINCHAT=true; shift  ;;
         --help)
-            sed -n '2,50p' "$0"   # print the usage block at the top
+            # Print everything between the first and last line of the usage block
+            sed -n '/^# USAGE/,/^# =\{10\}/p' "$0" | head -n -1
             exit 0
             ;;
         *)

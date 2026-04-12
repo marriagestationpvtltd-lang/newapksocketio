@@ -471,6 +471,7 @@ class _ChatListScreenState extends State<ChatListScreen>
         // Persist fresh data for next launch
         _saveChatRoomsToCache(parsedRooms);
       });
+  }
 
   /// Subscribe to real-time chat room list updates from Socket.IO.
   void _startChatRoomsUpdateListener() {

@@ -10,6 +10,8 @@
  *   - userId : uploader's user ID (for path namespacing)
  */
 
+require_once __DIR__ . '/../config/db.php';
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: POST, OPTIONS');
@@ -95,9 +97,7 @@ if (!move_uploaded_file($_FILES['file']['tmp_name'], $destination)) {
     exit;
 }
 
-// Build public URL
-$protocol  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-$host      = $_SERVER['HTTP_HOST'];
-$publicUrl = $protocol . '://' . $host . '/uploads/chat/' . $subDir . '/' . $filename;
+// Build public URL using configured base URL
+$publicUrl = APP_PUBLIC_BASE_URL . '/uploads/chat/' . $subDir . '/' . $filename;
 
 echo json_encode(['success' => true, 'url' => $publicUrl]);

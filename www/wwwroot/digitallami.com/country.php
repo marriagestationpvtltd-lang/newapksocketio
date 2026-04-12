@@ -8,7 +8,7 @@ error_reporting(E_ALL);
 header('Content-Type: application/json; charset=utf-8');
 
 // Database configuration
-$host = 'localhost';
+$host = DB_HOST;
 $dbName = DB_NAME;
 $dbUser = DB_USER;
 $dbPass = DB_PASS;

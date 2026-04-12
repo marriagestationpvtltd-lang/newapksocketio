@@ -3,7 +3,7 @@ require_once __DIR__ . '/../config/db.php';
 header('Content-Type: application/json');
 
 // Database configuration - Update these with your actual credentials
-$host = 'localhost';
+$host = DB_HOST;
 $dbname = DB_NAME;
 $username = DB_USER;
 $password = DB_PASS;

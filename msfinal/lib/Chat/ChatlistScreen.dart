@@ -422,9 +422,33 @@ class _ChatListScreenState extends State<ChatListScreen>
     final socketService = SocketService();
     if (!socketService.isConnected) socketService.connect(userId);
 
+    // Start real-time listeners immediately so updates aren't missed while
+    // the initial getChatRooms call is in-flight or retrying.
+    _startChatRoomsUpdateListener();
+    _startOnlineStatusListeners();
+
     // Load from cache first so the list appears instantly without a spinner
     _loadChatRoomsFromCache().then((_) {
-      socketService.getChatRooms(userId).then((rooms) {
+      _fetchChatRooms(socketService);
+    });
+  }
+
+  /// Fetch chat rooms from the server, retrying once the socket reconnects if
+  /// it is not connected at call time.
+  void _fetchChatRooms(SocketService socketService) {
+    if (!mounted) return;
+    if (!socketService.isConnected) {
+      // Subscribe to the next connection event and retry then.
+      StreamSubscription? retrySub;
+      retrySub = socketService.onConnectionChange.listen((connected) {
+        if (connected) {
+          retrySub?.cancel();
+          _fetchChatRooms(socketService);
+        }
+      });
+      return;
+    }
+    socketService.getChatRooms(userId).then((rooms) {
         if (!mounted) return;
         final parsedRooms =
             rooms.map((r) => Map<String, dynamic>.from(r as Map)).toList();
@@ -446,10 +470,7 @@ class _ChatListScreenState extends State<ChatListScreen>
         });
         // Persist fresh data for next launch
         _saveChatRoomsToCache(parsedRooms);
-        _startChatRoomsUpdateListener();
-        _startOnlineStatusListeners();
       });
-    });
   }
 
   /// Subscribe to real-time chat room list updates from Socket.IO.

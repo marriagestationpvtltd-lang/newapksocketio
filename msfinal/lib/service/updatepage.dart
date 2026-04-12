@@ -3,8 +3,6 @@ import 'package:http/http.dart' as http;
 import 'package:ms2026/config/app_endpoints.dart';
 
 class UpdateService {
-  static final String baseUrl = AppConfig.imageBase; // change to your domain
-
   // Reusable function to update page number
   static Future<bool> updatePageNumber({
     required String userId,
@@ -12,7 +10,7 @@ class UpdateService {
   }) async {
     try {
       final uri = Uri.parse(
-          "$baseUrl/update_pageno.php?user_id=$userId&pageno=$pageNo");
+          "${AppConfig.updatePageNo}?user_id=$userId&pageno=$pageNo");
 
       final response = await http.get(uri);
 

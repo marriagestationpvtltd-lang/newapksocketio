@@ -113,6 +113,7 @@ class AppConfig {
   static const String premiumMembers = '$_api2/premiuimmember.php';
   static const String likeAction = '$_api2/like_action.php';
   static const String likeProfile = '$_api2/like_profile.php';
+  static const String like = '$_api2/like.php';
   static const String servicesApi = '$_api2/services_api.php';
 
   // ── Proposals ─────────────────────────────────────────────────────────────
@@ -123,17 +124,24 @@ class AppConfig {
 
   // ── Chat / Requests ───────────────────────────────────────────────────────
   static const String sendRequest = '$_api2/send_request.php';
+  static const String acceptRequest = '$_api2/accept_request.php';
+  static const String rejectRequest = '$_api2/reject_request.php';
   static const String requestList = '$_request/request_list.php';
   static const String updateLastLogin = '$_request/update_last_login.php';
+  static const String addProfileView = '$_request/add_profile_view.php';
 
   // ── Notifications ─────────────────────────────────────────────────────────
   static const String sendNotification = '$_api2/send_notification.php';
   static const String getNotifications = '$_api2/get_notifications.php';
   static const String updateNotificationSettings = '$_api2/update_notification_settings.php';
+  static const String markNotificationsRead = '$_api2/mark_as_read.php';
+  static const String deleteNotification = '$_api2/delete_notification.php';
 
   // ── Blocked users ─────────────────────────────────────────────────────────
   static const String getBlockedUsers = '$_api2/get_blocked_users.php';
   static const String unblockUser = '$_api2/unblock_user.php';
+  static const String blockUser = '$_api2/block_user.php';
+  static const String checkBlockStatus = '$_api2/check_block_status.php';
 
   // ── Privacy ───────────────────────────────────────────────────────────────
   static const String getPrivacy = '$_api3/get_privacy.php';
@@ -160,6 +168,12 @@ class AppConfig {
 
   // ── WebRTC ────────────────────────────────────────────────────────────────
   static const String webrtc = '$_api2/webrtc.php';
+
+  // ── Page / onboarding ────────────────────────────────────────────────────
+  static const String updatePageNo = '$_api2/update_pageno.php';
+
+  // ── Other profile ─────────────────────────────────────────────────────────
+  static const String otherProfile = '$_api2/other_profile_new.php';
 
   // ── Users list (admin-facing endpoint, used from user app) ───────────────
   static const String getUsers = '$_api2/getusers.php';

@@ -9,8 +9,6 @@ import '../otherenew/modelfile.dart';
 import 'package:ms2026/config/app_endpoints.dart';
 
 class ProfileService {
-  static final String baseUrl = AppConfig.imageBase;
-
   /// Fetch profile data from API
   Future<ProfileResponse> fetchProfile({
     required dynamic myId,
@@ -20,7 +18,7 @@ class ProfileService {
     final String myIdStr = myId.toString();
     final String userIdStr = userId.toString();
 
-    final url = Uri.parse('$baseUrl/other_profile_new.php?myid=$myIdStr&userid=$userIdStr');
+    final url = Uri.parse('${AppConfig.otherProfile}?myid=$myIdStr&userid=$userIdStr');
 
     try {
       final response = await http.get(url);
@@ -49,7 +47,7 @@ class ProfileService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/block_user.php'),
+        Uri.parse(AppConfig.blockUser),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'my_id': myId,
@@ -69,7 +67,7 @@ class ProfileService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/unblock_user.php'),
+        Uri.parse(AppConfig.unblockUser),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'my_id': myId,
@@ -89,7 +87,7 @@ class ProfileService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/check_block_status.php'),
+        Uri.parse(AppConfig.checkBlockStatus),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'my_id': myId,
@@ -119,7 +117,7 @@ class ProfileService {
     };
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/check_block_status.php'),
+        Uri.parse(AppConfig.checkBlockStatus),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'my_id': myId,
@@ -143,7 +141,7 @@ class ProfileService {
   }) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/get_blocked_users.php'),
+        Uri.parse(AppConfig.getBlockedUsers),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'my_id': myId,
@@ -166,7 +164,7 @@ class ProfileService {
   }) async {
     // Ensure userId is converted to string explicitly
     final String userIdStr = userId.toString();
-    final url = Uri.parse('$baseUrl/match.php?userid=$userIdStr');
+    final url = Uri.parse('${AppConfig.match}?userid=$userIdStr');
 
     try {
       final response = await http.get(url);
@@ -202,7 +200,7 @@ class ProfileService {
     required String userId,
   }) async {
     try {
-      final url = Uri.parse('$baseUrl/send_request.php');
+      final url = Uri.parse(AppConfig.sendRequest);
 
       final response = await http.post(
         url,
@@ -255,7 +253,7 @@ class ProfileService {
     required String userId,
   }) async {
     try {
-      final url = Uri.parse('$baseUrl/send_request.php');
+      final url = Uri.parse(AppConfig.sendRequest);
 
       final response = await http.post(
         url,
@@ -309,7 +307,7 @@ class ProfileService {
     required bool like,
   }) async {
     try {
-      final url = Uri.parse('$baseUrl/like.php');
+      final url = Uri.parse(AppConfig.like);
 
       final response = await http.post(
         url,
@@ -335,7 +333,7 @@ class ProfileService {
     required String senderId,
     required String type,
   }) async {
-    final url = Uri.parse('$baseUrl/accept_request.php');
+    final url = Uri.parse(AppConfig.acceptRequest);
 
     final response = await http.post(url, body: {
       'myid': myId,
@@ -367,7 +365,7 @@ class ProfileService {
     required String senderId,
     required String type,
   }) async {
-    final url = Uri.parse('$baseUrl/reject_request.php');
+    final url = Uri.parse(AppConfig.rejectRequest);
 
     final response = await http.post(url, body: {
       'myid': myId,

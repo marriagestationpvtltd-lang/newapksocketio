@@ -3,13 +3,11 @@ import 'package:http/http.dart' as http;
 import 'package:ms2026/config/app_endpoints.dart';
 
 class MaritalStatusService {
-  static final String _baseUrl = '${AppConfig.baseUrl}/api19';
-
   /// Fetch the marital status for a given [userId] from api19/get.php.
   /// Returns a map with `maritalStatusId` and `maritalStatusName` on success.
   static Future<Map<String, dynamic>> fetchMaritalStatus(int userId) async {
     try {
-      final url = Uri.parse('$_baseUrl/get.php?userid=$userId');
+      final url = Uri.parse('${AppConfig.maritalStatusGet}?userid=$userId');
       final response = await http.get(
         url,
         headers: {

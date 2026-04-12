@@ -45,7 +45,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _currentPrivacy = 'Private';
   bool _loadingPrivacy = true;
 
-  final String _baseUrl = AppConfig.imageBase;
   final String _privacyGetUrl = AppConfig.getPrivacy;
   final String _privacyUpdateUrl = AppConfig.updatePrivacy;
 
@@ -105,7 +104,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/get_notifications.php?user_id=$userId'),
+        Uri.parse('${AppConfig.getNotifications}?user_id=$userId'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -128,7 +127,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (userId == null) return;
     try {
       await http.post(
-        Uri.parse('$_baseUrl/update_notification_settings.php'),
+        Uri.parse(AppConfig.updateNotificationSettings),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'user_id': userId,

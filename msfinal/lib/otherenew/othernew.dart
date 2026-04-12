@@ -34,7 +34,6 @@ ProfileScreen({super.key, required this.userId,});
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  static final String _requestBaseUrl = '${AppConfig.baseUrl}/request';
 
   bool _isBlocked = false;
   bool _isLoadingBlock = false;
@@ -416,7 +415,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final myId = userData["id"].toString();
 
       final response = await http.post(
-        Uri.parse("$_requestBaseUrl/add_profile_view.php"),
+        Uri.parse(AppConfig.addProfileView),
         headers: {
           'Content-Type': 'application/json',
         },
@@ -446,7 +445,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<UserMasterData> fetchUserMasterData(String userId) async {
     final url = Uri.parse(
-      "${ProfileService.baseUrl}/masterdata.php?userid=$userId",
+      "${AppConfig.masterData}?userid=$userId",
     );
 
     final response = await http.get(url);

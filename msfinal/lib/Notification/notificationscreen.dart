@@ -30,7 +30,6 @@ class _MatrimonyNotificationPageState
   List<Map<String, dynamic>> _notifications = [];
   bool _isLoading = true;
   bool _isRefreshing = false;
-  final String _baseUrl = AppConfig.imageBase;
   final String _requestUrl = AppConfig.requestList;
 
   @override
@@ -59,7 +58,7 @@ class _MatrimonyNotificationPageState
     try {
       final responses = await Future.wait([
         http.get(Uri.parse('$_requestUrl?receiver_id=$userId')),
-        http.get(Uri.parse('$_baseUrl/get_notifications.php?user_id=$userId')),
+        http.get(Uri.parse('${AppConfig.getNotifications}?user_id=$userId')),
         NotificationInboxService.loadNotifications(),
       ]);
 
@@ -229,7 +228,7 @@ class _MatrimonyNotificationPageState
     final userId = userData["id"].toString();
     try {
       await http.post(
-        Uri.parse('$_baseUrl/update_notification_settings.php'),
+        Uri.parse(AppConfig.updateNotificationSettings),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'user_id': userId,
@@ -250,7 +249,7 @@ class _MatrimonyNotificationPageState
         await NotificationInboxService.markAsRead(id);
       } else {
         await http.post(
-          Uri.parse('$_baseUrl/mark_as_read.php'),
+          Uri.parse(AppConfig.markNotificationsRead),
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
             'notification_id': notificationId,
@@ -282,7 +281,7 @@ class _MatrimonyNotificationPageState
         await NotificationInboxService.deleteNotification(id);
       } else {
         await http.delete(
-          Uri.parse('$_baseUrl/delete_notification.php'),
+          Uri.parse(AppConfig.deleteNotification),
           headers: {'Content-Type': 'application/json'},
           body: json.encode({
             'notification_id': notificationId,

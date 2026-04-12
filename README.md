@@ -30,6 +30,58 @@ Your Marriage Station app now has a **professional, safe, and scalable architect
 
 ---
 
+## 🗄️ Database Setup (One Command)
+
+Import all required databases with a single command:
+
+```bash
+# From the project root — reads credentials from .env automatically
+bash www/wwwroot/digitallami.com/migrations/import_databases.sh
+```
+
+### What it imports
+
+| Database | File | Purpose |
+|----------|------|---------|
+| `ms` | `msfinal/ms.sql` | Main app database (users, profiles, packages, …) |
+| `ms` | `msfinal/socket-server/sql/chat_tables.sql` | Real-time chat & call tables |
+| `adminchat` | `migrations/adminchat_schema.sql` | Admin back-office chat |
+
+### Credentials setup
+
+```bash
+# Copy the example env file and fill in your values
+cp www/wwwroot/digitallami.com/.env.example www/wwwroot/digitallami.com/.env
+# Edit .env with your DB host/user/pass
+```
+
+### CLI options (override .env)
+
+```bash
+# Custom user / password
+bash import_databases.sh -u myuser -p mypassword
+
+# Custom DB names
+bash import_databases.sh --ms-db marriage --adminchat-db marriage_chat
+
+# Import only the adminchat database
+bash import_databases.sh --skip-ms
+
+# Show all options
+bash import_databases.sh --help
+```
+
+### Default credentials after import
+
+| Database | Email | Password |
+|----------|-------|----------|
+| `ms` (admin panel) | `admin@ms.com` | `Admin@123` |
+| `adminchat` | `admin@example.com` | `admin123` |
+
+> **Note:** The socket-server creates its own tables automatically on first run — no manual steps needed.
+
+---
+
 ## 🚀 Quick Start
 
 ### Adding Your First Feature (5 Minutes)

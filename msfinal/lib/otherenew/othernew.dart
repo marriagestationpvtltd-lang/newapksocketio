@@ -38,6 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   bool _isBlocked = false;
   bool _isLoadingBlock = false;
+  bool _profileLoadError = false;
   Future<void> _checkBlockStatus() async {
     final prefs = await SharedPreferences.getInstance();
     final userDataString = prefs.getString('user_data');
@@ -577,6 +578,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     } catch (e) {
       debugPrint('Error loading profile data: $e');
+      if (mounted) setState(() => _profileLoadError = true);
     }
   }
 
@@ -652,7 +654,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
-      body: userProfile.profileResponse == null
+      body: _profileLoadError
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                  const SizedBox(height: 16),
+                  const Text('Failed to load profile.'),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () {
+                      setState(() => _profileLoadError = false);
+                      _loadProfileData();
+                    },
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            )
+          : userProfile.profileResponse == null
           ? const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

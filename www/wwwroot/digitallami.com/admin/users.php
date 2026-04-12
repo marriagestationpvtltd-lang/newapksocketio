@@ -17,14 +17,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
         curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        $res = curl_exec($ch);
+        $res     = curl_exec($ch);
+        $curlErr = curl_error($ch);
         curl_close($ch);
 
         // Return JSON for AJAX calls
         if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
             strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
             header('Content-Type: application/json');
-            echo $res;
+            if ($curlErr || $res === false) {
+                echo json_encode(['success' => false, 'message' => 'Network error communicating with API']);
+            } else {
+                echo $res;
+            }
             exit;
         }
     }
@@ -288,15 +293,21 @@ $(document).ready(function () {
         dt.column(2).search($(this).val()).draw();
     });
 
-    // Status filter using row data attribute
+    // Status filter using row data attribute (scoped to usersTable only)
     $('#filterStatus').on('change', function () {
         var val = $(this).val();
-        $.fn.dataTable.ext.search = [];
+        // Remove any previous status filter for this table
+        $.fn.dataTable.ext.search = $.fn.dataTable.ext.search.filter(function (fn) {
+            return fn._usersTableFilter !== true;
+        });
         if (val) {
-            $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
+            var filterFn = function (settings, data, dataIndex) {
+                if (settings.nTable.id !== 'usersTable') return true;
                 var row = dt.row(dataIndex).node();
                 return $(row).data('status') === val;
-            });
+            };
+            filterFn._usersTableFilter = true;
+            $.fn.dataTable.ext.search.push(filterFn);
         }
         dt.draw();
     });

@@ -1,4 +1,4 @@
-import 'dart:io' if (dart.library.html) 'package:ms2026/utils/web_io_stub.dart';
+import 'dart:io' show File;
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui';

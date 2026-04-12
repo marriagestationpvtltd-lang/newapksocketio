@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../ReUsable/dropdownwidget.dart';
 import '../../../service/personal_details_api.dart';
+import '../../../service/marital_status_service.dart';
 import '../../../service/updatepage.dart';
 import 'package:ms2026/config/app_endpoints.dart';
 
@@ -105,6 +106,44 @@ class _PersonalDetailsPageEditState extends State<PersonalDetailsPageEdit> {
 
 
 
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExistingMaritalStatus();
+  }
+
+  Future<void> _loadExistingMaritalStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userDataString = prefs.getString('userData');
+      if (userDataString == null) return;
+      final userData = json.decode(userDataString);
+      final userId = int.tryParse(userData["id"]?.toString() ?? '');
+      if (userId == null) return;
+
+      final result = await MaritalStatusService.fetchMaritalStatus(userId);
+      if (result['status'] == true && result['data'] != null) {
+        final data = result['data'];
+        final maritalId = data['maritalStatusId']?.toString();
+        if (maritalId != null) {
+          final index = int.tryParse(maritalId);
+          if (index != null && index > 0 && index <= _maritalStatusOptions.length) {
+            setState(() {
+              _selectedMaritalStatus = _maritalStatusOptions[index - 1];
+            });
+            return;
+          }
+        }
+        final maritalName = data['maritalStatusName']?.toString();
+        if (maritalName != null && _maritalStatusOptions.contains(maritalName)) {
+          setState(() {
+            _selectedMaritalStatus = maritalName;
+          });
+        }
+      }
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {

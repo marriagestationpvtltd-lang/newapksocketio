@@ -1,16 +1,2 @@
-# CORS is handled entirely by each PHP file via header() calls.
-# The parent .htaccess sets Access-Control-Allow-Origin via mod_headers, which
-# would stack on top of the PHP-emitted header and produce "*, *" — a value
-# that browsers reject. The block below unsets any such duplicates and then
-# re-sets each header once, so the final response always contains exactly one
-# value regardless of whether the parent mod_headers block ran.
-<IfModule mod_headers.c>
-    Header always unset Access-Control-Allow-Origin
-    Header always set   Access-Control-Allow-Origin  "*"
-    Header always unset Access-Control-Allow-Methods
-    Header always set   Access-Control-Allow-Methods "GET, POST, OPTIONS"
-    Header always unset Access-Control-Allow-Headers
-    Header always set   Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With, Accept"
-    Header always unset Access-Control-Max-Age
-    Header always set   Access-Control-Max-Age       "86400"
-</IfModule>
+# CORS is handled by shared/cors.php (included via config/db.php).
+# No mod_headers override is needed here.

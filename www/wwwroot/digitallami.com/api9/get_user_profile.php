@@ -6,7 +6,10 @@
  * GET /api9/get_user_profile.php?userid=<id>
  */
 require_once __DIR__ . '/../config/db.php';
+require_once __DIR__ . '/../shared/admin_auth.php';
 header('Content-Type: application/json');
+
+admin_auth_guard();
 
 $base_url = APP_API2_BASE_URL;
 
@@ -20,33 +23,6 @@ try {
 } catch (PDOException $e) {
     http_response_code(500);
     echo json_encode(['status' => 'error', 'message' => 'Database connection failed']);
-    exit;
-}
-
-// ── Admin token verification ─────────────────────────────────────────────────
-$authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
-if (empty($authHeader)) {
-    http_response_code(401);
-    echo json_encode(['status' => 'error', 'message' => 'Unauthorized']);
-    exit;
-}
-
-$tokenSecret = getenv('ADMIN_TOKEN_SECRET') ?: 'CHANGE_THIS_SECRET_KEY';
-$tokenParts  = explode('.', $authHeader, 2);
-$tokenValid  = false;
-if (count($tokenParts) === 2) {
-    $payloadJson = base64_decode($tokenParts[0]);
-    $expected    = hash_hmac('sha256', $payloadJson, $tokenSecret);
-    if (hash_equals($expected, $tokenParts[1])) {
-        $payload = json_decode($payloadJson, true);
-        if (is_array($payload) && isset($payload['exp']) && $payload['exp'] >= time()) {
-            $tokenValid = true;
-        }
-    }
-}
-if (!$tokenValid) {
-    http_response_code(401);
-    echo json_encode(['status' => 'error', 'message' => 'Unauthorized']);
     exit;
 }
 

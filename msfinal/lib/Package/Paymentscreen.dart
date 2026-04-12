@@ -748,7 +748,7 @@ class _PaymentPageState extends State<PaymentPage> {
 
     // Call Khalti API
     final response = await http.post(
-      Uri.parse('https://pay.digitallami.com/khalti_payment.php'),
+      Uri.parse('$kPaymentBaseUrl/khalti_payment.php'),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -789,7 +789,7 @@ class _PaymentPageState extends State<PaymentPage> {
     });
 
     // Create HBL payment URL with query parameters
-    final paymentUrl = Uri.parse('http://pay.digitallami.com/hbl/index.php')
+    final paymentUrl = Uri.parse('$kPaymentBaseUrl/hbl/index.php')
         .replace(queryParameters: {
       'input_amount': totalAmount.toStringAsFixed(0),
       'userid': userId.toString(),

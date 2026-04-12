@@ -31,3 +31,12 @@ final String kApi2BaseUrl = '$kApiBaseUrl/Api2';
 final String kApi3BaseUrl = '$kApiBaseUrl/Api3';
 final String kApi9BaseUrl = '$kApiBaseUrl/api9';
 final String kRequestBaseUrl = '$kApiBaseUrl/request';
+
+// Payment gateway base URL.
+// Pass at build time: --dart-define=PAYMENT_BASE_URL=https://pay.example.com
+final String kPaymentBaseUrl = _normalizeBaseUrl(
+  const String.fromEnvironment(
+    'PAYMENT_BASE_URL',
+    defaultValue: 'https://pay.digitallami.com',
+  ),
+);

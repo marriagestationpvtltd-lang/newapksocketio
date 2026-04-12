@@ -3,6 +3,7 @@
  * edit-profile.php – Multi-section profile editor
  */
 $title = 'Edit Profile';
+require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/user_header.php';
 
 $userId  = (int) $currentUser['user_id'];
@@ -11,7 +12,7 @@ $allowed = ['personal', 'education', 'family', 'lifestyle', 'partner'];
 if (!in_array($section, $allowed)) $section = 'personal';
 
 // Fetch current profile data
-$apiUrl = 'https://digitallami.com/Api2/myprofile.php?userid=' . urlencode($userId);
+$apiUrl = APP_API2_BASE_URL . 'myprofile.php?userid=' . urlencode($userId);
 $profile  = [];
 $apiError = '';
 
@@ -39,11 +40,11 @@ function ev($key, $profile): string {
 
 // Section API endpoints
 $endpoints = [
-    'personal'  => 'https://digitallami.com/Api2/save_personal_detail.php',
-    'education' => 'https://digitallami.com/Api2/educationcareer.php',
-    'family'    => 'https://digitallami.com/Api2/updatefamily.php',
-    'lifestyle' => 'https://digitallami.com/Api2/user_lifestyle.php',
-    'partner'   => 'https://digitallami.com/Api2/user_partner.php',
+    'personal'  => APP_API2_BASE_URL . 'save_personal_detail.php',
+    'education' => APP_API2_BASE_URL . 'educationcareer.php',
+    'family'    => APP_API2_BASE_URL . 'updatefamily.php',
+    'lifestyle' => APP_API2_BASE_URL . 'user_lifestyle.php',
+    'partner'   => APP_API2_BASE_URL . 'user_partner.php',
 ];
 
 $sectionLabels = [

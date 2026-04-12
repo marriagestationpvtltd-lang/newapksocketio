@@ -3,12 +3,13 @@
  * packages-user.php – View & purchase packages
  */
 $title = 'Packages';
+require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/user_header.php';
 
 $userId = (int) $currentUser['user_id'];
 
 // Fetch available packages
-$pkgUrl = 'https://digitallami.com/Api2/packagelist.php';
+$pkgUrl = APP_API2_BASE_URL . 'packagelist.php';
 $packages = [];
 $pkgError = '';
 
@@ -30,7 +31,7 @@ if ($resp !== false && $code === 200) {
 }
 
 // Fetch current user package
-$upUrl = 'https://digitallami.com/Api2/user_package.php?user_id=' . urlencode($userId);
+$upUrl = APP_API2_BASE_URL . 'user_package.php?user_id=' . urlencode($userId);
 $userPkg = null;
 
 $ch2 = curl_init($upUrl);

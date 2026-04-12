@@ -3,6 +3,7 @@
  * profile-view.php – View another user's profile
  */
 $title = 'View Profile';
+require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/user_header.php';
 
 // --- Require profile ID ---
@@ -16,7 +17,7 @@ if ($profileId <= 0) {
 function msProfileImg(?string $pic): string {
     if (empty($pic)) return '';
     if (!preg_match('/^https?:\/\//', $pic)) {
-        return 'https://digitallami.com/Api2/' . $pic;
+        return APP_API2_BASE_URL . $pic;
     }
     return $pic;
 }
@@ -28,7 +29,7 @@ function msVal($val, string $default = 'Not specified'): string {
 }
 
 // --- Fetch profile via API ---
-$apiUrl = 'https://digitallami.com/Api2/other_profile.php?userId='
+$apiUrl = APP_API2_BASE_URL . 'other_profile.php?userId='
         . urlencode($profileId)
         . '&loggedInUserId=' . urlencode($currentUser['user_id']);
 

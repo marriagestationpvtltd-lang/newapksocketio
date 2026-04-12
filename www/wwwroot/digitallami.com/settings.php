@@ -1,5 +1,6 @@
 <?php
 $title = 'Settings';
+require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/user_header.php';
 
 $userId = (int) $currentUser['user_id'];
@@ -8,7 +9,7 @@ $userId = (int) $currentUser['user_id'];
 $blockedUsers = [];
 $blockedError = '';
 
-$apiUrl = 'https://digitallami.com/Api2/get_blocked_users.php?user_id=' . $userId;
+$apiUrl = APP_API2_BASE_URL . 'get_blocked_users.php?user_id=' . $userId;
 $ch = curl_init($apiUrl);
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,

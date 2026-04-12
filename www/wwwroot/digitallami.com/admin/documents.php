@@ -4,7 +4,7 @@ require_once 'includes/header.php';
 
 // Get documents from API
 function getDocuments() {
-    $url = 'https://digitallami.com/api9/get_documents.php';
+    $url = APP_PUBLIC_BASE_URL . '/api9/get_documents.php';
     
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $rejectReason = $_POST['reject_reason'] ?? '';
     
     if ($action && $userId) {
-        $url = 'https://digitallami.com/api9/update_document_status.php';
+        $url = APP_PUBLIC_BASE_URL . '/api9/update_document_status.php';
         
         $postData = [
             'user_id' => $userId,
@@ -130,7 +130,7 @@ $rejectedDocs = array_filter($documents, fn($doc) => $doc['status'] === 'rejecte
                                         <!-- Document Image -->
                                         <div class="document-image mb-3">
                                             <?php if (!empty($doc['photo'])): ?>
-                                                <img src="https://digitallami.com/<?php echo htmlspecialchars($doc['photo']); ?>" 
+                                                <img src="<?php echo htmlspecialchars(APP_PUBLIC_BASE_URL . '/' . ltrim($doc['photo'], '/')); ?>" 
                                                      alt="Document" class="img-fluid" 
                                                      style="max-height: 200px; object-fit: contain;">
                                             <?php else: ?>

@@ -109,6 +109,8 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
   final SocketService _socketService = SocketService();
   final Uuid _uuid = Uuid();
 
+  static const String _kUnsentPlaceholder = 'This message was unsent.';
+
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final FocusNode _messageFocusNode = FocusNode();
@@ -532,7 +534,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
           _cachedMessages[idx] = {
             ..._cachedMessages[idx],
             'isUnsent': true,
-            'message': 'This message was unsent.',
+            'message': _kUnsentPlaceholder,
           };
           _messagesCacheVersion++;
         });
@@ -1444,8 +1446,17 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
 
   Future<void> _unsendMessage() async {
     if (selectedMessage == null) return;
+    final messageId = selectedMessage!['messageId']?.toString() ?? '';
+    if (messageId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to unsend: message ID not found.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     try {
-      final messageId = selectedMessage!['messageId'];
       _socketService.unsendMessage(
         chatRoomId: widget.chatRoomId,
         messageId: messageId,
@@ -1464,9 +1475,10 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
         ),
       );
     } catch (e) {
+      print('Error unsending message: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to unsend message: $e'),
+        const SnackBar(
+          content: Text('Failed to unsend message. Please try again.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -1875,7 +1887,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen>
                 Icon(Icons.undo, size: 14, color: Colors.grey.shade500),
                 const SizedBox(width: 6),
                 Text(
-                  'This message was unsent.',
+                  _kUnsentPlaceholder,
                   style: TextStyle(
                     color: Colors.grey.shade500,
                     fontSize: 14,

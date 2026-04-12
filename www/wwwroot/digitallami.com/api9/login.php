@@ -27,7 +27,7 @@ if (!$email || !$password) {
 
 try {
     $pdo = new PDO(
-        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME,
+        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
         DB_USER,
         DB_PASS,
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
@@ -80,6 +80,9 @@ try {
         ]
     ]);
 
+} catch (PDOException $e) {
+    error_log('api9/login.php DB error [SQLSTATE ' . $e->getCode() . ']');
+    response(false, 'Database error. Check server logs.', [], 500);
 } catch (Exception $e) {
     error_log('api9/login.php Exception: ' . $e->getMessage());
     response(false, 'Server error', [], 500);

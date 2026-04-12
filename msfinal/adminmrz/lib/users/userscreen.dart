@@ -58,7 +58,7 @@ class _UsersPageState extends State<UsersPage> {
           create: (context) => UserDetailsProvider(),
           child: UserDetailsScreen(
             userId: user.id,
-            myId: user.id,
+            myId: 1,
             onOpenChat: widget.onOpenChat,
             email: user.email,
             phone: user.phone,

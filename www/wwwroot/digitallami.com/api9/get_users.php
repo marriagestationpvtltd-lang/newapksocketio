@@ -20,6 +20,7 @@ try {
             firstName,
             lastName,
             email,
+            phone,
             isVerified,
             status,
             privacy,

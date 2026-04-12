@@ -2,6 +2,8 @@
 // building for a physical device or running on an emulator (use 10.0.2.2 for
 // Android emulator instead of the LAN IP).
 // Pass at build time without editing: --dart-define=API_BASE_URL=http://X.X.X.X/...
+// Prepends http:// only when no scheme is provided (e.g. a bare LAN IP passed
+// via --dart-define). Production URLs should always include https:// explicitly.
 String _normalizeBaseUrl(String raw) {
   if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
   return 'http://$raw';

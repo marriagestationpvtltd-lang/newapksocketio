@@ -1,4 +1,7 @@
 <?php
+// Load CORS headers FIRST so that OPTIONS preflight requests receive the
+// correct Access-Control-Allow-* headers before any method check exits early.
+require_once __DIR__ . '/../shared/cors.php';
 header("Content-Type: application/json; charset=UTF-8");
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

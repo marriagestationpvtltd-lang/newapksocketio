@@ -1,4 +1,7 @@
 <?php
+// Load CORS headers FIRST so that OPTIONS preflight requests receive the
+// correct Access-Control-Allow-* headers before any method check exits early.
+require_once __DIR__ . '/../shared/cors.php';
 // Suppress HTML error output so PHP notices/warnings cannot contaminate
 // the JSON response body. Errors are still written to the server error log.
 ini_set('display_errors', '0');

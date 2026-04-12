@@ -1,6 +1,6 @@
 const String kAdminApiBaseUrl = String.fromEnvironment(
   'ADMIN_API_BASE_URL',
-  defaultValue: 'https://react.marriagestation.com.np/landing.php',
+  defaultValue: 'https://react.marriagestation.com.np',
 );
 
 const String kAdminSocketBaseUrl = String.fromEnvironment(

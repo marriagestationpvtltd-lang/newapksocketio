@@ -881,12 +881,14 @@ io.on('connection', (socket) => {
 
   // ── join_room ─────────────────────────────────────────────────────────────
   socket.on('join_room', ({ chatRoomId }) => {
-    if (chatRoomId) socket.join(chatRoomId);
+    if (!authenticatedUserId || !chatRoomId) return;
+    socket.join(chatRoomId);
   });
 
   // ── leave_room ────────────────────────────────────────────────────────────
   socket.on('leave_room', ({ chatRoomId }) => {
-    if (chatRoomId) socket.leave(chatRoomId);
+    if (!authenticatedUserId || !chatRoomId) return;
+    socket.leave(chatRoomId);
   });
 
   // ── set_active_chat ───────────────────────────────────────────────────────
@@ -990,13 +992,13 @@ io.on('connection', (socket) => {
 
   // ── typing_start ──────────────────────────────────────────────────────────
   socket.on('typing_start', ({ chatRoomId, userId }) => {
-    if (!chatRoomId || !userId) return;
+    if (!authenticatedUserId || !chatRoomId || !userId) return;
     socket.to(chatRoomId).emit('typing_start', { chatRoomId, userId });
   });
 
   // ── typing_stop ───────────────────────────────────────────────────────────
   socket.on('typing_stop', ({ chatRoomId, userId }) => {
-    if (!chatRoomId || !userId) return;
+    if (!authenticatedUserId || !chatRoomId || !userId) return;
     socket.to(chatRoomId).emit('typing_stop', { chatRoomId, userId });
   });
 

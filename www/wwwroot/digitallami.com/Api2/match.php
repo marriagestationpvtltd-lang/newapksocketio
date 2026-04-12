@@ -23,6 +23,11 @@ try {
         echo json_encode(["success"=>false,"message"=>"Invalid userid"]);
         exit;
     }
+
+    // Pagination support
+    $page   = max(1, intval($_REQUEST['page']  ?? 1));
+    $limit  = min(50, max(1, intval($_REQUEST['limit'] ?? 20)));
+    $offset = ($page - 1) * $limit;
     
     
     /* ================= USER LIKES ================= */
@@ -75,12 +80,54 @@ $likedUserIds = array_column($stmtLikes->fetchAll(), 'receiver_id');
         WHERE u.id != :userid AND TRIM(LOWER(u.gender)) != TRIM(LOWER(:gender))
           AND u.isActive = 1 AND u.isDelete = 0
         GROUP BY u.id
+        LIMIT :lmt OFFSET :ofs
     ");
     $stmt->execute([
         ":userid"=>$userid,
-        ":gender"=>$userGender
+        ":gender"=>$userGender,
+        ":lmt"   =>$limit,
+        ":ofs"   =>$offset
     ]);
     $candidates = $stmt->fetchAll();
+
+    if (empty($candidates)) {
+        echo json_encode(["success"=>true,"page"=>$page,"limit"=>$limit,"matched_users"=>[]]);
+        exit;
+    }
+
+    // ── Pre-fetch photo requests (avoid N+1) ─────────────────────────────
+    $candidateIds = array_column($candidates, 'userid');
+    $placeholders = implode(',', array_fill(0, count($candidateIds), '?'));
+    $photoParams  = array_merge([$userid, $userid], $candidateIds, $candidateIds);
+    $stmtBatchPhoto = $pdo->prepare("
+        SELECT sender_id, receiver_id, status
+        FROM proposals
+        WHERE request_type = 'Photo'
+          AND ((sender_id = ? AND receiver_id IN ($placeholders))
+               OR (sender_id IN ($placeholders) AND receiver_id = ?))
+        ORDER BY id DESC
+    ");
+    $stmtBatchPhoto->execute(array_merge([$userid], $candidateIds, $candidateIds, [$userid]));
+    $photoMap = [];
+    foreach ($stmtBatchPhoto->fetchAll() as $pr) {
+        $otherId = ($pr['sender_id'] == $userid) ? $pr['receiver_id'] : $pr['sender_id'];
+        if (!isset($photoMap[$otherId])) {
+            $photoMap[$otherId] = ($pr['status'] === 'accepted') ? 'accepted' : 'pending';
+        }
+    }
+
+    // ── Pre-fetch gallery images (avoid N+1) ─────────────────────────────
+    $stmtBatchGallery = $pdo->prepare("
+        SELECT userId, id, imageUrl, createdDate, updatedDate
+        FROM userimagegallery
+        WHERE userId IN ($placeholders) AND isActive = 1 AND isDelete = 0
+        ORDER BY createdDate DESC
+    ");
+    $stmtBatchGallery->execute($candidateIds);
+    $galleryMap = [];
+    foreach ($stmtBatchGallery->fetchAll() as $img) {
+        $galleryMap[$img['userId']][] = $img;
+    }
 
     $results = [];
 
@@ -111,41 +158,11 @@ $likedUserIds = array_column($stmtLikes->fetchAll(), 'receiver_id');
 
         if($matchPercent < 20) continue;
 
-        /* ================= PHOTO REQUEST ================= */
-        $photo_request = "not sent";
+        /* ================= PHOTO REQUEST (from pre-fetched map) ================= */
+        $photo_request = $photoMap[$c['userid']] ?? "not sent";
 
-        $stmtPhoto = $pdo->prepare("
-            SELECT status
-            FROM proposals
-            WHERE request_type = 'Photo'
-            AND (
-                (sender_id = :me AND receiver_id = :other)
-                OR
-                (sender_id = :other AND receiver_id = :me)
-            )
-            ORDER BY id DESC
-            LIMIT 1
-        ");
-        $stmtPhoto->execute([
-            ":me"=>$userid,
-            ":other"=>$c['userid']
-        ]);
-
-        if($row = $stmtPhoto->fetch()){
-            $photo_request = ($row['status'] === 'accepted')
-                ? 'accepted'
-                : 'pending';
-        }
-
-        /* ================= GALLERY ================= */
-        $stmtImages = $pdo->prepare("
-            SELECT id, imageUrl, createdDate, updatedDate
-            FROM userimagegallery
-            WHERE userId = :uid AND isActive = 1 AND isDelete = 0
-            ORDER BY createdDate DESC
-        ");
-        $stmtImages->execute([":uid"=>$c['userid']]);
-        $gallery = $stmtImages->fetchAll();
+        /* ================= GALLERY (from pre-fetched map) ================= */
+        $gallery = $galleryMap[$c['userid']] ?? [];
 
         /* ================= FINAL USER ================= */
         $results[] = [
@@ -173,6 +190,8 @@ $likedUserIds = array_column($stmtLikes->fetchAll(), 'receiver_id');
 
     echo json_encode([
         "success"=>true,
+        "page"   =>$page,
+        "limit"  =>$limit,
         "matched_users"=>$results
     ]);
 

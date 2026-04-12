@@ -445,7 +445,12 @@ class _ProfileSwipeUIState extends State<ProfileSwipeUI> {
       final prefs = await SharedPreferences.getInstance();
       final userDataString = prefs.getString('user_data');
 
-      final userData = jsonDecode(userDataString!);
+      if (userDataString == null) {
+        setState(() { _isCheckingStatus = false; _isLoading = false; });
+        return;
+      }
+
+      final userData = jsonDecode(userDataString);
       final userId = int.tryParse(userData["id"].toString());
 
       print("Checking document status for user ID: $userId");
@@ -496,7 +501,8 @@ class _ProfileSwipeUIState extends State<ProfileSwipeUI> {
   void loadMasterData() async {
     final prefs = await SharedPreferences.getInstance();
     final userDataString = prefs.getString('user_data');
-    final userData = jsonDecode(userDataString!);
+    if (userDataString == null) return;
+    final userData = jsonDecode(userDataString);
     final userId = int.tryParse(userData["id"].toString());
     try {
       UserMasterData user = await fetchUserMasterData(userId.toString());
@@ -541,7 +547,8 @@ class _ProfileSwipeUIState extends State<ProfileSwipeUI> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final userDataString = prefs.getString('user_data');
-      final userData = jsonDecode(userDataString!);
+      if (userDataString == null) { setState(() { _isProcessingLike = false; }); return; }
+      final userData = jsonDecode(userDataString);
       final senderId = int.tryParse(userData["id"].toString());
 
       if (senderId == null) {
@@ -1051,7 +1058,8 @@ class _ProfileSwipeUIState extends State<ProfileSwipeUI> {
                                 await SharedPreferences.getInstance();
                             final userDataString =
                                 prefs.getString('user_data');
-                            final userData = jsonDecode(userDataString!);
+                            if (userDataString == null) return;
+                            final userData = jsonDecode(userDataString);
                             final senderId = int.tryParse(
                                 userData["id"].toString());
                             if (docstatus == 'approved') {

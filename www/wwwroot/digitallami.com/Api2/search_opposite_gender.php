@@ -173,34 +173,38 @@ try {
 
     $imageBaseUrl = APP_API2_BASE_URL;
 
+    if (!empty($rows)) {
+        // === Pre-fetch photo requests (avoid N+1) ===
+        $rowIds     = array_column($rows, 'id');
+        $rowIdsStr  = implode(',', array_map('intval', $rowIds));
+        $stmtBatch  = $pdo->prepare("
+            SELECT sender_id, receiver_id, status
+            FROM proposals
+            WHERE request_type = 'Photo'
+              AND ((sender_id = ? AND receiver_id IN ($rowIdsStr))
+                   OR (sender_id IN ($rowIdsStr) AND receiver_id = ?))
+            ORDER BY id DESC
+        ");
+        $stmtBatch->execute([$userId, $userId]);
+        $photoMap = [];
+        foreach ($stmtBatch->fetchAll() as $pr) {
+            $otherId = ($pr['sender_id'] == $userId) ? (int)$pr['receiver_id'] : (int)$pr['sender_id'];
+            if (!isset($photoMap[$otherId])) {
+                $photoMap[$otherId] = ($pr['status'] === 'accepted') ? 'accepted' : 'pending';
+            }
+        }
+    } else {
+        $photoMap = [];
+    }
+
     foreach ($rows as &$row) {
         // Prepend base URL to profile picture
         if (!empty($row['profile_picture']) && !preg_match('/^https?:\/\//', $row['profile_picture'])) {
             $row['profile_picture'] = $imageBaseUrl . $row['profile_picture'];
         }
 
-        // === PHOTO REQUEST LOGIC ===
-        $stmtPhoto = $pdo->prepare("
-            SELECT status
-            FROM proposals
-            WHERE request_type = 'Photo'
-            AND (
-                (sender_id = :me AND receiver_id = :other)
-                OR
-                (sender_id = :other AND receiver_id = :me)
-            )
-            ORDER BY id DESC
-            LIMIT 1
-        ");
-        $stmtPhoto->execute([
-            ":me"=>$userId,
-            ":other"=>$row['id']
-        ]);
-        $photo_request = "not sent";
-        if($r = $stmtPhoto->fetch()){
-            $photo_request = ($r['status'] === 'accepted') ? 'accepted' : 'pending';
-        }
-        $row['photo_request'] = $photo_request;
+        // === PHOTO REQUEST (from pre-fetched map) ===
+        $row['photo_request'] = $photoMap[(int)$row['id']] ?? "not sent";
     }
 
     $totalCount = count($rows);

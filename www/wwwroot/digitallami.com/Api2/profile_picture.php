@@ -45,14 +45,32 @@ $fileName = $_FILES['profile_picture']['name'];
 $fileSize = $_FILES['profile_picture']['size'];
 $fileType = $_FILES['profile_picture']['type'];
 
+// Validate MIME type using actual file bytes (not browser-supplied type)
+$finfo = new finfo(FILEINFO_MIME_TYPE);
+$detectedMime = $finfo->file($fileTmpPath);
+$allowedMimeTypes = [
+    'image/jpeg' => 'jpg',
+    'image/png'  => 'png',
+    'image/webp' => 'webp',
+    'image/gif'  => 'gif',
+];
+if (!array_key_exists($detectedMime, $allowedMimeTypes)) {
+    echo json_encode([
+        "status"  => "error",
+        "message" => "Only JPEG, PNG, WebP and GIF images are allowed"
+    ]);
+    exit;
+}
+// Use server-detected extension, not the one from the filename
+$fileExt = $allowedMimeTypes[$detectedMime];
+
 // Create uploads directory if not exists
 $uploadDir = __DIR__ . '/uploads/profile_pictures/';
 if (!is_dir($uploadDir)) {
     mkdir($uploadDir, 0755, true);
 }
 
-// Generate unique file name to avoid overwriting
-$fileExt = pathinfo($fileName, PATHINFO_EXTENSION);
+// Generate unique file name using server-detected extension
 $newFileName = 'profilepicture_' . $userid . '.' . $fileExt;
 $destPath = $uploadDir . $newFileName;
 

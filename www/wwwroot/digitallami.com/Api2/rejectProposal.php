@@ -51,10 +51,11 @@ try {
     }
 
     // ---------------- AUTHORIZATION ----------------
-    if ($proposal['sender_id'] != $userId && $proposal['receiver_id'] != $userId) {
+    // Only the receiver should be able to reject a proposal
+    if ($proposal['receiver_id'] != $userId) {
         echo json_encode([
             "success" => false,
-            "message" => "You are not authorized to reject this proposal"
+            "message" => "Only the receiver can reject a proposal"
         ]);
         exit;
     }

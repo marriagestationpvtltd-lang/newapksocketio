@@ -977,7 +977,8 @@ class _FavoritePeoplePageState extends State<FavoritePeoplePage> {
   void loadMasterData() async {
     final prefs = await SharedPreferences.getInstance();
     final userDataString = prefs.getString('user_data');
-    final userData = jsonDecode(userDataString!);
+    if (userDataString == null) return;
+    final userData = jsonDecode(userDataString);
     final userId = int.tryParse(userData["id"].toString());
     try {
       UserMasterData user = await fetchUserMasterData(userId.toString());

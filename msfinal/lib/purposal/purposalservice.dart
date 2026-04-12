@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'Purposalmodel.dart';
 import 'package:ms2026/config/app_endpoints.dart';
@@ -10,16 +11,20 @@ class ProposalService {
       String userId, String type) async {
     final url = Uri.parse("$baseUrl?user_id=$userId&type=$type");
 
-    final response = await http.get(url);
+    try {
+      final response = await http.get(url);
 
-    if (response.statusCode == 200) {
-      final jsonData = json.decode(response.body);
+      if (response.statusCode == 200) {
+        final jsonData = json.decode(response.body);
 
-      if (jsonData["status"] == "success") {
-        return (jsonData["data"] as List)
-            .map((e) => ProposalModel.fromJson(e))
-            .toList();
+        if (jsonData["status"] == "success") {
+          return (jsonData["data"] as List)
+              .map((e) => ProposalModel.fromJson(e))
+              .toList();
+        }
       }
+    } catch (e) {
+      debugPrint('fetchProposals error: $e');
     }
     return [];
   }

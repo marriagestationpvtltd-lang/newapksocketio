@@ -21,10 +21,14 @@ try {
     exit;
 }
 
-// ---------- INPUT (GET) ----------
-$userid    = $_GET['userid']    ?? null;
-$paidby    = $_GET['paidby']    ?? null;
-$packageid = $_GET['packageid'] ?? null;
+// ---------- INPUT (POST body) ----------
+$rawInput = file_get_contents('php://input');
+$input    = json_decode($rawInput, true);
+
+// Fallback: also accept form-encoded POST (for backward compat)
+$userid    = $input['userid']    ?? ($_POST['userid']    ?? null);
+$paidby    = $input['paidby']    ?? ($_POST['paidby']    ?? null);
+$packageid = $input['packageid'] ?? ($_POST['packageid'] ?? null);
 
 if (!$userid || !$paidby || !$packageid) {
     echo json_encode([

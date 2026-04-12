@@ -68,29 +68,32 @@ try {
 
     $rows = $stmt2->fetchAll(PDO::FETCH_ASSOC);
 
-    // Add photo_request status for each user
-    foreach ($rows as &$row) {
-        $stmtPhoto = $pdo->prepare("
-            SELECT status
+    if (!empty($rows)) {
+        // Pre-fetch photo requests (avoid N+1)
+        $rowIds    = array_column($rows, 'id');
+        $rowIdsStr = implode(',', array_map('intval', $rowIds));
+        $stmtBatch = $pdo->prepare("
+            SELECT sender_id, receiver_id, status
             FROM proposals
             WHERE request_type = 'Photo'
-            AND (
-                (sender_id = :me AND receiver_id = :other)
-                OR
-                (sender_id = :other AND receiver_id = :me)
-            )
+              AND ((sender_id = ? AND receiver_id IN ($rowIdsStr))
+                   OR (sender_id IN ($rowIdsStr) AND receiver_id = ?))
             ORDER BY id DESC
-            LIMIT 1
         ");
-        $stmtPhoto->execute([
-            ":me" => $userId,
-            ":other" => $row['id']
-        ]);
-        $photo_request = "not sent";
-        if ($r = $stmtPhoto->fetch(PDO::FETCH_ASSOC)) {
-            $photo_request = ($r['status'] === 'accepted') ? 'accepted' : 'pending';
+        $stmtBatch->execute([$userId, $userId]);
+        $photoMap = [];
+        foreach ($stmtBatch->fetchAll(PDO::FETCH_ASSOC) as $pr) {
+            $otherId = ($pr['sender_id'] == $userId) ? (int)$pr['receiver_id'] : (int)$pr['sender_id'];
+            if (!isset($photoMap[$otherId])) {
+                $photoMap[$otherId] = ($pr['status'] === 'accepted') ? 'accepted' : 'pending';
+            }
         }
-        $row['photo_request'] = $photo_request;
+    } else {
+        $photoMap = [];
+    }
+
+    foreach ($rows as &$row) {
+        $row['photo_request'] = $photoMap[(int)$row['id']] ?? "not sent";
     }
 
     echo json_encode([

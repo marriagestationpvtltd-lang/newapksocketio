@@ -2,7 +2,6 @@
 require_once __DIR__ . '/../config/db.php';
 header("Content-Type: application/json");
 require 'common_fcm.php';
-header("Content-Type: application/json");
 
 // Database connection
 $host = DB_HOST;

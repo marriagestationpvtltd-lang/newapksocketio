@@ -52,7 +52,7 @@ class _MatrimonyNotificationPageState
       return;
     }
 
-    final safeUserDataString = userDataString!;
+    final safeUserDataString = userDataString;
     final userData = jsonDecode(safeUserDataString);
     final userId = userData["id"].toString();
 
@@ -224,7 +224,8 @@ class _MatrimonyNotificationPageState
   Future<void> _updateNotificationSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final userDataString = prefs.getString('user_data');
-    final userData = jsonDecode(userDataString!);
+    if (userDataString == null) return;
+    final userData = jsonDecode(userDataString);
     final userId = userData["id"].toString();
     try {
       await http.post(

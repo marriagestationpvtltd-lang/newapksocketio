@@ -124,8 +124,12 @@ class _MatrimonyHomeScreenState extends State<MatrimonyHomeScreen> {
       final prefs = await SharedPreferences.getInstance();
       final userDataString = prefs.getString('user_data');
 
+      if (userDataString == null) {
+        setState(() { _isCheckingStatus = false; });
+        return;
+      }
 
-      final userData = jsonDecode(userDataString!);
+      final userData = jsonDecode(userDataString);
       final userId = int.tryParse(userData["id"].toString());
 
 

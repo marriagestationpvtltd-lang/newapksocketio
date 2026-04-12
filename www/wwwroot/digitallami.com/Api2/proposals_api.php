@@ -73,14 +73,14 @@ try {
     FROM proposals p
 
     -- SENDER JOINS
-    JOIN users us ON us.id = p.sender_id
+    JOIN users us ON us.id = p.sender_id AND us.isActive = 1 AND us.isDelete = 0
     LEFT JOIN (SELECT userid, designation FROM educationcareer GROUP BY userid) ec_sender ON ec_sender.userid = us.id
     LEFT JOIN (SELECT userid, city FROM permanent_address GROUP BY userid) pa_sender ON pa_sender.userid = us.id
     LEFT JOIN userpersonaldetail upd_sender ON upd_sender.userid = us.id
     LEFT JOIN maritalstatus ms_sender ON ms_sender.id = upd_sender.maritalStatusId
 
     -- RECEIVER JOINS
-    JOIN users ur ON ur.id = p.receiver_id
+    JOIN users ur ON ur.id = p.receiver_id AND ur.isActive = 1 AND ur.isDelete = 0
     LEFT JOIN (SELECT userid, designation FROM educationcareer GROUP BY userid) ec_receiver ON ec_receiver.userid = ur.id
     LEFT JOIN (SELECT userid, city FROM permanent_address GROUP BY userid) pa_receiver ON pa_receiver.userid = ur.id
     LEFT JOIN userpersonaldetail upd_receiver ON upd_receiver.userid = ur.id
@@ -94,8 +94,9 @@ try {
     } elseif ($type === "sent") {
         $sql .= " p.sender_id = ? AND p.status = 'pending' ";
     } else {
+        // "accepted" tab: show only truly accepted proposals (not rejected)
         $sql .= " (p.sender_id = ? OR p.receiver_id = ?)
-                  AND p.status IN ('accepted','rejected') ";
+                  AND p.status = 'accepted' ";
     }
 
     $sql .= " ORDER BY p.created_at DESC";

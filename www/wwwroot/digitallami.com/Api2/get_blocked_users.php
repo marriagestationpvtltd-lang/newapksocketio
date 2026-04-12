@@ -16,7 +16,7 @@ if ($myId <= 0) {
 $stmt = $conn->prepare("
     SELECT u.id, u.firstName as first_name, u.lastName as last_name, u.profile_picture as photo, b.created_at as blocked_date
     FROM blocks b
-    JOIN users u ON b.blocked_id = u.id
+    JOIN users u ON b.blocked_id = u.id AND u.isDelete = 0
     WHERE b.blocker_id = ?
     ORDER BY b.created_at DESC
 ");

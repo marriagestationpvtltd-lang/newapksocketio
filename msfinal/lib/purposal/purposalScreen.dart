@@ -77,7 +77,8 @@ class _ProposalsPageState extends State<ProposalsPage> {
   void loadMasterData() async {
     final prefs = await SharedPreferences.getInstance();
     final userDataString = prefs.getString('user_data');
-    final userData = jsonDecode(userDataString!);
+    if (userDataString == null) return;
+    final userData = jsonDecode(userDataString);
     final userId = int.tryParse(userData["id"].toString());
     try {
       UserMasterData user = await fetchUserMasterData(userId.toString());
@@ -120,7 +121,8 @@ class _ProposalsPageState extends State<ProposalsPage> {
   Future<void> _loadDataForTab(int tabIndex) async {
     final prefs = await SharedPreferences.getInstance();
     final userDataString = prefs.getString('user_data');
-    final userData = jsonDecode(userDataString!);
+    if (userDataString == null) return;
+    final userData = jsonDecode(userDataString);
     final userId = int.tryParse(userData["id"].toString());
 
     if (mounted) {

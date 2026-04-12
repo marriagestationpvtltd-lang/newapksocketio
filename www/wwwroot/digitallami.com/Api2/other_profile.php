@@ -2,7 +2,6 @@
 require_once __DIR__ . '/../config/db.php';
 require_once __DIR__ . '/mysqli_compat.php';
 header('Content-Type: application/json');
-header("Content-Type: application/json");
 
 // Base URL for profile pictures
 $base_url = APP_API2_BASE_URL;

@@ -120,7 +120,11 @@ while ($row = $result->fetch_assoc()) {
     /* -------- Paid status -------- */
     $is_paid = ($row['usertype'] === 'paid');
 
-    /* -------- Match percentage (simple gender match = 100) -------- */
+    /* -------- Match percentage -------- */
+    // Base score is 60 for any cross-gender match.
+    // Compatibility on religion (+10), community (+10), and education (+10)
+    // can raise the score to a maximum of 90 for this simplified calculation.
+    // A more sophisticated partner-preferences algorithm would use userpartner table.
     $matchPercent = 60;
     if (!empty($row['religionId']) && $row['religionId'] == $user['religionId'])   $matchPercent += 10;
     if (!empty($row['communityId']) && $row['communityId'] == $user['communityId']) $matchPercent += 10;

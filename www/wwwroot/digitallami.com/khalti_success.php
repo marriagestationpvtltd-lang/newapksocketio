@@ -35,10 +35,12 @@ if ($pidx !== '') {
             [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
         );
 
+        // 'completed' → success; anything with 'cancel' → cancelled;
+        // empty or unknown → treat as failed/incomplete
         $dbStatus = 'failed';
         if (strtolower($status) === 'completed') {
             $dbStatus = 'completed';
-        } elseif (stripos($status, 'cancel') !== false) {
+        } elseif ($status !== '' && stripos($status, 'cancel') !== false) {
             $dbStatus = 'cancelled';
         }
 

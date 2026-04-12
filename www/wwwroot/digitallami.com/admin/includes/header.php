@@ -263,6 +263,11 @@ $admin = getCurrentAdmin();
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link <?php echo basename($_SERVER['PHP_SELF']) == 'activities.php' ? 'active' : ''; ?>" href="activities.php">
+                        <i class="fas fa-history"></i> User Activities
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link <?php echo basename($_SERVER['PHP_SELF']) == 'settings.php' ? 'active' : ''; ?>" href="settings.php">
                         <i class="fas fa-cog"></i> Settings
                     </a>

@@ -71,7 +71,7 @@ $stmt->close();
 $data = [
     "sender"=>[
         "name"=>"no-reply",
-        "email"=>"no-reply@digitallami.com"
+        "email"=> getenv('NO_REPLY_EMAIL') ?: "no-reply@digitallami.com"
     ],
     "to"=>[
         [

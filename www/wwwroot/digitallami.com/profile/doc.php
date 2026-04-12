@@ -89,7 +89,8 @@ if ($method == 'GET') {
     $result = $stmt->get_result();
 
     $documents = [];
-    $baseUploadUrl = "https://api.digitallami.com/"; // change this to your upload directory
+    // Use APP_PUBLIC_BASE_URL from config/db.php instead of hardcoding
+    $baseUploadUrl = rtrim(APP_PUBLIC_BASE_URL, '/') . '/';
 
     while ($row = $result->fetch_assoc()) {
         $documents[] = [

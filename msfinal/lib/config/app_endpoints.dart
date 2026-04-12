@@ -13,7 +13,7 @@ const String kApiBaseUrl = String.fromEnvironment(
 // Pass at build time: --dart-define=SOCKET_SERVER_URL=http://X.X.X.X:3001
 const String kSocketServerBaseUrl = String.fromEnvironment(
   'SOCKET_SERVER_URL',
-  defaultValue: 'http://adminnew.marriagestation.com.np',
+  defaultValue: 'https://adminnew.marriagestation.com.np',
 );
 
 const String kPaymentBaseUrl = String.fromEnvironment(

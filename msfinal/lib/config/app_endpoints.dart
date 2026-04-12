@@ -16,6 +16,11 @@ const String kSocketServerBaseUrl = String.fromEnvironment(
   defaultValue: 'http://adminnew.marriagestation.com.np',
 );
 
+const String kPaymentBaseUrl = String.fromEnvironment(
+  'PAYMENT_BASE_URL',
+  defaultValue: 'https://react.marriagestation.com.np',
+);
+
 const String kApi2BaseUrl = '$kApiBaseUrl/Api2';
 const String kApi3BaseUrl = '$kApiBaseUrl/Api3';
 const String kApi9BaseUrl = '$kApiBaseUrl/api9';

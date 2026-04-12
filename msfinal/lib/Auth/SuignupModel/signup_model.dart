@@ -70,16 +70,8 @@ class SignupModel extends ChangeNotifier {
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // Clear SharedPreferences
-    await prefs.remove('bearer_token');
-    await prefs.remove('user_data');
-    await prefs.remove('user_firstName');
-    await prefs.remove('user_lastName');
-    await prefs.remove('user_email');
-    await prefs.remove('user_contactNo');
-
-    // OPTIONAL: clear everything (use only if safe)
-    // await prefs.clear();
+    // Clear all auth and session data from SharedPreferences
+    await prefs.clear();
 
     // Reset model fields
     email = '';
@@ -221,14 +213,15 @@ class SignupModel extends ChangeNotifier {
         // ignore
       }
     }
-    // ALSO save individual fields for quick access
+    // Save individual fields for quick access
     await prefs.setString('user_firstName', firstName);
     await prefs.setString('user_lastName', lastName);
     await prefs.setString('user_email', email);
     await prefs.setString('user_contactNo', contactNo);
-
+    await prefs.setBool('is_logged_in', true);
+    // Clear cached page number so next app restart fetches fresh page from server
+    await prefs.remove('cached_page_no');
   }
-  // ALSO save individual fields for quick access
 
 
   // Helper to load saved token/data on app start (optional)

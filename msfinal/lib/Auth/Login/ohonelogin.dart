@@ -1,13 +1,38 @@
 import 'package:flutter/material.dart';
-import 'package:ms2026/Auth/Login/LoginMain.dart';
+import 'package:ms2026/Auth/Login/Email.dart';
 import 'package:ms2026/Auth/Screen/Signup.dart';
 import 'package:ms2026/constant/app_colors.dart';
 import 'package:ms2026/constant/app_dimensions.dart';
 import 'package:ms2026/constant/app_text_styles.dart';
 import '../../ReUsable/terms_dialog.dart';
 
-class MobileLoginScreen extends StatelessWidget {
+class MobileLoginScreen extends StatefulWidget {
   const MobileLoginScreen({super.key});
+
+  @override
+  State<MobileLoginScreen> createState() => _MobileLoginScreenState();
+}
+
+class _MobileLoginScreenState extends State<MobileLoginScreen> {
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _otpController = TextEditingController();
+
+  @override
+  void dispose() {
+    _phoneController.dispose();
+    _otpController.dispose();
+    super.dispose();
+  }
+
+  void _showComingSoon() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Mobile OTP login is coming soon. Please use Email login.'),
+        backgroundColor: AppColors.primary,
+        duration: Duration(seconds: 3),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +53,7 @@ class MobileLoginScreen extends StatelessWidget {
 
             // Mobile Number Field
             TextFormField(
+              controller: _phoneController,
               keyboardType: TextInputType.phone,
               style: AppTextStyles.bodyLarge,
               decoration: InputDecoration(
@@ -53,6 +79,7 @@ class MobileLoginScreen extends StatelessWidget {
 
             // OTP Field
             TextFormField(
+              controller: _otpController,
               keyboardType: TextInputType.number,
               style: AppTextStyles.bodyLarge,
               decoration: InputDecoration(
@@ -80,7 +107,7 @@ class MobileLoginScreen extends StatelessWidget {
             Align(
               alignment: Alignment.centerRight,
               child: TextButton(
-                onPressed: () {},
+                onPressed: _showComingSoon,
                 style: TextButton.styleFrom(foregroundColor: AppColors.primary),
                 child: Text('Send OTP', style: AppTextStyles.primaryLabel),
               ),
@@ -107,9 +134,7 @@ class MobileLoginScreen extends StatelessWidget {
                   color: Colors.transparent,
                   child: InkWell(
                     borderRadius: AppDimensions.borderRadiusMD,
-                    onTap: () {
-                      // Your login logic here
-                    },
+                    onTap: _showComingSoon,
                     child: Center(
                       child: Text('Login', style: AppTextStyles.whiteLabel),
                     ),
@@ -138,7 +163,10 @@ class MobileLoginScreen extends StatelessWidget {
               height: AppDimensions.buttonHeightMD,
               child: OutlinedButton(
                 onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => LoginScreens()));
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => const PrefilledEmailScreen()),
+                  );
                 },
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: AppColors.border),

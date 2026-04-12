@@ -631,17 +631,7 @@ class _MatrimonyProfilePageState extends State<MatrimonyProfilePage> {
         ),
         actions: [
           TextButton(
-            onPressed: () async {
-              await context.read<SignupModel>().logout();
-
-              if (!mounted) return;
-
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => OnboardingScreen()),
-                    (route) => false,
-              );
-            },
-
+            onPressed: () => Navigator.pop(context),
             child: Text('Cancel', style: TextStyle(color: Colors.grey)),
           ),
           Container(

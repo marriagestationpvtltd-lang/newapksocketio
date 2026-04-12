@@ -98,6 +98,8 @@ class _PrefilledEmailScreenState extends State<PrefilledEmailScreen> with Single
     await prefs.setString('user_lastName', userData['lastName']?.toString() ?? '');
     await prefs.setString('user_contactNo', userData['contactNo']?.toString() ?? '');
     await prefs.setBool('is_logged_in', true);
+    // Clear cached page number so next app restart fetches fresh page from server
+    await prefs.remove('cached_page_no');
   }
 
   Future<Map<String, dynamic>?> _loginUser(String email, String password) async {

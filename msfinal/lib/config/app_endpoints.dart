@@ -4,8 +4,7 @@
 // Pass at build time without editing: --dart-define=API_BASE_URL=http://X.X.X.X/...
 const String kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue:
-      'http://192.168.1.4:3001/newapksocketio/www/wwwroot/digitallami.com',
+  defaultValue: 'http://192.168.1.4/newapksocketio/www/wwwroot/digitallami.com',
 );
 
 // ⚠️  IMPORTANT: Change the defaultValue IP to your machine's LAN IP.

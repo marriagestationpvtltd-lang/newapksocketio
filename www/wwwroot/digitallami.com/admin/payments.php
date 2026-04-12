@@ -6,7 +6,7 @@ require_once 'includes/header.php';
 $payments = [];
 $summary  = [];
 $ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, 'https://digitallami.com/api9/get_payments.php');
+curl_setopt($ch, CURLOPT_URL, APP_PUBLIC_BASE_URL . '/api9/get_payments.php');
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_TIMEOUT, 10);
 $response = curl_exec($ch);

@@ -2,7 +2,7 @@
 $title = 'User Activities';
 require_once 'includes/header.php';
 
-$apiBase = 'https://digitallami.com/api9';
+$apiBase = APP_PUBLIC_BASE_URL . '/api9';
 
 // Read filter params
 $filterUserId       = isset($_GET['user_id'])       ? (int)$_GET['user_id']            : 0;

@@ -4,10 +4,11 @@
  * Mirrors the mobile HomeScreenPage.
  */
 $title = 'Home';
+require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/user_header.php';
 
 // --- Fetch opposite-gender profiles via API ---
-$apiUrl = 'https://digitallami.com/Api2/search_opposite_gender.php?user_id='
+$apiUrl = APP_API2_BASE_URL . 'search_opposite_gender.php?user_id='
         . urlencode($currentUser['user_id']);
 
 $profiles  = [];
@@ -48,7 +49,7 @@ function profileImageUrl(array $profile): string
     }
     $pic = $profile['profile_picture'];
     if (!preg_match('/^https?:\/\//', $pic)) {
-        $pic = 'https://digitallami.com/Api2/' . $pic;
+        $pic = APP_API2_BASE_URL . $pic;
     }
     return $pic;
 }

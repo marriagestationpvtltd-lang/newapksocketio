@@ -1,5 +1,6 @@
 <?php
 $title = 'Notifications';
+require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/user_header.php';
 
 $userId = (int) $currentUser['user_id'];
@@ -8,7 +9,7 @@ $userId = (int) $currentUser['user_id'];
 $notifications = [];
 $apiError      = '';
 
-$apiUrl = 'https://digitallami.com/Api2/get_notifications.php?user_id=' . $userId;
+$apiUrl = APP_API2_BASE_URL . 'get_notifications.php?user_id=' . $userId;
 $ch = curl_init($apiUrl);
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,

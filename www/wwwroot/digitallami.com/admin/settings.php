@@ -2,7 +2,7 @@
 $title = 'Settings';
 require_once 'includes/header.php';
 
-$apiBase = 'https://digitallami.com';
+$apiBase = APP_PUBLIC_BASE_URL;
 
 $actionMsg  = '';
 $actionType = '';

@@ -5,7 +5,7 @@ require_once 'includes/header.php';
 // Fetch real dashboard data from API
 $dashboardData = null;
 $ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, 'https://digitallami.com/api9/get_dashboard.php');
+curl_setopt($ch, CURLOPT_URL, APP_PUBLIC_BASE_URL . '/api9/get_dashboard.php');
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_TIMEOUT, 10);
 $response = curl_exec($ch);
@@ -31,7 +31,7 @@ $totalSold       = $dashboardData['payments']['total_sold']            ?? 0;
 // Fetch documents stats
 $documents = [];
 $ch2 = curl_init();
-curl_setopt($ch2, CURLOPT_URL, 'https://digitallami.com/api9/get_documents.php');
+curl_setopt($ch2, CURLOPT_URL, APP_PUBLIC_BASE_URL . '/api9/get_documents.php');
 curl_setopt($ch2, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch2, CURLOPT_TIMEOUT, 10);
 $docResponse = curl_exec($ch2);

@@ -2,7 +2,7 @@
 $title = 'Packages';
 require_once 'includes/header.php';
 
-$apiBase = 'https://digitallami.com/api9';
+$apiBase = APP_PUBLIC_BASE_URL . '/api9';
 
 // Handle Create / Update / Delete actions (JSON POST to API)
 $actionMsg = '';

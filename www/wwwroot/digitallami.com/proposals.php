@@ -3,6 +3,7 @@
  * proposals.php – Sent & Received Proposals
  */
 $title = 'Proposals';
+require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/user_header.php';
 
 $userId = (int) $currentUser['user_id'];
@@ -10,7 +11,7 @@ $userId = (int) $currentUser['user_id'];
 // --- Helper: build profile image URL ---
 function msProposalImg(?string $pic): string {
     if (empty($pic)) return '';
-    if (!preg_match('/^https?:\/\//', $pic)) return 'https://digitallami.com/Api2/' . $pic;
+    if (!preg_match('/^https?:\/\//', $pic)) return APP_API2_BASE_URL . $pic;
     return $pic;
 }
 
@@ -18,7 +19,7 @@ function msProposalImg(?string $pic): string {
 $receivedProposals = [];
 $receivedError     = '';
 
-$ch = curl_init('https://digitallami.com/Api2/proposals_api.php?action=received&user_id=' . urlencode($userId));
+$ch = curl_init(APP_API2_BASE_URL . 'proposals_api.php?action=received&user_id=' . urlencode($userId));
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_TIMEOUT        => 15,
@@ -44,7 +45,7 @@ if ($resp === false || $httpCode !== 200) {
 $sentProposals = [];
 $sentError     = '';
 
-$ch = curl_init('https://digitallami.com/Api2/proposals_api.php?action=sent&user_id=' . urlencode($userId));
+$ch = curl_init(APP_API2_BASE_URL . 'proposals_api.php?action=sent&user_id=' . urlencode($userId));
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_TIMEOUT        => 15,

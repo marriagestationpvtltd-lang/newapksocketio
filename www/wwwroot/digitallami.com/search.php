@@ -4,6 +4,7 @@
  * Mirrors the mobile SearchPage / filterPage.
  */
 $title = 'Search';
+require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/includes/user_header.php';
 
 // --- Collect filter params from GET ---
@@ -29,7 +30,7 @@ foreach ($filters as $key => $val) {
         $apiParams[$key] = $val;
     }
 }
-$apiUrl = 'https://digitallami.com/Api2/search_opposite_gender.php?' . http_build_query($apiParams);
+$apiUrl = APP_API2_BASE_URL . 'search_opposite_gender.php?' . http_build_query($apiParams);
 
 $profiles   = [];
 $apiError   = '';
@@ -65,7 +66,7 @@ function searchProfileImageUrl(array $profile): string
     }
     $pic = $profile['profile_picture'];
     if (!preg_match('/^https?:\/\//', $pic)) {
-        $pic = 'https://digitallami.com/Api2/' . $pic;
+        $pic = APP_API2_BASE_URL . $pic;
     }
     return $pic;
 }

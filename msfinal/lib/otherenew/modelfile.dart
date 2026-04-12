@@ -130,9 +130,11 @@ class MatchedProfile {
   String get profession => designation.isNotEmpty ? designation : "Not specified";
   String get maritalStatus => "Not specified"; // Not in API
   String get qualification => "Not specified"; // Not in API
-  String get imageUrl => profilePicture != null && profilePicture!.isNotEmpty
-      ? "${kApiBaseUrl}/Api2/$profilePicture"
-      : '';
+  String get imageUrl {
+    if (profilePicture == null || profilePicture!.isEmpty) return '';
+    if (profilePicture!.startsWith('http')) return profilePicture!;
+    return '${kApiBaseUrl}/Api2/$profilePicture';
+  }
 
   bool get isVerifiedBool => isVerified == 1;
 

@@ -1,16 +1,10 @@
-// ⚠️  IMPORTANT: Change the defaultValue IP to your machine's LAN IP before
-// building for a physical device or running on an emulator (use 10.0.2.2 for
-// Android emulator instead of the LAN IP).
-// Pass at build time without editing: --dart-define=API_BASE_URL=http://X.X.X.X/...
+// Pass at build time without editing: --dart-define=API_BASE_URL=https://digitallami.com
 const String kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://192.168.1.4/digitallami.com',
+  defaultValue: 'https://digitallami.com',
 );
 
-// ⚠️  IMPORTANT: Change the defaultValue IP to your machine's LAN IP.
-// Android emulator: use http://10.0.2.2:3001
-// Physical device : use http://<YOUR_LAN_IP>:3001 (e.g. http://192.168.1.5:3001)
-// Pass at build time: --dart-define=SOCKET_SERVER_URL=http://X.X.X.X:3001
+// Pass at build time: --dart-define=SOCKET_SERVER_URL=http://adminnew.marriagestation.com.np
 const String kSocketServerBaseUrl = String.fromEnvironment(
   'SOCKET_SERVER_URL',
   defaultValue: 'http://adminnew.marriagestation.com.np',

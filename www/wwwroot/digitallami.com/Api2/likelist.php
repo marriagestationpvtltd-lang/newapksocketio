@@ -121,7 +121,7 @@ while ($user = $result->fetch_assoc()) {
     /* -------- FINAL USER OBJECT -------- */
     $users_data[] = [
         "userid" => $uid,
-        "firstName" => "MS:" . $uid,
+        "firstName" => $user['firstName'],
         "lastName" => $user['lastName'],
         "isVerified" => (int)$user['isVerified'],
         "privacy" => (string)$user['privacy'],

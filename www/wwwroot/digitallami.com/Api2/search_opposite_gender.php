@@ -65,7 +65,7 @@ try {
             u.isVerified,
             u.profile_picture,
             u.privacy,
-            u.created_at,
+            u.createdDate AS created_at,
             ud.birthDate,
             TIMESTAMPDIFF(YEAR, ud.birthDate, CURDATE()) AS age,
             pa.city,
@@ -77,9 +77,9 @@ try {
             ul.smoke
         FROM users u
         LEFT JOIN userpersonaldetail ud ON ud.userId = u.id
-        LEFT JOIN permanent_address pa ON pa.userId = u.id
-        LEFT JOIN educationcareer ec ON ec.userId = u.id
-        LEFT JOIN user_lifestyle ul ON ul.userId = u.id
+        LEFT JOIN (SELECT userid, country, city FROM permanent_address GROUP BY userid) pa ON pa.userid = u.id
+        LEFT JOIN (SELECT userid, degree, annualincome, designation FROM educationcareer GROUP BY userid) ec ON ec.userid = u.id
+        LEFT JOIN (SELECT userid, drinks, smoke FROM user_lifestyle GROUP BY userid) ul ON ul.userid = u.id
         WHERE TRIM(LOWER(u.gender)) = :opp_gender
           AND u.id != :me
     ";
@@ -135,7 +135,7 @@ try {
 
     // Days since registration filter
     if ($daysSinceRegistration !== null) {
-        $sql .= " AND DATEDIFF(CURDATE(), u.created_at) <= :days_since_reg";
+        $sql .= " AND DATEDIFF(CURDATE(), u.createdDate) <= :days_since_reg";
         $params[':days_since_reg'] = $daysSinceRegistration;
     }
 

@@ -33,7 +33,7 @@ class UserMasterData {
       usertype: json['usertype'] ?? 'free',
       pageno: json['pageno'] ?? 0,
       createdDate: json['createdDate'] ?? '',
-      docStatus: json['docstatus']
+      docStatus: json['docstatus'] ?? 'not_uploaded'
 
     );
   }

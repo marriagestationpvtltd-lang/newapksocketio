@@ -209,6 +209,7 @@ enum InterruptionLevel { passive, active, timeSensitive, critical }
 
 // ── Android notification sounds ───────────────────────────────────────────────
 
+/// Web stub for the abstract base class of Android notification sounds.
 abstract class AndroidNotificationSound {
   const AndroidNotificationSound();
   String get sound;
@@ -230,6 +231,8 @@ class UriAndroidNotificationSound extends AndroidNotificationSound {
 
 // ── Audio attributes ──────────────────────────────────────────────────────────
 
+/// Web stub for Android's AudioAttributes usage values.
+/// Mirrors [AudioAttributes constants](https://developer.android.com/reference/android/media/AudioAttributes).
 enum AudioAttributesUsage {
   unknown,
   media,

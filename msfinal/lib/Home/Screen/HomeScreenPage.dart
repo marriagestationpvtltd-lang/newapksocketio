@@ -541,7 +541,7 @@ class _MatrimonyHomeScreenState extends State<MatrimonyHomeScreen> {
     if (userDataString == null) return;
     final userData = jsonDecode(userDataString);
     final userid = userData["id"];
-    final userCreatedDate = userData["created_at"] ?? "";
+    final userCreatedDate = userData["createdDate"] ?? userData["created_at"] ?? "";
 
     try {
       // Use search_opposite_gender API with sort by recent registration

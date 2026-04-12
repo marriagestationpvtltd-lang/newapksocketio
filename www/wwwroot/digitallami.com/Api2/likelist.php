@@ -71,6 +71,7 @@ $sql = "
     SELECT id, firstName, lastName, profile_picture, isVerified, privacy
     FROM users
     WHERE id IN ($ids)
+      AND isActive = 1 AND isDelete = 0
 ";
 $result = $conn->query($sql);
 
@@ -121,7 +122,7 @@ while ($user = $result->fetch_assoc()) {
     /* -------- FINAL USER OBJECT -------- */
     $users_data[] = [
         "userid" => $uid,
-        "firstName" => "MS:" . $uid,
+        "firstName" => $user['firstName'],
         "lastName" => $user['lastName'],
         "isVerified" => (int)$user['isVerified'],
         "privacy" => (string)$user['privacy'],

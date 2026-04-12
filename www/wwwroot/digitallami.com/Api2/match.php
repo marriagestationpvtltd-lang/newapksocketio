@@ -50,10 +50,8 @@ $likedUserIds = array_column($stmtLikes->fetchAll(), 'receiver_id');
     $stmt = $pdo->prepare("SELECT minage, maxage FROM user_partner WHERE userid = :uid LIMIT 1");
     $stmt->execute([":uid"=>$userid]);
     $pref = $stmt->fetch();
-    if(!$pref){
-        echo json_encode(["success"=>true,"matched_users"=>[]]);
-        exit;
-    }
+    // If no partner preference set, use defaults (no age restriction)
+    $hasPrefs = (bool)$pref;
 
     /* ================= CANDIDATES ================= */
     $stmt = $pdo->prepare("
@@ -71,10 +69,12 @@ $likedUserIds = array_column($stmtLikes->fetchAll(), 'receiver_id');
             pa.city,
             ec.designation
         FROM users u
-        INNER JOIN userpersonaldetail upd ON upd.userId = u.id
-        LEFT JOIN permanent_address pa ON pa.userId = u.id
-        LEFT JOIN educationcareer ec ON ec.userId = u.id
-        WHERE u.id != :userid AND u.gender != :gender
+        LEFT JOIN userpersonaldetail upd ON upd.userId = u.id
+        LEFT JOIN (SELECT userid, country, city FROM permanent_address GROUP BY userid) pa ON pa.userid = u.id
+        LEFT JOIN (SELECT userid, designation FROM educationcareer GROUP BY userid) ec ON ec.userid = u.id
+        WHERE u.id != :userid AND TRIM(LOWER(u.gender)) != TRIM(LOWER(:gender))
+          AND u.isActive = 1 AND u.isDelete = 0
+        GROUP BY u.id
     ");
     $stmt->execute([
         ":userid"=>$userid,
@@ -87,9 +87,9 @@ $likedUserIds = array_column($stmtLikes->fetchAll(), 'receiver_id');
     foreach($candidates as $c){
 
         /* ================= MATCH PERCENT ================= */
-        $matchPercent = 0;
-        $minAge = !empty($pref['minage']) ? intval($pref['minage']) : null;
-        $maxAge = !empty($pref['maxage']) ? intval($pref['maxage']) : null;
+        $matchPercent = 50; // Default when no prefs set
+        $minAge = ($hasPrefs && !empty($pref['minage'])) ? intval($pref['minage']) : null;
+        $maxAge = ($hasPrefs && !empty($pref['maxage'])) ? intval($pref['maxage']) : null;
         $age = intval($c['age']);
         /* ================= LIKE STATUS ================= */
          $isLiked = in_array($c['userid'], $likedUserIds);
@@ -100,6 +100,8 @@ $likedUserIds = array_column($stmtLikes->fetchAll(), 'receiver_id');
                 $matchPercent = 100;
             } elseif($age >= $minAge-5 && $age <= $maxAge+5){
                 $matchPercent = 20;
+            } else {
+                $matchPercent = 0;
             }
         } elseif($minAge !== null){
             $matchPercent = ($age >= $minAge) ? 100 : 20;

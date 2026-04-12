@@ -163,6 +163,7 @@ try {
     // 6) Fetch user row + associated userpersonaldetail
     $stmt = $mysqli->prepare("
         SELECT u.id, u.firstName, u.lastName, u.email, u.contactNo, u.gender, u.languages, u.nationality, u.profile_picture,
+               u.createdDate,
                up.birthDate, up.profileForId
         FROM users u
         LEFT JOIN userpersonaldetail up ON up.userid = u.id

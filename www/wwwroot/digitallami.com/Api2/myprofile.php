@@ -87,6 +87,7 @@ LEFT JOIN user_family uf ON u.id = uf.userid
 LEFT JOIN user_lifestyle ul ON u.id = ul.userid
 LEFT JOIN user_partner upa ON u.id = upa.userid
 WHERE u.id = ?
+GROUP BY u.id
 ";
 
 $stmt = $conn->prepare($sql);

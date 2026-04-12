@@ -103,7 +103,7 @@ class _RecentMembersPageState extends State<RecentMembersPage> {
 
       final userData = jsonDecode(userDataString);
       final userid = userData["id"];
-      _userCreatedDate = userData["created_at"] ?? "";
+      _userCreatedDate = userData["createdDate"] ?? userData["created_at"] ?? "";
 
       final url = Uri.parse(
           '${kApiBaseUrl}/Api2/search_opposite_gender.php?user_id=$userid&sort_by=recent&limit=${_perPage * _currentPage}');

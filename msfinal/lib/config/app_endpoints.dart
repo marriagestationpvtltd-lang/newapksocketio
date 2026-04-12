@@ -4,7 +4,7 @@
 // Pass at build time without editing: --dart-define=API_BASE_URL=http://X.X.X.X/...
 const String kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'https://digitallami.com',
+  defaultValue: 'http://192.168.1.4/digitallami.com',
 );
 
 // ⚠️  IMPORTANT: Change the defaultValue IP to your machine's LAN IP.
